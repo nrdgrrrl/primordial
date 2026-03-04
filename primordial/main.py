@@ -7,9 +7,19 @@ Main entry point with game loop, event handling, and controls.
 
 from __future__ import annotations
 
+import platform
 import sys
 
 import pygame
+
+# Fix blurry rendering on Windows high-DPI displays.
+# Must run before pygame.init(); silently ignored on non-Windows and older Windows.
+try:
+    if platform.system() == "Windows":
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # type: ignore[attr-defined]
+except Exception:
+    pass
 
 from .rendering import Renderer
 from .settings import Settings
@@ -30,7 +40,7 @@ def main() -> None:
         display_info = pygame.display.Info()
         width = display_info.current_w
         height = display_info.current_h
-        screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
+        screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
     else:
         width = 1280
         height = 720
@@ -145,7 +155,7 @@ def toggle_fullscreen(
         display_info = pygame.display.Info()
         width = display_info.current_w
         height = display_info.current_h
-        screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
+        screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
     else:
         width = 1280
         height = 720
