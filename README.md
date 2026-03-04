@@ -192,6 +192,48 @@ primordial/
 3. Register in `get_theme()`
 4. Add name to `Settings.VALID_VISUAL_THEMES`
 
+## Distribution
+
+### Run from source
+
+Follow the Installation and Running steps above. Requires Python 3.12+ and the dependencies in `requirements.txt`.
+
+### Build a standalone executable
+
+```bash
+# Activate your virtual environment first
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+
+# Run the build script
+python build.py
+```
+
+This produces:
+- **Linux/Mac:** `dist/primordial` — a single self-contained ELF/Mach-O binary
+- **Windows:** `dist/primordial.exe` — a single self-contained PE executable
+
+Expected output size is **~30–50 MB** (pygame + numpy bundled in).
+
+#### Deploy
+
+Just copy `dist/primordial.exe` (Windows) or `dist/primordial` (Linux) to any machine — no Python, no pip, no installation required. Double-click on Windows; `chmod +x primordial && ./primordial` on Linux.
+
+#### Reproducible builds
+
+After the first `python build.py` run, PyInstaller writes `primordial.spec` to the project root. Subsequent builds can use it directly for identical results:
+
+```bash
+pyinstaller primordial.spec
+```
+
+#### Platform notes
+
+| Platform | Tested | Notes |
+|----------|--------|-------|
+| Linux x86-64 | ✅ | Verified — `dist/primordial` 31.9 MB |
+| Windows x86-64 | ❌ untested | Should work; `dist/primordial.exe` produced cross-platform build is untested |
+| macOS | ❌ untested | `--noconsole` becomes `--windowed`; may need code signing |
+
 ## License
 
 MIT License

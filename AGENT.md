@@ -16,20 +16,27 @@ Primordial is a fullscreen Python screensaver featuring a cellular evolution sim
 ## Architecture Map
 
 ```
-primordial/
-├── main.py              # Entry point, pygame init, game loop, event handling
-├── settings.py          # Settings dataclass — all tuneable parameters
-├── simulation/
-│   ├── genome.py        # Genome dataclass — heritable traits (13 traits)
-│   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
-│   ├── food.py          # Food particle and FoodManager with spatial bucketing
-│   └── simulation.py    # Simulation — orchestrates creatures, food, evolution, events
-└── rendering/
-    ├── glyphs.py        # Glyph rendering system — stroke vocabulary, deterministic assembly
-    ├── animations.py    # AnimationManager — death/birth animations, decoupled from sim
-    ├── themes.py        # Theme ABC and implementations (OceanTheme, StubTheme)
-    ├── hud.py           # HUD overlay for simulation stats
-    └── renderer.py      # Renderer — draws state, kin lines, territory shimmer, animations
+primordial/                  ← project root
+├── main.py                  # Top-level entry point for direct run and PyInstaller
+├── build.py                 # Cross-platform build script (produces dist/primordial[.exe])
+├── primordial.spec          # PyInstaller spec — commit this for reproducible builds
+├── requirements.txt         # Runtime deps + pyinstaller under # build
+└── primordial/              ← Python package
+    ├── main.py              # Real entry point, pygame init, game loop, event handling
+    ├── settings.py          # Settings dataclass — all tuneable parameters
+    ├── utils/
+    │   └── paths.py         # get_base_path() — resolves paths in dev + frozen builds
+    ├── simulation/
+    │   ├── genome.py        # Genome dataclass — heritable traits (13 traits)
+    │   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
+    │   ├── food.py          # Food particle and FoodManager with spatial bucketing
+    │   └── simulation.py    # Simulation — orchestrates creatures, food, evolution, events
+    └── rendering/
+        ├── glyphs.py        # Glyph rendering system — stroke vocabulary, deterministic assembly
+        ├── animations.py    # AnimationManager — death/birth animations, decoupled from sim
+        ├── themes.py        # Theme ABC and implementations (OceanTheme, StubTheme)
+        ├── hud.py           # HUD overlay for simulation stats
+        └── renderer.py      # Renderer — draws state, kin lines, territory shimmer, animations
 ```
 
 ## Key Abstractions
@@ -245,6 +252,69 @@ Trail lengths are motion-style-dependent (14/10/5 positions). Dart-style creatur
 8. **Energy bounds** — creature energy stays in [0.0, 1.0]
 9. **Glyph determinism** — same genome must always produce same glyph (hash-seeded RNG)
 10. **Event queue ownership** — `death_events` and `birth_events` are populated by simulation, cleared by renderer after processing
+
+## Asset Path Resolution
+
+All asset loading **must** use `get_base_path()` from `primordial/utils/paths.py`:
+
+```python
+from primordial.utils.paths import get_base_path
+
+icon_path = get_base_path() / "assets" / "icon.ico"
+font_path  = get_base_path() / "primordial" / "assets" / "font.ttf"
+```
+
+### Why this matters
+
+When PyInstaller freezes the app with `--onefile`, all files are extracted at
+runtime to a temporary directory and `sys._MEIPASS` is set to that directory.
+Paths relative to `__file__` or the working directory won't resolve correctly
+inside the bundle.
+
+`get_base_path()` abstracts this:
+
+| Environment | Returns |
+|-------------|---------|
+| Dev (source) | Project root (`Path(__file__).parent.parent.parent`) |
+| PyInstaller frozen | `Path(sys._MEIPASS)` |
+
+**Never** use bare `open("assets/foo.png")` or `Path(__file__).parent / "x"` for
+files that must ship in the binary — use `get_base_path()` instead.
+
+## Build Process
+
+### Entry points
+
+- `main.py` (project root) — top-level entry point; delegates to `primordial.main.main()`.
+  Used by PyInstaller and can also be run directly with `python main.py`.
+- `primordial/main.py` — real implementation; uses relative imports, so it cannot be
+  the direct PyInstaller target.
+
+### Building the executable
+
+```bash
+python build.py          # cleans dist/, runs PyInstaller, prints result path
+pyinstaller primordial.spec  # reproducible rebuild using committed .spec file
+```
+
+`build.py` does the following:
+1. Deletes `build/` and `dist/` to ensure a clean state
+2. Invokes `PyInstaller.__main__.run()` programmatically with `--onefile --noconsole`
+3. Attaches `--add-data=primordial/assets:primordial/assets` when that directory exists
+4. Attaches `--icon=assets/icon.ico` on Windows when the file exists
+
+### .spec file
+
+`primordial.spec` is committed and should be updated whenever build arguments change
+(new `--add-data` entries, new hidden imports, etc.). The spec is regenerated
+automatically on each `python build.py` run.
+
+### Adding new assets
+
+1. Place the file under `primordial/assets/` (create the directory if needed)
+2. Load it via `get_base_path() / "primordial" / "assets" / "filename"`
+3. Add `--add-data=primordial/assets{os.pathsep}primordial/assets` to `build.py` args
+   (already present if the directory exists)
 
 ## Ollama Integration Note
 
