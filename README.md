@@ -192,6 +192,28 @@ primordial/
 3. Register in `get_theme()`
 4. Add name to `Settings.VALID_VISUAL_THEMES`
 
+## Screensaver Installation (Windows)
+
+### Method 1 — Right-click install (recommended)
+
+1. Build: `python build.py`
+2. Right-click `dist/primordial.scr` → **Install**
+3. Open **Screensaver Settings** → select **Primordial** → **OK**
+
+### Method 2 — Manual
+
+1. Build: `python build.py`
+2. Copy `dist/primordial.scr` to `C:\Windows\System32\`
+3. Open **Screensaver Settings** → select **Primordial** → **OK**
+
+### To uninstall
+
+Delete `primordial.scr` from `C:\Windows\System32\`.
+
+> **Note:** The `.scr` file is self-contained — no other files or Python installation needed.
+
+---
+
 ## Distribution
 
 ### Run from source
@@ -210,7 +232,8 @@ python build.py
 
 This produces:
 - **Linux/Mac:** `dist/primordial` — a single self-contained ELF/Mach-O binary
-- **Windows:** `dist/primordial.exe` — a single self-contained PE executable
+- **Windows:** `dist/primordial.exe` — a single self-contained PE executable (direct launch)
+- **Windows:** `dist/primordial.scr` — identical copy of the `.exe`, installable as a screensaver
 
 Expected output size is **~30–50 MB** (pygame + numpy bundled in).
 

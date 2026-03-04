@@ -18,14 +18,18 @@ Primordial is a fullscreen Python screensaver featuring a cellular evolution sim
 ```
 primordial/                  ← project root
 ├── main.py                  # Top-level entry point for direct run and PyInstaller
-├── build.py                 # Cross-platform build script (produces dist/primordial[.exe])
+│                            #   Parses screensaver args, sets SDL_WINDOWID if preview,
+│                            #   then delegates to primordial.main.main(scr_args)
+├── build.py                 # Cross-platform build script (produces dist/primordial[.exe/.scr])
 ├── primordial.spec          # PyInstaller spec — commit this for reproducible builds
 ├── requirements.txt         # Runtime deps + pyinstaller under # build
 └── primordial/              ← Python package
     ├── main.py              # Real entry point, pygame init, game loop, event handling
+    │                        #   main(scr_args) branches on screensaver mode
     ├── settings.py          # Settings dataclass — all tuneable parameters
     ├── utils/
-    │   └── paths.py         # get_base_path() — resolves paths in dev + frozen builds
+    │   ├── paths.py         # get_base_path() — resolves paths in dev + frozen builds
+    │   └── screensaver.py   # ScreensaverArgs + parse_screensaver_args()
     ├── simulation/
     │   ├── genome.py        # Genome dataclass — heritable traits (13 traits)
     │   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
@@ -280,6 +284,62 @@ inside the bundle.
 
 **Never** use bare `open("assets/foo.png")` or `Path(__file__).parent / "x"` for
 files that must ship in the binary — use `get_base_path()` instead.
+
+## Screensaver Argument Parsing
+
+`primordial/utils/screensaver.py` provides `parse_screensaver_args() -> ScreensaverArgs`.
+
+Windows passes arguments to `.scr` files when it invokes them:
+
+| Windows argument | Parsed mode | Behaviour |
+|-----------------|-------------|-----------|
+| *(none)* | `normal` | Dev / direct launch — full controls, existing behaviour |
+| `/s` or `-s` | `screensaver` | Fullscreen, hidden cursor, quit on any user input |
+| `/p HWND` or `-p HWND` | `preview` | Render into existing window handle (screensaver Settings preview pane) |
+| `/c` or `/c:HWND` | `config` | Show the config/about dialog |
+
+### Preview mode and SDL_WINDOWID
+
+When Windows invokes the `.scr` with `/p HWND`, it expects the screensaver to
+render its output into an existing child window identified by the integer HWND.
+SDL2 (and therefore pygame) honours the `SDL_WINDOWID` environment variable:
+if set before `pygame.init()`, SDL renders into that window instead of creating
+a new one.
+
+**Critical ordering:**
+1. Root `main.py` calls `parse_screensaver_args()` before importing `primordial.main`
+2. If mode is `preview`, it sets `os.environ["SDL_WINDOWID"]` immediately
+3. Only then does it `from primordial.main import main` — which triggers the
+   module-level `import pygame`
+4. `pygame.init()` called inside `main()` therefore sees the env var
+
+Never move the SDL_WINDOWID assignment after the `from primordial.main import main`
+line, or preview rendering will silently create a new window instead.
+
+### Screensaver input handling (mode == "screensaver")
+
+The screensaver must exit immediately on real user activity:
+
+- `KEYDOWN` → quit
+- `MOUSEBUTTONDOWN` → quit
+- `MOUSEMOTION` with `abs(dx) > 4 or abs(dy) > 4` → quit (small threshold
+  absorbs jitter; avoids false-quit on initial cursor settling)
+
+A **2-second grace period** (`grace_until = time.time() + 2.0`) suppresses all
+input events at startup — some systems emit a spurious mouse-move event when
+the screensaver is first activated.
+
+### Dual build output
+
+`build.py` produces both files on Windows after a successful PyInstaller build:
+
+```
+dist/primordial.exe   ← for direct double-click launch
+dist/primordial.scr   ← identical copy; right-click → Install for screensaver
+```
+
+Both files are the same binary; `.scr` is just the extension Windows recognises
+as a screensaver. No `--add-data` or other flags differ between the two.
 
 ## Build Process
 

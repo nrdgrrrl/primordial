@@ -2,6 +2,68 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-03-04] - Windows Screensaver Pass
+
+### Summary
+
+This pass converts Primordial into a proper Windows `.scr` screensaver file while
+keeping it launchable as a normal app on both Linux and Windows.
+
+---
+
+## [2026-03-04] - docs: README, AGENT.md, CHANGELOG updated for screensaver pass
+
+**What changed:**
+
+- README.md: added "Screensaver Installation (Windows)" section documenting Method 1
+  (right-click Install) and Method 2 (manual copy to System32), uninstall steps, and
+  updated Distribution section to mention `dist/primordial.scr` alongside `.exe`
+- AGENT.md: updated architecture map to include `utils/screensaver.py`; added
+  "Screensaver Argument Parsing" section documenting the four modes, the SDL_WINDOWID
+  trick and why ordering matters, screensaver input-quit behaviour and grace period,
+  and the dual `.exe`/`.scr` build output
+
+**Why:** Future agents need to understand the screensaver argument contract, the SDL
+preview embedding mechanism, and the build output to safely extend or modify this pass.
+
+---
+
+## [2026-03-04] - feat: Windows .scr screensaver — arg parsing, modes, config dialog, build output
+
+**What changed:**
+
+*`primordial/utils/screensaver.py` (new):*
+- `ScreensaverArgs` dataclass with `mode: str` and optional `preview_hwnd: int`
+- `parse_screensaver_args()` — maps `/s`, `/p HWND`, `/c`, and no-args to the four modes
+
+*`main.py` (root):*
+- Parse screensaver args at the very top before importing `primordial.main`
+- Set `os.environ["SDL_WINDOWID"]` for preview mode before the import so it lands
+  before `pygame.init()` is called inside the package
+
+*`primordial/main.py`:*
+- `main()` now accepts optional `scr_args: ScreensaverArgs` parameter (defaults to normal)
+- `screensaver` mode: fullscreen SCALED, hidden cursor, quit on KEYDOWN /
+  MOUSEBUTTONDOWN / MOUSEMOTION > 4px, 2-second startup grace period
+- `preview` mode: 152×112 window (SDL renders into HWND via SDL_WINDOWID), half tick
+  rate to save CPU, no input handling beyond QUIT
+- `config` mode: standalone 400×300 pygame dialog with app title, current settings
+  (sim_mode, visual_theme, population, FPS), path to settings.py, OK button —
+  no simulation started
+- `normal` mode: existing behaviour fully preserved
+
+*`build.py`:*
+- After PyInstaller on Windows, copy `dist/primordial.exe` → `dist/primordial.scr`
+- Attach `--version-file=version.txt` on Windows when the file exists
+
+**Why:** Windows identifies screensaver binaries solely by the `.scr` extension and
+passes `/s`, `/p`, `/c` arguments to control the execution mode. The SDL_WINDOWID
+env var is the standard mechanism for embedding a pygame/SDL window into an existing
+HWND for the screensaver preview pane. The grace period prevents false-quit from
+cursor settling jitter that some systems emit at screensaver activation.
+
+---
+
 ## [2026-03-04] - Windows Compatibility and PyInstaller Packaging
 
 ### Summary
