@@ -20,14 +20,16 @@ primordial/
 ├── main.py              # Entry point, pygame init, game loop, event handling
 ├── settings.py          # Settings dataclass — all tuneable parameters
 ├── simulation/
-│   ├── genome.py        # Genome dataclass — heritable traits
-│   ├── creature.py      # Creature dataclass — position, velocity, energy, behavior
+│   ├── genome.py        # Genome dataclass — heritable traits (13 traits)
+│   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
 │   ├── food.py          # Food particle and FoodManager with spatial bucketing
-│   └── simulation.py    # Simulation class — orchestrates creatures, food, evolution
+│   └── simulation.py    # Simulation — orchestrates creatures, food, evolution, events
 └── rendering/
+    ├── glyphs.py        # Glyph rendering system — stroke vocabulary, deterministic assembly
+    ├── animations.py    # AnimationManager — death/birth animations, decoupled from sim
     ├── themes.py        # Theme ABC and implementations (OceanTheme, StubTheme)
     ├── hud.py           # HUD overlay for simulation stats
-    └── renderer.py      # Renderer class — draws simulation state to screen
+    └── renderer.py      # Renderer — draws state, kin lines, territory shimmer, animations
 ```
 
 ## Key Abstractions
@@ -35,162 +37,215 @@ primordial/
 ### Genome (`simulation/genome.py`)
 
 Immutable dataclass holding creature traits (all `float` 0.0–1.0):
+
+**Original traits:**
 - `speed`, `size`, `sense_radius`, `aggression`, `hue`, `saturation`, `efficiency`
+
+**Glyph traits (added in enhancement pass):**
+- `complexity` — 0–1 → maps to 2–7 strokes in the glyph
+- `symmetry` — 0=asymmetric, 0.33=bilateral, 0.66=3-fold radial, 1.0=4-fold radial
+- `stroke_scale` — overall proportion/delicacy of strokes
+- `appendages` — 0–1 → 0–4 extra limb strokes at perimeter
+- `rotation_speed` — glyph rotation speed (0=still, 1=steady spin)
+
+**Motion trait:**
+- `motion_style` — 0.00–0.33=glide, 0.34–0.66=swim, 0.67–1.00=dart
 
 **Key methods:**
 - `Genome.random()` — create random genome
 - `genome.mutate(rate)` — return new genome with mutated traits
+- `genome.copy()` — exact copy
 
-**Invariant:** All trait values must stay in [0.0, 1.0] range after mutation.
+**Invariant:** All trait values stay in [0.0, 1.0] after mutation.
 
 ### Creature (`simulation/creature.py`)
 
 Mutable dataclass representing a single organism:
-- Position (`x`, `y`), velocity (`vx`, `vy`), `energy`, `age`, `genome`, `trail`
 
-**Key methods:**
-- `update_position(dt, world_width, world_height)` — move and wrap
-- `steer_toward(x, y, speed_base, world_width, world_height)` — smooth steering
-- `wander(speed_base)` — random wandering when no food nearby
+**Core fields:** `x`, `y`, `vx`, `vy`, `energy`, `age`, `genome`, `trail`
+
+**Added fields:**
+- `lineage_id: int` — inheritable lineage identifier for kin tracking; new ID on speciation (hue mutation > 0.15)
+- `rotation_angle: float` — current glyph rotation in degrees, updated each frame
+- `glyph_surface: Any` — cached glyph pygame.Surface set by renderer; `None` until first render; reset to `None` to force rebuild
+- `_swim_phase: float` — internal oscillation state for swim motion
+- `_dart_burst_remaining: int`, `_dart_cooldown: int` — dart burst state machine
+
+**Trail length** varies by motion style: glide=14, swim=10, dart=5 (`get_trail_length()`).
+
+**Motion styles** (in `wander()` and `update_position()`):
+- **Glide**: very gentle direction changes, slow speed
+- **Swim**: moderate wandering + sinusoidal lateral oscillation applied in `update_position`
+- **Dart**: mostly stationary (`vx *= 0.95`) with random bursts at ~1.8× max speed every 3–5 seconds
+
+**Key methods (unchanged):**
+- `update_position(dt, world_width, world_height)` — move, wrap, update trail and rotation
+- `steer_toward(x, y, speed_base, world_width, world_height)` — smooth steering (dart uses stronger steer)
+- `wander(speed_base)` — motion-style-aware wandering
 - `distance_to(x, y, world_width, world_height)` — toroidal distance
 - `get_radius()`, `get_sense_radius()`, `get_movement_cost()`
 
-**Invariant:** Creatures always wrap around world edges (toroidal topology).
+**Invariant:** Creatures always wrap around world edges.
 
 ### FoodManager (`simulation/food.py`)
 
-Manages all food particles with **spatial bucketing** for efficient neighbor queries.
-
-**Key methods:**
-- `spawn()`, `spawn_batch(count)` — create food particles
-- `remove(food)` — remove eaten particle
-- `find_nearest(x, y, max_radius)` — O(1) average-case lookup using spatial hash
-
-**Invariant:** Maximum 500 food particles; bucket size is 100 pixels.
+Unchanged. Spatial bucketing for efficient nearest-neighbor queries. See original docs.
 
 ### Simulation (`simulation/simulation.py`)
 
-Main simulation controller. Owns `creatures` list, `food_manager`, and `settings`.
+Main simulation controller. Owns `creatures`, `food_manager`, `settings`.
 
-**Key methods:**
-- `step()` — advance simulation by one frame (spawn food, move creatures, handle eating/reproduction/death)
-- `reset()` — reinitialize simulation
-- `get_dominant_traits()` — returns average genome traits (for LLM narration)
+**Added fields:**
+- `_next_lineage_id: int` — monotone counter for lineage ID allocation
+- `death_events: list[dict]` — populated each frame when creatures die; cleared by renderer
+- `birth_events: list[Creature]` — populated each frame on reproduction; cleared by renderer
 
-**Properties:**
-- `population`, `generation`, `oldest_age`, `food_count`, `paused`
+**Death event dict keys:** `x`, `y`, `genome`, `glyph_surface`, `lineage_id`
 
-**Invariant:** `step()` must not modify rendering state; simulation is render-agnostic.
+**Key methods (updated):**
+- `step()` — now populates `death_events` and `birth_events`; offspring inherit lineage unless hue mutation > 0.15 (speciation → new ID)
+- `get_lineage_counts() -> dict[int, int]` — counts creatures per lineage_id
+- `get_dominant_traits()` — now includes all 13 genome traits
+
+**Invariants (all preserved):**
+- `step()` never calls pygame or modifies rendering state
+- Genome is still immutable; mutation returns new instance
 
 ### Renderer (`rendering/renderer.py`)
 
-Reads simulation state and draws to pygame surface. Owns `theme`, `hud`, `ambient_particles`.
+Reads simulation state and draws to pygame surface. Now orchestrates three additional visual systems.
 
 **Key methods:**
-- `draw(simulation)` — render current state
-- `set_theme(name)` — change visual theme
-- `toggle_hud()` — toggle HUD visibility
+- `draw(simulation)` — render current state (calls all sub-systems)
+- `set_theme(name)`, `toggle_hud()`
 
-**Invariant:** Renderer never mutates simulation state.
+**Sub-systems called in `draw()`:**
+1. `process_events()` on AnimationManager (ingest death/birth events, clear queues)
+2. `_draw_territory_shimmer()` — top-N lineage shimmer ellipses
+3. `_draw_kin_lines()` — faint intra-lineage connection lines
+4. `theme.render_creature(creature, scale=birth_scale)` — glyph + glow
+5. `animation_manager.tick_and_draw()` — death effects, birth scales
+
+**Territory shimmer state:** `_shimmer_states: dict[int, ShimmerState]` — persists across frames; centroids lerp, alpha pulses on sine wave.
+
+**Invariant:** Renderer never mutates simulation state (death/birth event lists are cleared here after processing, which is permitted since renderer owns the consumption contract).
 
 ### Theme (`rendering/themes.py`)
 
-Abstract base class for visual styling.
+Abstract base class. `render_creature` now accepts `scale: float = 1.0` parameter (backward-compatible).
 
-**Required methods:**
-- `name` (property), `background_color` (property)
-- `render_creature(surface, creature, time)`
-- `render_food(surface, food, time)`
-- `render_ambient(surface, particles, time)`
-- `create_ambient_particles(width, height, count)`
+**OceanTheme rendering order per creature:**
+1. Trail segments (fading circles)
+2. Bloom glow halo (`_create_glow_surface`)
+3. Rotated glyph surface (`get_glyph_surface`)
 
-**Factory:** `get_theme(name)` returns appropriate theme instance.
+### Glyph System (`rendering/glyphs.py`)
+
+Procedural symbolic glyph generation from genome.
+
+**Stroke vocabulary:**
+- `_draw_arc(surface, cx, cy, size, color, alpha, angle_start, angle_sweep, radius_ratio)` — partial circle arc
+- `_draw_line(...)` — straight line radiating from center
+- `_draw_loop(...)` — small closed oval attached at offset point
+- `_draw_fork(...)` — Y-shaped split
+- `_draw_spiral(...)` — inward spiral
+- `_draw_dot(...)` — small filled circle offset from center
+
+**Key functions:**
+- `build_glyph_surface(genome, color, base_size) -> pygame.Surface` — fully deterministic from genome hash seed; applies symmetry and appendages
+- `get_glyph_surface(creature, color, base_size) -> pygame.Surface` — returns cached or builds fresh; caches on `creature.glyph_surface`
+
+**Determinism guarantee:** `_genome_hash_seed()` quantizes traits to 3dp and hashes the tuple; same genome always produces same glyph.
+
+### AnimationManager (`rendering/animations.py`)
+
+Manages all active visual animations. Completely decoupled from simulation/.
+
+**Animation types:**
+- `DeathAnimation` — 40-frame dissolution: white flash at frame 0, glyph fades+shrinks to 0.3×, 4–6 scatter particles over 20 frames
+- `BirthScaleTracker` — 30-frame ease-out-cubic scale-up from 0.2× to 1.0×; tracked per `id(creature)`
+- `ParentPulse` — 15-frame expanding ring on reproducing parent (not yet wired to simulation, can be added)
+
+**Key methods:**
+- `process_events(death_events, birth_events, get_color)` — create animations from event queues
+- `get_birth_scale(creature) -> float | None` — query current scale override for a creature
+- `tick_and_draw(surface)` — advance + draw all active animations
 
 ### Settings (`settings.py`)
 
-Single dataclass holding all configuration. No global mutable state — pass `Settings` instance to constructors.
+Single dataclass. New fields added in this pass:
+
+```
+glyph_size_base: int = 48           # base canvas size for glyphs
+kin_line_max_distance: float = 120.0
+kin_line_min_group: int = 3
+territory_top_n: int = 3
+territory_shimmer_lerp: float = 0.05
+territory_fade_seconds: float = 2.0
+death_animation_frames: int = 40
+birth_animation_frames: int = 30
+death_particle_count: int = 5
+```
 
 ## Sim Mode Contract
 
 A new simulation mode must:
 
 1. Be a class with constructor `__init__(self, width: int, height: int, settings: Settings)`
-2. Implement `step(self) -> None` to advance simulation by one frame
-3. Implement `reset(self) -> None` to reinitialize
-4. Expose these properties:
-   - `creatures: list[Creature]` — current living creatures
-   - `food_manager: FoodManager` — food particle manager
-   - `population: int` — current creature count
-   - `generation: int` — reproduction counter
-   - `oldest_age: int` — age of oldest creature
-   - `food_count: int` — current food count
-   - `paused: bool` — pause state
-   - `settings: Settings` — settings reference
-5. Add mode name to `Settings.VALID_SIM_MODES`
-6. Update `main.py` to instantiate based on `settings.sim_mode`
+2. Implement `step(self) -> None`
+3. Implement `reset(self) -> None`
+4. Expose properties: `creatures`, `food_manager`, `population`, `generation`, `oldest_age`, `food_count`, `paused`, `settings`
+5. Expose event queues: `death_events: list[dict]`, `birth_events: list[Creature]`
+6. Add mode name to `Settings.VALID_SIM_MODES`
 
 ## Visual Theme Contract
 
 A new theme must:
 
-1. Inherit from `Theme` ABC in `rendering/themes.py`
-2. Implement all abstract methods (see Key Abstractions above)
-3. Be registered in `get_theme()` function
-4. Add theme name to `Settings.VALID_VISUAL_THEMES`
+1. Inherit from `Theme` ABC
+2. Implement all abstract methods including `render_creature(surface, creature, time, scale=1.0)`
+3. Register in `get_theme()`
+4. Add to `Settings.VALID_VISUAL_THEMES`
 
 ## Known Stubs
 
 **Simulation modes (not implemented):**
-- `predator_prey` — creatures can eat each other based on size/aggression
-- `boids` — flocking behavior
-- `drift` — passive floating without food-seeking
+- `predator_prey`, `boids`, `drift`
 
 **Visual themes (not implemented):**
-- `petri` — microscope/petri dish aesthetic
-- `geometric` — abstract geometric shapes
-- `chaotic` — vibrant, high-contrast colors
-
-Each stub shows a "coming soon" overlay. Implementation requires creating the mode/theme class and removing the stub check.
-
-## Ollama Integration Note
-
-A future enhancement will add LLM narration that reads:
-- `simulation.generation`
-- `simulation.population`
-- `simulation.get_dominant_traits()`
-
-The architecture already supports this — `get_dominant_traits()` returns a dict of average trait values. A narrator module can periodically query these and generate commentary.
+- `petri`, `geometric`, `chaotic`
 
 ## Performance Notes
 
-### Spatial Bucketing
+### Glyph Caching
 
-`FoodManager` uses a grid-based spatial hash (bucket size 100px) to avoid O(n²) creature-food collision checks. When a creature seeks food:
+Glyph surfaces are cached on `creature.glyph_surface`. Building a glyph involves ~2–7 stroke draws on a small surface (32–80px); this is acceptable at creation time but must not happen every frame. The cache is invalidated when the surface size changes by more than 4px (creature grew/shrunk significantly) or when the creature reproduces (offspring has new genome → `glyph_surface = None`).
 
-1. Determine which buckets are within `sense_radius`
-2. Only check food particles in those buckets
-3. Average case: O(1) per creature; worst case: O(k) where k = particles in range
+### Kin Lines
 
-### Creature Count
+Creatures are bucketed by `lineage_id` before drawing kin lines — only within-lineage pairs are compared. With typical lineage diversity, most lineages have 1–5 members; the expected per-frame cost is O(n × avg_lineage_size), not O(n²).
 
-With 300 creatures and 500 food particles:
-- Per-frame: ~300 food lookups + ~300 position updates
-- Each lookup checks ~4-9 buckets on average
-- Target: 60 FPS on modern CPU
+### Territory Shimmer
 
-### Rendering
+Shimmer state is computed once per frame per dominant lineage (top 3). Centroid and spread are recomputed from the members list. This is O(n) total per frame and negligible vs. rendering cost.
 
-- Glow surfaces are cached by size/color to avoid repeated creation
-- Trails are limited to 8 positions per creature
-- Ambient particles use simple sinusoidal movement (no physics)
+### Trail Lengths
+
+Trail lengths are motion-style-dependent (14/10/5 positions). Dart-style creatures use very short trails, reducing the per-creature draw cost for the most common burst-pause pattern.
 
 ## Do Not Break
 
 1. **Sim/render decoupling** — `Simulation.step()` must never call pygame or modify visual state
-2. **No global mutable state** — all state lives in `Simulation`, `Renderer`, or `Settings` instances
+2. **No global mutable state** — all state lives in `Simulation`, `Renderer`, or `Settings`
 3. **Settings-driven behavior** — no hardcoded numbers; use `Settings` fields
 4. **Toroidal world** — creatures and distance calculations must handle wrapping
 5. **Genome immutability** — `Genome` is frozen; mutation returns a new instance
 6. **Food spatial bucketing** — maintain bucket structure when modifying `FoodManager`
-7. **Trail length cap** — always limit creature trails to 8 positions
-8. **Energy bounds** — creature energy should stay in [0.0, 1.0] range
+7. **Trail length cap** — always limit creature trails to `get_trail_length()` positions (not hardcoded 8)
+8. **Energy bounds** — creature energy stays in [0.0, 1.0]
+9. **Glyph determinism** — same genome must always produce same glyph (hash-seeded RNG)
+10. **Event queue ownership** — `death_events` and `birth_events` are populated by simulation, cleared by renderer after processing
+
+## Ollama Integration Note
+
+A future enhancement will add LLM narration. `get_dominant_traits()` now returns all 13 genome traits including the new glyph and motion traits.
