@@ -47,7 +47,7 @@ The screensaver will launch in fullscreen mode by default.
 
 ### The Genome System
 
-Each creature has a **genome** — a set of 13 heritable traits that determine its characteristics. All traits are floats in the range 0.0–1.0 and can mutate slightly each generation.
+Each creature has a **genome** — a set of 14 heritable traits that determine its characteristics. All traits are floats in the range 0.0–1.0 and can mutate slightly each generation.
 
 #### Survival Traits
 
@@ -55,11 +55,12 @@ Each creature has a **genome** — a set of 13 heritable traits that determine i
 |-------|-------|--------|
 | **speed** | 0–1 | Maximum movement speed multiplier |
 | **size** | 0–1 | Body radius (4–12 pixels); larger = more collision area but higher energy cost |
-| **sense_radius** | 0–1 | Food detection range (40–150 pixels) |
-| **aggression** | 0–1 | Reserved for predator-prey mode |
+| **sense_radius** | 0–1 | Food detection range (40–150 pixels); declines after 85% of max lifespan |
+| **aggression** | 0–1 | Feeding strategy: <0.4 = grazer (+20% food efficiency, ignores prey), >0.6 = hunter (seeks and drains nearby creatures), 0.4–0.6 = opportunist |
+| **efficiency** | 0–1 | Energy extraction rate from food |
+| **longevity** | 0–1 | Maximum lifespan: 0 = ~3000 frames (~50s), 1 = ~10000 frames (~2.8min); high longevity costs energy each frame |
 | **hue** | 0–1 | Base color hue (heritable; hue drift > 0.15 triggers speciation) |
 | **saturation** | 0–1 | Color saturation |
-| **efficiency** | 0–1 | Energy extraction rate from food |
 
 #### Glyph Traits — What You See
 
@@ -92,23 +93,47 @@ Glyphs are built from a **stroke vocabulary**: arcs, straight lines, loops (smal
 - **Glyph rotation**: each creature's glyph rotates at a rate set by `rotation_speed` — gliders barely turn, some creatures spin continuously.
 - **Population cycles**: the overcrowding energy penalty creates boom-bust cycles. Watch population rise, crash, and re-stabilize.
 - **Speciation events**: when a creature's offspring inherits a hue mutation > 0.15, it gets a new lineage ID. Kin lines for the old lineage gradually fade as the old line dies out and new lines emerge.
+- **Aging**: creatures past 70% of their max lifespan gradually grey out. Ancient creatures become visibly desaturated and slower — a soft visual indicator of senescence.
+- **Cosmic rays**: a faint white ring briefly expands around a creature struck by a spontaneous single-trait mutation. Watch for these in slow periods — they can seed sudden new lineage directions.
+- **Attack lines**: when a hunter drains a nearby creature, a thin colored thread briefly connects them.
+- **Zone backgrounds**: subtle radial tints mark the 5 environmental zones (warm vent, open water, kelp forest, hunting ground, deep trench). Creatures that evolve for their zone gain an energy advantage.
+
+### Watching Evolution
+
+Over a 10–30 minute run, you can observe real selection pressure at work:
+
+- **Glyph family divergence**: At startup, all glyphs look similar (random mutations from a common ancestor). After ~5 minutes, distinct visual clans emerge — recognizable by glyph shape, symmetry type, and rotation. Kin lines help trace which families dominate which regions.
+
+- **Hunter/grazer balance shifting with food cycles**: The HUD shows `H:N G:N O:N` counts. During feast phases (food bar toward right), grazers can outpace hunters. During famines, hunters profit from harvesting grazers — watch the ratio flip. At equilibrium, hunters and grazers coexist through frequency-dependent selection: hunting is only profitable when prey are plentiful.
+
+- **Zone adaptation**: Creatures gradually cluster in zones that favor their trait profile. A high-efficiency lineage will tend to concentrate near warm vents; fast aggressive hunters gravitate toward hunting grounds. This takes many generations — look for the territory shimmer centroid drifting toward favorable zones.
+
+- **Longevity vs. fecundity tradeoff**: High-longevity creatures live longer but pay an energy tax each frame and reproduce less often. During stable boom periods, you'll see long-lived types persist; during crashes, short-lived fast-reproducers may bounce back faster. The HUD shows average old-age lifespan in seconds.
+
+- **Cosmic ray injections**: Occasionally a creature's glyph shape visibly changes without reproduction. This is a cosmic ray hit — a single-trait mutation. These are most visible as sudden glyph asymmetry shifts or rotation speed jumps in long-lived lineages.
 
 ### Evolution
 
-1. **Food Seeking**: Creatures sense nearby food particles and steer toward them
-2. **Eating**: Touching food gains energy scaled by efficiency
-3. **Energy Cost**: Movement costs energy proportional to speed × size
-4. **Reproduction**: At energy ≥ 0.8, split into parent + offspring (halved energy each); the offspring genome is mutated
-5. **Mutation**: Each of 13 traits has a 5% chance of shifting (gaussian, std 0.08), clamped to 0–1
-6. **Speciation**: If hue mutates more than 0.15 in one step, the offspring starts a new lineage
-7. **Death**: Energy depleted → 40-frame dissolution animation, then removed
-8. **Natural Selection**: Traits that find food efficiently and survive spread
+1. **Food Seeking**: Creatures sense nearby food and steer toward it; sense radius declines with age
+2. **Eating**: Touching food gains energy scaled by `efficiency`; grazers get a +20% bonus
+3. **Hunting**: Hunters (aggression > 0.6) seek and drain energy from smaller nearby creatures; deal damage proportional to size ratio and aggression
+4. **Energy Cost**: Movement costs energy proportional to speed × size; high aggression and high longevity each add a continuous metabolic drain
+5. **Food Cycles**: Food spawn rate oscillates sinusoidally over ~30 seconds — alternating feast and famine. Boom-bust ecological cycles emerge from this pressure.
+6. **Zones**: Five environmental zones grant ±20% energy modifiers based on trait matching. Creatures evolve toward zones that favor their profile.
+7. **Reproduction**: At energy ≥ 0.8, split into parent + offspring (halved energy each); offspring genome is mutated
+8. **Mutation**: Each of 14 traits has a ~6% chance of shifting (gaussian, std 0.08), clamped to 0–1
+9. **Cosmic Rays**: Each creature has a small per-frame chance of a single spontaneous trait mutation (independent of reproduction)
+10. **Aging**: Creatures have a maximum lifespan determined by `longevity`. Speed declines after 70% of max lifespan; sense radius after 85%. Death by old age emits scatter particles.
+11. **Speciation**: If hue mutates more than 0.15 in one step, the offspring starts a new lineage
+12. **Death**: Energy depleted or max lifespan reached → 40-frame dissolution animation, scatter particles, then removed
+13. **Natural Selection**: Traits that find food efficiently, survive predation, and thrive in local zones spread
 
 ### Population Dynamics
 
-- Population is soft-capped at `max_population` (default 300)
+- Population is soft-capped at `max_population` (default 220)
 - When population exceeds 50% of max, energy costs increase quadratically
-- Boom-bust cycles emerge naturally; generation count tracks total reproductions
+- Food cycles, predation, and aging interact to produce complex boom-bust dynamics
+- Generation count tracks total reproductions; oldest creature tracked as % of max lifespan
 
 ## Settings
 
@@ -119,11 +144,23 @@ All settings are configured in `primordial/settings.py`:
 sim_mode: str = "energy"          # "energy" implemented; others coming soon
 visual_theme: str = "ocean"       # "ocean" implemented; others coming soon
 initial_population: int = 80
-max_population: int = 300
-food_spawn_rate: float = 0.4      # food particles per frame
-mutation_rate: float = 0.05       # chance of mutation per trait
-energy_to_reproduce: float = 0.8
+max_population: int = 220
+food_spawn_rate: float = 0.6      # base food particles per frame (cycles 0→2×)
+food_max_particles: int = 300     # food cap; lower = sharper famines
+mutation_rate: float = 0.06       # chance of mutation per trait per generation
+energy_to_reproduce: float = 0.80
 creature_speed_base: float = 1.5
+
+# Food cycle (sinusoidal boom/bust)
+food_cycle_period: int = 1800     # frames per feast/famine cycle (~30s at 60fps)
+food_cycle_enabled: bool = True
+
+# Cosmic ray mutations
+cosmic_ray_rate: float = 0.0003   # probability per creature per frame
+
+# Environmental zones
+zone_count: int = 5               # number of zones placed at startup
+zone_strength: float = 0.8        # global zone effect multiplier (0 = disabled)
 
 # Display
 fullscreen: bool = True
@@ -148,6 +185,23 @@ birth_animation_frames: int = 30
 death_particle_count: int = 5
 ```
 
+### Tuning
+
+These are the levers most likely to change the feel of the simulation:
+
+| Goal | Setting | Change |
+|------|---------|--------|
+| More dramatic famines | `food_max_particles` | Lower (e.g. 150) |
+| Slower food cycles | `food_cycle_period` | Higher (e.g. 3600) |
+| Disable food cycles | `food_cycle_enabled` | `False` |
+| More predation pressure | `cosmic_ray_rate` + `mutation_rate` | Higher (more trait diversity) |
+| Faster evolution | `mutation_rate` | Higher (e.g. 0.10) |
+| Longer-lived creatures | (genome evolves) | Reduce `food_max_particles` — famines favor longevity |
+| More zone influence | `zone_strength` | Higher (max 1.0) |
+| Disable zones | `zone_strength` | `0.0` |
+| Bigger populations | `max_population` | Higher (300+), expect more hunting noise |
+| Disable cosmic rays | `cosmic_ray_rate` | `0.0` |
+
 ## Project Structure
 
 ```
@@ -158,9 +212,10 @@ primordial/
 │   ├── settings.py          # Configuration dataclass
 │   ├── simulation/
 │   │   ├── __init__.py
-│   │   ├── creature.py      # Creature class with motion styles
-│   │   ├── food.py          # Food and FoodManager
-│   │   ├── genome.py        # Genome — 13 heritable traits
+│   │   ├── creature.py      # Creature class with motion styles and aging
+│   │   ├── food.py          # Food and FoodManager (spatial bucket)
+│   │   ├── genome.py        # Genome — 14 heritable traits
+│   │   ├── zones.py         # Environmental zones and ZoneManager
 │   │   └── simulation.py    # Main simulation logic + event queues
 │   └── rendering/
 │       ├── __init__.py
