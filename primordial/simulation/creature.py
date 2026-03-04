@@ -85,6 +85,12 @@ class Creature:
         """
         ms = self.genome.motion_style
 
+        # Apply aging speed reduction (old creatures move slower)
+        age_mult = self.get_age_speed_mult()
+        if age_mult < 1.0:
+            self.vx *= age_mult
+            self.vy *= age_mult
+
         # Apply swim lateral oscillation before moving
         if 0.34 <= ms < 0.67:
             self._swim_phase += 0.15
@@ -301,6 +307,49 @@ class Creature:
             Sensing radius in pixels (40-150 range).
         """
         return 40.0 + self.genome.sense_radius * 110.0
+
+    def get_max_lifespan(self) -> float:
+        """
+        Maximum lifespan in frames based on longevity trait.
+
+        Returns:
+            Lifespan in frames (3000–10000, ~50s–167s at 60fps).
+        """
+        return 3000.0 + self.genome.longevity * 7000.0
+
+    def get_age_fraction(self) -> float:
+        """
+        Current age as a fraction of max lifespan (0.0–1.0+).
+
+        Returns:
+            0.0 at birth, 1.0 at natural death age.
+        """
+        return self.age / self.get_max_lifespan()
+
+    def get_age_speed_mult(self) -> float:
+        """
+        Speed multiplier from aging (declines linearly after 70% lifespan).
+
+        Returns:
+            1.0 when young, down to 0.5 at max lifespan.
+        """
+        frac = self.get_age_fraction()
+        if frac < 0.7:
+            return 1.0
+        return max(0.5, 1.0 - (frac - 0.7) / 0.3 * 0.5)
+
+    def get_effective_sense_radius(self) -> float:
+        """
+        Sense radius accounting for aging (declines after 85% lifespan).
+
+        Returns:
+            Sensing radius in pixels, reduced for old creatures.
+        """
+        base = self.get_sense_radius()
+        frac = self.get_age_fraction()
+        if frac < 0.85:
+            return base
+        return base * max(0.6, 1.0 - (frac - 0.85) / 0.15 * 0.4)
 
     def get_movement_cost(self) -> float:
         """

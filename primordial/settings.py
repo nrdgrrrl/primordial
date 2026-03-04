@@ -23,14 +23,25 @@ class Settings:
 
     # Population settings
     initial_population: int = 80
-    max_population: int = 300
+    max_population: int = 250
 
     # Food settings
-    food_spawn_rate: float = 0.4  # food particles per frame
+    food_spawn_rate: float = 0.3  # food particles per frame (slightly reduced — scarcity matters)
+
+    # Food cycle settings (boom/bust sinusoidal oscillation)
+    food_cycle_period: int = 1800   # frames per cycle (~30s at 60fps)
+    food_cycle_enabled: bool = True
 
     # Evolution settings
-    mutation_rate: float = 0.05
-    energy_to_reproduce: float = 0.8
+    mutation_rate: float = 0.06       # slightly increased for faster trait drift
+    energy_to_reproduce: float = 0.75  # slightly easier to reproduce
+
+    # Cosmic ray (spontaneous single-trait mutation) settings
+    cosmic_ray_rate: float = 0.0003  # probability per creature per frame
+
+    # Zone settings
+    zone_count: int = 5
+    zone_strength: float = 0.8  # global zone effect multiplier (0 = disabled)
 
     # Creature settings
     creature_speed_base: float = 1.5

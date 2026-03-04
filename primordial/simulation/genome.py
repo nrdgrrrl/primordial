@@ -31,6 +31,9 @@ class Genome:
     # Motion trait
     motion_style: float = 0.5  # 0-0.33=glide, 0.34-0.66=swim, 0.67-1.0=dart
 
+    # Lifespan trait (added in selection-pressure pass)
+    longevity: float = 0.5  # 0=short-lived cheap, 1=long-lived costly
+
     @classmethod
     def random(cls) -> "Genome":
         """Create a genome with random trait values between 0.0 and 1.0."""
@@ -48,6 +51,7 @@ class Genome:
             appendages=random.random(),
             rotation_speed=random.random(),
             motion_style=random.random(),
+            longevity=random.random(),
         )
 
     def mutate(self, mutation_rate: float) -> "Genome":
@@ -83,7 +87,32 @@ class Genome:
             appendages=mutate_trait(self.appendages),
             rotation_speed=mutate_trait(self.rotation_speed),
             motion_style=mutate_trait(self.motion_style),
+            longevity=mutate_trait(self.longevity),
         )
+
+    def mutate_one(self, std: float = 0.15) -> tuple["Genome", str]:
+        """
+        Apply a cosmic-ray mutation: randomly pick one trait and shift it.
+
+        Args:
+            std: Gaussian standard deviation for the shift (larger than normal).
+
+        Returns:
+            Tuple of (new_genome, trait_name_mutated).
+        """
+        trait_names = [
+            "speed", "size", "sense_radius", "aggression",
+            "hue", "saturation", "efficiency",
+            "complexity", "symmetry", "stroke_scale",
+            "appendages", "rotation_speed", "motion_style", "longevity",
+        ]
+        trait = random.choice(trait_names)
+        new_val = max(0.0, min(1.0, getattr(self, trait) + random.gauss(0, std)))
+        new_genome = Genome(**{
+            **{t: getattr(self, t) for t in trait_names},
+            trait: new_val,
+        })
+        return new_genome, trait
 
     def copy(self) -> "Genome":
         """Create an exact copy of the genome."""
@@ -101,4 +130,5 @@ class Genome:
             appendages=self.appendages,
             rotation_speed=self.rotation_speed,
             motion_style=self.motion_style,
+            longevity=self.longevity,
         )
