@@ -82,6 +82,12 @@ Mutable dataclass representing a single organism:
 - `_swim_phase: float` — internal oscillation state for swim motion
 - `_dart_burst_remaining: int`, `_dart_cooldown: int` — dart burst state machine
 
+**Aging methods (selection-pressure pass):**
+- `get_max_lifespan()` — 3000 + longevity × 7000 frames
+- `get_age_fraction()` — current age / max_lifespan
+- `get_age_speed_mult()` — 1.0 until 70% lifespan, then linear to 0.5
+- `get_effective_sense_radius()` — accounts for aging after 85% lifespan
+
 **Trail length** varies by motion style: glide=14, swim=10, dart=5 (`get_trail_length()`).
 
 **Motion styles** (in `wander()` and `update_position()`):
@@ -110,13 +116,20 @@ Main simulation controller. Owns `creatures`, `food_manager`, `settings`.
 - `_next_lineage_id: int` — monotone counter for lineage ID allocation
 - `death_events: list[dict]` — populated each frame when creatures die; cleared by renderer
 - `birth_events: list[Creature]` — populated each frame on reproduction; cleared by renderer
+- `cosmic_ray_events: list[tuple[float,float]]` — (x, y) positions for cosmic ray animations; cleared by renderer
+- `active_attacks: list[tuple]` — (ax, ay, tx, ty, hue) attack lines; rebuilt per frame; consumed by renderer
+- `zone_manager: ZoneManager` — fixed environmental zones; reset() regenerates them
+- `_old_age_lifespans: deque[float]` — rolling last-20 natural deaths in frames
 
-**Death event dict keys:** `x`, `y`, `genome`, `glyph_surface`, `lineage_id`
+**Death event dict keys:** `x`, `y`, `genome`, `glyph_surface`, `lineage_id`, `cause` ("energy" | "age")
 
 **Key methods (updated):**
-- `step()` — now populates `death_events` and `birth_events`; offspring inherit lineage unless hue mutation > 0.15 (speciation → new ID)
-- `get_lineage_counts() -> dict[int, int]` — counts creatures per lineage_id
-- `get_dominant_traits()` — now includes all 13 genome traits
+- `step()` — populates all event queues; runs food cycle, hunting, cosmic rays, aging
+- `get_lineage_counts() -> dict[int, int]`
+- `get_dominant_traits()` — now includes all 14 genome traits (+ longevity)
+- `get_hunter_grazer_counts() -> tuple[int, int, int]` — (hunters, grazers, opportunists)
+- `food_cycle_phase` property — 0.0=famine, 1.0=feast
+- `avg_old_age_lifespan_seconds` property — rolling avg of last 20 natural deaths
 
 **Invariants (all preserved):**
 - `step()` never calls pygame or modifies rendering state
@@ -182,12 +195,105 @@ Manages all active visual animations. Completely decoupled from simulation/.
 - `get_birth_scale(creature) -> float | None` — query current scale override for a creature
 - `tick_and_draw(surface)` — advance + draw all active animations
 
+### ZoneManager (`simulation/zones.py`)
+
+Generates and manages fixed environmental zones at startup.
+
+**Zone types** (defined in `ZONE_DEFINITIONS` dict):
+
+| Zone | Favours | Penalises | BG colour |
+|------|---------|-----------|-----------|
+| `warm_vent` | efficiency↑, size↑ | speed↑ | deep amber |
+| `open_water` | speed↑, size↓ | aggression↑ | pale blue |
+| `kelp_forest` | sense_radius↑, aggression↓ | speed↑ | deep green |
+| `hunting_ground` | aggression↑, speed↑ | longevity↑ | deep red |
+| `deep_trench` | longevity↑, size↓ | efficiency↑ | deep indigo |
+
+**Zone effect application** (per creature per frame):
+1. For each zone, compute distance weight (0 at edge, 1 at centre).
+2. Compute `_trait_effect(zone_type, genome)`: favoured traits → negative value (cheaper energy), penalised → positive (costlier).
+3. Sum contributions × weight × strength → clamp to [0.75, 1.25].
+4. Multiply creature's total `energy_cost` by this modifier.
+
+**Performance:** O(zone_count) per creature per frame — trivial even at 250 creatures.
+
+**HUD helper:** `get_dominant_zone(creatures)` returns label of the zone containing the most creatures (by highest overlap weight).
+
+### Aggression Behaviour Tiers
+
+Three tiers defined by `genome.aggression`:
+
+| Tier | Range | Behaviour | Cost | Advantage |
+|------|-------|-----------|------|-----------|
+| Hunter | > 0.6 | Seeks nearest creature ≤1.3× own radius within `sense×1.5`; attacks within `radius×4` | `aggression×0.0012/frame` drain; 0.85× food sense | Attack gain `aggression×0.008×size_ratio/frame` |
+| Opportunist | 0.4–0.6 | Eats food; attacks creatures <60% own size nearby | Moderate | None |
+| Grazer | < 0.4 | Pure food-seeking | None | +20% food efficiency bonus |
+
+Hunting uses a **creature spatial bucket** (150px cells, built per frame) to avoid O(n²) scanning. Only cells within `sense_radius` distance are checked.
+
+Attack lines rendered by `renderer._draw_attack_lines()` — thin 1px hue-colored lines, alpha 40.
+
+### Lifespan / Aging System
+
+**`genome.longevity`** (new trait, 0–1): controls max lifespan.
+
+`max_lifespan = 3000 + longevity × 7000` frames (50s–167s at 60fps).
+
+Aging effects (computed by creature methods, applied in `update_position` and `simulation.step`):
+
+| Life fraction | Speed effect | Sense effect |
+|---------------|-------------|-------------|
+| 0–70% | ×1.0 | ×1.0 |
+| 70–100% | ×1.0 → ×0.5 linearly | ×1.0 |
+| 85–100% | ×1.0 | ×1.0 → ×0.6 linearly |
+
+**r/K tradeoff:** High longevity = long-lived but pays `longevity×0.0004/frame` maintenance. Low longevity = cheap but dies young.
+
+Visual: grey wash overlay applied at blit time (not glyph cache) reaches alpha 160 at max lifespan.
+
+**HUD:** "Oldest" stat shows `N% lifespan` rather than raw frames.
+
+### Food Cycle
+
+Sinusoidal spawn rate: `food_spawn_rate × (0.5 + 0.5 × sin(2π × t / food_cycle_period))`.  Phase 0 = famine (near-zero spawn); phase 1 = feast (2× base rate).  `food_cycle_phase` property exposed for HUD bar.
+
+### Cosmic Rays
+
+Each frame each living creature has `cosmic_ray_rate` chance of a single-trait mutation via `genome.mutate_one(std=0.15)`.  If the hit trait is `hue` and shift > 0.2, a new `lineage_id` is allocated (visible speciation).  Position emitted to `simulation.cosmic_ray_events` → `CosmicRayAnimation` (20-frame expanding white ring, alpha 50).
+
+### Selection Pressure — How the Systems Interact
+
+All four systems create converging selection pressure:
+
+1. **Food cycle** drives boom/bust population oscillation.  During famine, only the most energy-efficient creatures survive.  This selects for high `efficiency` (grazers) and high `longevity` (creatures that can outlast famine on stored energy).
+
+2. **Aggression / predation** creates a frequency-dependent layer on top of the food cycle.  Hunters thrive when prey density is high (feast); struggle during famine when prey is also starving.  This prevents hunters from completely eliminating grazers: when grazers become rare, hunting becomes unprofitable and hunter numbers drop, allowing grazers to recover.
+
+3. **Zones** add spatial texture.  Creatures in `hunting_ground` evolve higher aggression and speed; creatures in `kelp_forest` or `deep_trench` evolve toward low aggression, high sense_radius, or high longevity.  This produces regionally distinct phenotypes visible in glyph appearance.
+
+4. **Cosmic rays** act as a continuous mutation floor, preventing fixation.  At 0.0003/frame with 100 creatures, there's ~1 cosmic ray per 33 frames (~0.5s).  This continuously re-introduces rare phenotypes, preventing permanent extinction of any strategy.
+
+**Expected equilibrium:** Hunter-heavy population (H:G ratio ~4:1) with:
+- Average aggression drifting toward 0.6–0.8
+- Average efficiency co-rising (hunters who also forage well survive famine)
+- Grazers persisting as minority, cycling in abundance with feast periods
+- Zone-adapted local clusters visible in glyph shape families by generation 300
+
+**Selection speed levers:**
+- Increase `mutation_rate` (faster drift, less genetic diversity)
+- Increase `cosmic_ray_rate` (more random jumps, maintains diversity)
+- Increase `food_cycle_period` (longer feast/famine — more dramatic selection)
+- Increase `zone_strength` (stronger regional pressure)
+- Decrease `food_max_particles` (sharper famines — stronger selection per cycle)
+- Increase `aggression * drain` coefficient — makes hunters riskier, slows aggression takeover
+
 ### Settings (`settings.py`)
 
-Single dataclass. New fields added in this pass:
+Single dataclass. Fields added in this pass:
 
 ```
-glyph_size_base: int = 48           # base canvas size for glyphs
+# Original glyph/animation fields:
+glyph_size_base: int = 48
 kin_line_max_distance: float = 120.0
 kin_line_min_group: int = 3
 territory_top_n: int = 3
@@ -196,6 +302,14 @@ territory_fade_seconds: float = 2.0
 death_animation_frames: int = 40
 birth_animation_frames: int = 30
 death_particle_count: int = 5
+
+# Selection-pressure pass fields:
+food_max_particles: int = 300       # food cap; lower = sharper famines
+food_cycle_period: int = 1800       # frames per boom/bust cycle (~30s)
+food_cycle_enabled: bool = True
+cosmic_ray_rate: float = 0.0003     # prob/creature/frame for spontaneous mutation
+zone_count: int = 5                  # number of environmental zones at startup
+zone_strength: float = 0.8          # global zone effect multiplier (0 = disabled)
 ```
 
 ## Sim Mode Contract

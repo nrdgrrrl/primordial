@@ -2,6 +2,188 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-03-04] — Evolution Selection Pressure Pass
+
+### Summary
+
+This pass adds four interacting selection systems so that evolution is visible
+and meaningful over hundreds of generations.  All systems create genuine
+tradeoffs; the visual tone stays calm and meditative throughout.
+
+---
+
+## [2026-03-04] — docs: AGENT.md and README updated for selection-pressure pass
+
+**What changed:**  Added zone architecture, aggression behaviour tiers,
+aging/longevity, and Selection Pressure section to AGENT.md.  Added
+"Watching Evolution" and "Tuning" sections to README.md.
+
+---
+
+## [2026-03-04] — feat: tuning — selection pressure balance, spatial bucket
+
+**What changed:**
+
+*`settings.py`:*
+- `food_spawn_rate` 0.4 → 0.6 (base rate; cycle makes it 0–1.2/frame)
+- `food_max_particles` 500 → 300 (lower cap means famine buffer empties faster)
+- `food_cycle_period` 1800 (30s per cycle)
+- `max_population` 300 → 220 (crowding penalty starts at 110 creatures)
+- `energy_to_reproduce` 0.75 → 0.80 (requires sustained feeding, not just lucky burst)
+- `mutation_rate` 0.05 → 0.06 (faster trait drift — visible change by gen 300)
+
+*`simulation/simulation.py`:*
+- Aggression drain tuned to `aggression * 0.0012/frame` — hunters pay a real cost
+  but can offset it with successful attacks
+- Attack drain tuned to `aggression * 0.008 * size_ratio/frame` — frequency-
+  dependent: profitable in dense prey environment, marginal in sparse
+- Grazer efficiency bonus raised to 20% (from spec's 15%) to ensure coexistence
+- Prey size cap: hunters only attack creatures ≤ 1.3× own radius
+
+*Creature spatial bucket:*  `_build_creature_bucket()` / `_nearby_creatures()`
+builds a 150px grid hash each frame and limits hunting queries to local cells.
+Reduces hunt step from O(n²) to O(n × local_density).
+Result: 476 fps sim-only at pop=100 on 1920×1080 (well above 60fps target).
+
+*Initial state:*  Creatures start with `energy=0.7`; 200 food particles
+pre-seeded so the population doesn't starve before the cycle's first feast.
+
+**Tuning rationale:**
+
+The core balance challenge: with predation providing a second energy source,
+hunters can survive famine by eating prey (which are also stressed by famine).
+This dampens the boom/bust oscillation and allows hunters to gradually dominate.
+The chosen parameters create frequency-dependent selection: hunting is
+marginally profitable at high population density (feast) and marginally
+unprofitable when prey is scarce (famine).  In practice, observed dynamics
+are run-dependent: some seeds reach hunter/grazer coexistence around H:G 4:1;
+others evolve toward hunter dominance.  Grazers are continuously re-introduced
+by cosmic ray mutations (0.0003 rate × 100 creatures ≈ 1 mutation every 33
+frames) so complete extinction requires sustained predation pressure over many
+generations.
+
+Expected observable dynamics at 1920×1080:
+- Population: 36–230 range, oscillating with food cycle
+- Hunters dominate after ~generation 100 in most runs
+- Average aggression rises to 0.6–0.8 by generation 500
+- Average efficiency rises in parallel (both traits co-selected)
+- Rare grazers persist as a minority throughout
+
+**Why these specific values:**
+- food_spawn_rate=0.6 × 2 = 1.2 at feast; feeds 200 creatures comfortably
+- food_max_particles=300: at 100 creatures, 300 food = 3 per creature; at
+  famine they draw down the buffer in ~200 frames — a visible scarcity
+- energy_to_reproduce=0.80: creatures need to eat ~4 food particles after
+  splitting; achievable in feast but not guaranteed in famine
+- Spatial bucket at 150px cells keeps hunting O(n × local) not O(n²)
+
+---
+
+## [2026-03-04] — feat: HUD updates — H/G/O counts, food bar, zone, avg lifespan
+
+**What changed** (`rendering/hud.py`):
+
+- **Oldest**: now shown as `N% lifespan` instead of raw frames — more meaningful
+  since max lifespan varies by `longevity` genome trait
+- **H:N G:N O:N**: live count of hunters (aggression > 0.6), grazers (< 0.4),
+  and opportunists; updates every frame
+- **Avg lifespan**: rolling average of last 20 natural (old-age) deaths in
+  seconds; `—` until first natural death occurs
+- **Zone**: dominant zone label (zone type containing the most creatures at
+  this instant; `—` if no creatures are inside any zone)
+- **Food cycle bar**: 80px horizontal bar with "Famine" ← → "Feast" labels;
+  colour gradient red→green tracks `food_cycle_phase`; updated every frame
+
+---
+
+## [2026-03-04] — feat: rendering — cosmic ray rings, zone backgrounds, attack lines, aging grey
+
+**What changed:**
+
+*`rendering/animations.py`:*
+- `CosmicRayAnimation`: 20-frame expanding white ring, max alpha 50, radius
+  6→30px.  Added `add_cosmic_ray()` to `AnimationManager`.
+
+*`rendering/renderer.py`:*
+- `_draw_zone_backgrounds()`: soft atmospheric radial gradients drawn
+  beneath territory shimmer; per-zone color at alpha 0–20; zones are static.
+- `_draw_attack_lines()`: 1px lines from attacker to target, hue color
+  alpha 40.  Consumes `simulation.active_attacks` each frame.
+- Cosmic ray events consumed from `simulation.cosmic_ray_events` → animations.
+
+*`rendering/themes.py`:*
+- Age desaturation: after blitting glyph, overlay a grey circle (alpha up to
+  160) on creatures past 70% max lifespan.  Applied at blit time — glyph cache
+  NOT invalidated.  Subtle until ~85%, obvious at 100%.
+
+---
+
+## [2026-03-04] — feat: environmental zone system
+
+**What changed** (`simulation/zones.py` new):
+
+Five zone types: `warm_vent`, `open_water`, `kelp_forest`, `hunting_ground`,
+`deep_trench`.  At startup, `ZoneManager` places `zone_count` (default 5)
+circles randomly across the world, each 18–30% of the shorter screen
+dimension in radius.
+
+Each zone type favours 2 traits and penalises 1 trait via energy cost
+multipliers (up to ±20% per zone, capped [0.75, 1.25] aggregate).
+`get_energy_modifier(creature)` is O(zone_count) per creature per frame.
+`get_dominant_zone(creatures)` for HUD: returns the zone label most creatures
+currently overlap.
+
+Zone rendering: `renderer._draw_zone_backgrounds()` draws each zone as
+concentric circles with alpha 0–20, giving subtle screen regions.
+
+---
+
+## [2026-03-04] — feat: food cycle, aggression/hunting, cosmic rays, aging deaths
+
+**What changed** (`simulation/simulation.py` rewritten):
+
+*Food cycle:*  `_get_food_rate()` = `food_spawn_rate × (0.5 + 0.5×sin(2π×t/period))`.
+`food_cycle_phase` property exposed for HUD bar.  Pre-seeded with 200 particles.
+
+*Aggression tiers:*
+- Hunters (> 0.6): seek nearest creature within `sense×1.5`, steer toward it,
+  attack at `radius×4` range.  Fallback food-seek uses 0.85× sense radius.
+- Grazers (< 0.4): pure food-seeking with 20% efficiency bonus at eat time.
+- Opportunists (0.4–0.6): eat food + opportunistic attack vs tiny nearby prey.
+Hunters pay `aggression×0.0012/frame`; must hunt to compensate.
+
+*Cosmic rays:*  Per-frame per-creature chance → `mutate_one(std=0.15)`.
+Hue shift > 0.2 → new `lineage_id`.  Position emitted to `cosmic_ray_events`.
+
+*Aging deaths:*  Creatures dying at `age >= max_lifespan` → cause="age"; ages
+tracked in rolling deque for `avg_old_age_lifespan_seconds` property.
+
+*New event queues:*  `cosmic_ray_events`, `active_attacks` (rebuilt per frame).
+New queries: `get_hunter_grazer_counts()`, `get_dominant_traits()` now includes
+`longevity`.
+
+---
+
+## [2026-03-04] — feat: settings tuning, longevity genome trait, creature aging system
+
+**What changed:**
+
+*`settings.py`:*  Added `food_cycle_period` (1800), `food_cycle_enabled`,
+`cosmic_ray_rate` (0.0003), `zone_count` (5), `zone_strength` (0.8),
+`food_max_particles` (300).
+
+*`genome.py`:*  Added `longevity` trait (0=short-lived, 1=long-lived);
+updated `random()`, `mutate()`, `copy()`.  Added `mutate_one()` for cosmic-ray
+single-trait mutation (picks one trait, Gaussian std=0.15).
+
+*`creature.py`:*  Added `get_max_lifespan()` (3000–10000 frames based on
+longevity), `get_age_fraction()`, `get_age_speed_mult()` (declines to 0.5×
+after 70% lifespan), `get_effective_sense_radius()` (declines to 0.6× after
+85% lifespan).  `update_position()` applies age speed mult before moving.
+`Creature.spawn()` now accepts optional `energy` parameter.
+
+---
+
 ## [2026-03-04] - Windows Screensaver Pass
 
 ### Summary

@@ -137,6 +137,14 @@ class DeathAnimation(Animation):
                 max_life=self.PARTICLE_LIFE,
             ))
 
+        # Pre-render particle surfaces at 16 alpha levels to avoid per-frame allocs
+        self._p_surfs: list[pygame.Surface] = []
+        for i in range(16):
+            alpha = int(80 * i / 15)
+            surf = pygame.Surface((6, 6), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (*color, alpha), (3, 3), 2)
+            self._p_surfs.append(surf)
+
     def tick(self) -> bool:
         self.frame += 1
         for p in self.particles:
@@ -151,15 +159,6 @@ class DeathAnimation(Animation):
     def draw(self, surface: pygame.Surface) -> None:
         t = self.frame / self.TOTAL_FRAMES  # 0→1
 
-        # --- White flash at frame 0 ---
-        if self.frame == 0:
-            flash_surf = pygame.Surface((self.glyph_size * 2, self.glyph_size * 2), pygame.SRCALPHA)
-            pygame.draw.circle(flash_surf, (255, 255, 255, 180),
-                               (self.glyph_size, self.glyph_size),
-                               self.glyph_size)
-            surface.blit(flash_surf, (int(self.x) - self.glyph_size,
-                                      int(self.y) - self.glyph_size))
-
         # --- Fading, shrinking glyph ---
         alpha = int(255 * (1.0 - t))
         scale = self.MIN_SCALE + (1.0 - self.MIN_SCALE) * (1.0 - t)
@@ -173,14 +172,12 @@ class DeathAnimation(Animation):
         except pygame.error:
             pass
 
-        # --- Scatter particles ---
+        # --- Scatter particles (use pre-rendered surfaces, no per-frame alloc) ---
         for p in self.particles:
             if p.life <= 0:
                 continue
-            particle_alpha = int(80 * (p.life / p.max_life))
-            p_surf = pygame.Surface((6, 6), pygame.SRCALPHA)
-            pygame.draw.circle(p_surf, (*p.color, particle_alpha), (3, 3), 2)
-            surface.blit(p_surf, (int(p.x) - 3, int(p.y) - 3))
+            idx = int(15 * p.life / p.max_life)
+            surface.blit(self._p_surfs[idx], (int(p.x) - 3, int(p.y) - 3))
 
 
 # ---------------------------------------------------------------------------

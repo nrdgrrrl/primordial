@@ -6,7 +6,7 @@ import math
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pygame
 
@@ -27,6 +27,7 @@ class AmbientParticle:
     alpha: int
     phase: float  # For sinusoidal movement
     speed: float
+    surface: Any = field(default=None, repr=False)  # pre-rendered surface
 
 
 class Theme(ABC):
@@ -122,6 +123,20 @@ class OceanTheme(Theme):
         """Initialize the ocean theme."""
         self._glow_cache: dict[tuple[int, int, int, int], pygame.Surface] = {}
 
+        # Pre-rendered food surfaces at 16 alpha levels (avoid per-frame alloc)
+        # Food: radius=3, color=(200,255,255), alpha range [60, 150]
+        self._food_surfs: list[pygame.Surface] = []
+        for i in range(16):
+            t = i / 15
+            alpha = int(60 + (150 - 60) * t)
+            surf = pygame.Surface((12, 12), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (200, 255, 255, alpha // 3), (6, 6), 6)
+            pygame.draw.circle(surf, (200, 255, 255, alpha), (6, 6), 3)
+            self._food_surfs.append(surf)
+
+        # Shared trail surface (lazy-init to screen size on first use)
+        self._trail_surf: pygame.Surface | None = None
+
     @property
     def name(self) -> str:
         return "ocean"
@@ -175,7 +190,7 @@ class OceanTheme(Theme):
         """
         cache_key = (radius, color[0], color[1], color[2])
         if cache_key in self._glow_cache:
-            return self._glow_cache[cache_key].copy()
+            return self._glow_cache[cache_key]
 
         glow_radius = int(radius * 2.5)
         size = glow_radius * 2
@@ -191,9 +206,38 @@ class OceanTheme(Theme):
             )
 
         if len(self._glow_cache) < 100:
-            self._glow_cache[cache_key] = surface.copy()
+            self._glow_cache[cache_key] = surface
 
         return surface
+
+    def render_creature_trail(
+        self,
+        creature: Creature,
+        time: float,
+        scale: float = 1.0,
+    ) -> None:
+        """
+        Draw creature trail onto the shared _trail_surf (no per-frame alloc).
+
+        Must be called after _trail_surf has been cleared by the renderer.
+        """
+        if not creature.trail or self._trail_surf is None:
+            return
+
+        color = self.get_creature_color(creature.genome.hue, creature.genome.saturation)
+        pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature.genome.hue * 6.28)
+        radius = max(4, int(creature.get_radius() * pulse * scale))
+
+        trail_len = len(creature.trail)
+        for i, (tx, ty) in enumerate(creature.trail):
+            trail_alpha = int(25 * (i + 1) / trail_len)
+            trail_radius = max(1, int(radius * 0.4 * (i + 1) / trail_len))
+            pygame.draw.circle(
+                self._trail_surf,
+                (*color, trail_alpha),
+                (int(tx), int(ty)),
+                trail_radius,
+            )
 
     def render_creature(
         self,
@@ -202,7 +246,7 @@ class OceanTheme(Theme):
         time: float,
         scale: float = 1.0,
     ) -> None:
-        """Render a creature with bloom glow halo and symbolic glyph."""
+        """Render a creature with bloom glow halo and symbolic glyph (no trail)."""
         color = self.get_creature_color(
             creature.genome.hue, creature.genome.saturation
         )
@@ -211,26 +255,6 @@ class OceanTheme(Theme):
         pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature.genome.hue * 6.28)
         base_radius = creature.get_radius()
         radius = max(4, int(base_radius * pulse * scale))
-
-        # Draw trail (before glow so glow sits on top)
-        if creature.trail:
-            trail_len = len(creature.trail)
-            for i, (tx, ty) in enumerate(creature.trail):
-                trail_alpha = int(25 * (i + 1) / trail_len)
-                trail_radius = max(1, int(radius * 0.4 * (i + 1) / trail_len))
-                trail_surface = pygame.Surface(
-                    (trail_radius * 2, trail_radius * 2), pygame.SRCALPHA
-                )
-                pygame.draw.circle(
-                    trail_surface,
-                    (*color, trail_alpha),
-                    (trail_radius, trail_radius),
-                    trail_radius,
-                )
-                surface.blit(
-                    trail_surface,
-                    (int(tx) - trail_radius, int(ty) - trail_radius),
-                )
 
         # Draw bloom glow halo (behind the glyph)
         glow = self._create_glow_surface(radius, color, 140)
@@ -283,26 +307,11 @@ class OceanTheme(Theme):
         food: Food,
         time: float,
     ) -> None:
-        """Render a food particle with twinkle effect."""
-        base_alpha = 150
+        """Render a food particle with twinkle effect (uses pre-rendered surfaces)."""
         twinkle = math.sin(time * 5 + food.twinkle_phase) * 0.3 + 0.7
-        alpha = int(base_alpha * twinkle)
-
-        color = (200, 255, 255, alpha)
-        radius = 3
-
-        glow_surface = pygame.Surface((radius * 4, radius * 4), pygame.SRCALPHA)
-        pygame.draw.circle(
-            glow_surface, (*color[:3], alpha // 3), (radius * 2, radius * 2), radius * 2
-        )
-        pygame.draw.circle(
-            glow_surface, color, (radius * 2, radius * 2), radius
-        )
-
-        surface.blit(
-            glow_surface,
-            (int(food.x) - radius * 2, int(food.y) - radius * 2),
-        )
+        # twinkle ∈ [0.4, 1.0] → index ∈ [0, 15]
+        idx = min(15, max(0, int((twinkle - 0.4) / 0.6 * 15)))
+        surface.blit(self._food_surfs[idx], (int(food.x) - 6, int(food.y) - 6))
 
     def render_ambient(
         self,
@@ -310,40 +319,38 @@ class OceanTheme(Theme):
         particles: list[AmbientParticle],
         time: float,
     ) -> None:
-        """Render ambient background particles."""
+        """Render ambient background particles (uses pre-rendered surfaces)."""
         for p in particles:
+            if p.surface is None:
+                continue
             offset_x = math.sin(time * p.speed + p.phase) * 20
             offset_y = math.cos(time * p.speed * 0.7 + p.phase) * 15
-
             x = int(p.x + offset_x)
             y = int(p.y + offset_y)
-
-            color = (20, 40, 80, p.alpha)
-            particle_surface = pygame.Surface(
-                (int(p.radius * 2), int(p.radius * 2)), pygame.SRCALPHA
-            )
-            pygame.draw.circle(
-                particle_surface,
-                color,
-                (int(p.radius), int(p.radius)),
-                int(p.radius),
-            )
-            surface.blit(particle_surface, (x - int(p.radius), y - int(p.radius)))
+            r = int(p.radius)
+            surface.blit(p.surface, (x - r, y - r))
 
     def create_ambient_particles(
         self, width: int, height: int, count: int
     ) -> list[AmbientParticle]:
-        """Create ambient background particles for depth effect."""
+        """Create ambient background particles with pre-rendered surfaces."""
         particles = []
         for _ in range(count):
+            r = random.uniform(30, 80)
+            alpha = random.randint(8, 20)
+            ri = int(r)
+            size = ri * 2
+            surf = pygame.Surface((size, size), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (20, 40, 80, alpha), (ri, ri), ri)
             particles.append(
                 AmbientParticle(
                     x=random.uniform(0, width),
                     y=random.uniform(0, height),
-                    radius=random.uniform(30, 80),
-                    alpha=random.randint(8, 20),
+                    radius=r,
+                    alpha=alpha,
                     phase=random.uniform(0, 6.28),
                     speed=random.uniform(0.1, 0.3),
+                    surface=surf,
                 )
             )
         return particles

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -95,7 +95,7 @@ class Renderer:
         self.start_time = time.time()
 
         # FPS tracking
-        self.frame_times: list[float] = []
+        self.frame_times: deque[float] = deque(maxlen=60)
         self.fps = 0.0
 
         # Stub mode/theme detection
@@ -109,6 +109,14 @@ class Renderer:
 
         # Territory shimmer state: lineage_id → ShimmerState
         self._shimmer_states: dict[int, ShimmerState] = {}
+
+        # Pre-allocated full-screen overlay surfaces (cleared each frame, not recreated)
+        self._line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._shimmer_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+        # Cached zone background (zones never move; render once)
+        self._zone_surf_cached: pygame.Surface | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -175,6 +183,20 @@ class Renderer:
         if isinstance(self.theme, OceanTheme):
             self._draw_kin_lines(simulation)
 
+        # --- Creature trails (batched onto shared surface, then blitted once) ---
+        if isinstance(self.theme, OceanTheme):
+            if (self.theme._trail_surf is None or
+                    self.theme._trail_surf.get_size() != (self.width, self.height)):
+                self.theme._trail_surf = pygame.Surface(
+                    (self.width, self.height), pygame.SRCALPHA
+                )
+            self.theme._trail_surf.fill((0, 0, 0, 0))
+            for creature in simulation.creatures:
+                birth_scale = self.animation_manager.get_birth_scale(creature)
+                scale = birth_scale if birth_scale is not None else 1.0
+                self.theme.render_creature_trail(creature, anim_time, scale=scale)
+            self.screen.blit(self.theme._trail_surf, (0, 0))
+
         # --- Creatures ---
         for creature in simulation.creatures:
             birth_scale = self.animation_manager.get_birth_scale(creature)
@@ -207,36 +229,31 @@ class Renderer:
         """
         Draw atmospheric radial gradient circles for each environmental zone.
 
-        Rendered beneath creatures, very low alpha (18-25) so they give
-        the screen a regional colour mood without being visually intrusive.
-        Zones never move — this surface could be cached, but at these sizes
-        the cost is negligible compared with creature rendering.
+        Zones never move, so the surface is rendered once and cached.
         """
-        zone_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        if self._zone_surf_cached is None:
+            self._zone_surf_cached = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            for zone in simulation.zone_manager.zones:
+                color = _ZONE_BG_COLORS.get(zone.zone_type, (60, 60, 60))
+                radius = int(zone.radius)
+                cx = int(zone.x)
+                cy = int(zone.y)
 
-        for zone in simulation.zone_manager.zones:
-            color = _ZONE_BG_COLORS.get(zone.zone_type, (60, 60, 60))
-            radius = int(zone.radius)
-            cx = int(zone.x)
-            cy = int(zone.y)
+                layers = 6
+                for i in range(layers, 0, -1):
+                    t = i / layers
+                    layer_radius = int(radius * t)
+                    layer_alpha = int(20 * (t ** 2))
+                    if layer_alpha <= 0 or layer_radius <= 0:
+                        continue
+                    pygame.draw.circle(
+                        self._zone_surf_cached,
+                        (*color, layer_alpha),
+                        (cx, cy),
+                        layer_radius,
+                    )
 
-            # Radial gradient: concentric circles from centre outward
-            layers = 6
-            for i in range(layers, 0, -1):
-                t = i / layers
-                layer_radius = int(radius * t)
-                # Alpha peaks at 20 at centre, 0 at edge
-                layer_alpha = int(20 * (t ** 2))
-                if layer_alpha <= 0 or layer_radius <= 0:
-                    continue
-                pygame.draw.circle(
-                    zone_surf,
-                    (*color, layer_alpha),
-                    (cx, cy),
-                    layer_radius,
-                )
-
-        self.screen.blit(zone_surf, (0, 0))
+        self.screen.blit(self._zone_surf_cached, (0, 0))
 
     # ------------------------------------------------------------------
     # Attack lines
@@ -252,7 +269,7 @@ class Renderer:
         if not simulation.active_attacks:
             return
 
-        attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._attack_surf.fill((0, 0, 0, 0))
 
         for ax, ay, tx, ty, hue in simulation.active_attacks:
             if isinstance(self.theme, OceanTheme):
@@ -261,14 +278,14 @@ class Renderer:
                 color = (200, 200, 200)
 
             pygame.draw.line(
-                attack_surf,
+                self._attack_surf,
                 (*color, 40),
                 (int(ax), int(ay)),
                 (int(tx), int(ty)),
                 1,
             )
 
-        self.screen.blit(attack_surf, (0, 0))
+        self.screen.blit(self._attack_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # Kin connection lines
@@ -292,8 +309,8 @@ class Renderer:
         for c in simulation.creatures:
             lineage_buckets[c.lineage_id].append(c)
 
-        # Build a reusable transparent surface for lines
-        line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        # Clear the pre-allocated line surface
+        self._line_surf.fill((0, 0, 0, 0))
 
         for lineage_id, members in lineage_buckets.items():
             if len(members) < min_group:
@@ -329,14 +346,14 @@ class Renderer:
                     alpha = max(15, min(30, alpha))
 
                     pygame.draw.line(
-                        line_surf,
+                        self._line_surf,
                         (*base_color, alpha),
                         (int(a.x), int(a.y)),
                         (int(b.x), int(b.y)),
                         1,
                     )
 
-        self.screen.blit(line_surf, (0, 0))
+        self.screen.blit(self._line_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # Territory shimmer
@@ -420,7 +437,7 @@ class Renderer:
         if not self._shimmer_states:
             return
 
-        shimmer_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._shimmer_surf.fill((0, 0, 0, 0))
 
         for lid, state in self._shimmer_states.items():
             if state.alpha_mult <= 0.0:
@@ -456,9 +473,9 @@ class Renderer:
                     continue
                 rect = pygame.Rect(cx - layer_rx, cy - layer_ry,
                                    layer_rx * 2, layer_ry * 2)
-                pygame.draw.ellipse(shimmer_surf, (*color, layer_alpha), rect)
+                pygame.draw.ellipse(self._shimmer_surf, (*color, layer_alpha), rect)
 
-        self.screen.blit(shimmer_surf, (0, 0))
+        self.screen.blit(self._shimmer_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # FPS and stub overlay helpers
@@ -467,15 +484,11 @@ class Renderer:
     def _update_fps(self, current_time: float) -> float:
         """Update FPS calculation. Returns dt in seconds."""
         self.frame_times.append(current_time)
-        while len(self.frame_times) > 60:
-            self.frame_times.pop(0)
 
         if len(self.frame_times) >= 2:
             elapsed = self.frame_times[-1] - self.frame_times[0]
             if elapsed > 0:
                 self.fps = (len(self.frame_times) - 1) / elapsed
-
-        if len(self.frame_times) >= 2:
             return self.frame_times[-1] - self.frame_times[-2]
         return 1.0 / 60.0
 
