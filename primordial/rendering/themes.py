@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from .glyphs import get_glyph_surface
+
 if TYPE_CHECKING:
     from ..simulation.creature import Creature
     from ..simulation.food import Food
@@ -53,6 +55,7 @@ class Theme(ABC):
         surface: pygame.Surface,
         creature: Creature,
         time: float,
+        scale: float = 1.0,
     ) -> None:
         """
         Render a creature to the surface.
@@ -61,6 +64,7 @@ class Theme(ABC):
             surface: Pygame surface to draw on.
             creature: The creature to render.
             time: Current simulation time for animations.
+            scale: Optional scale override (used by birth animation).
         """
         pass
 
@@ -71,14 +75,7 @@ class Theme(ABC):
         food: Food,
         time: float,
     ) -> None:
-        """
-        Render a food particle to the surface.
-
-        Args:
-            surface: Pygame surface to draw on.
-            food: The food particle to render.
-            time: Current simulation time for animations.
-        """
+        """Render a food particle to the surface."""
         pass
 
     @abstractmethod
@@ -88,31 +85,14 @@ class Theme(ABC):
         particles: list[AmbientParticle],
         time: float,
     ) -> None:
-        """
-        Render ambient background particles.
-
-        Args:
-            surface: Pygame surface to draw on.
-            particles: List of ambient particles.
-            time: Current simulation time for animations.
-        """
+        """Render ambient background particles."""
         pass
 
     @abstractmethod
     def create_ambient_particles(
         self, width: int, height: int, count: int
     ) -> list[AmbientParticle]:
-        """
-        Create ambient background particles.
-
-        Args:
-            width: World width.
-            height: World height.
-            count: Number of particles to create.
-
-        Returns:
-            List of AmbientParticle instances.
-        """
+        """Create ambient background particles."""
         pass
 
 
@@ -122,7 +102,8 @@ class OceanTheme(Theme):
 
     Features:
     - Near-black deep blue background
-    - Glowing blob creatures with trails
+    - Procedurally generated symbolic glyphs derived from genome
+    - Bloom glow halo behind each glyph
     - Cool bioluminescent color palette
     - Ambient drifting particles for depth
     """
@@ -139,7 +120,6 @@ class OceanTheme(Theme):
 
     def __init__(self) -> None:
         """Initialize the ocean theme."""
-        # Pre-create glow surfaces for different sizes
         self._glow_cache: dict[tuple[int, int, int, int], pygame.Surface] = {}
 
     @property
@@ -150,7 +130,7 @@ class OceanTheme(Theme):
     def background_color(self) -> tuple[int, int, int]:
         return (2, 8, 24)  # Deep ocean blue, near-black
 
-    def _get_creature_color(self, hue: float, saturation: float) -> tuple[int, int, int]:
+    def get_creature_color(self, hue: float, saturation: float) -> tuple[int, int, int]:
         """
         Map genome hue/saturation to a bioluminescent color.
 
@@ -161,11 +141,9 @@ class OceanTheme(Theme):
         Returns:
             RGB color tuple.
         """
-        # Use hue to pick from palette
         idx = int(hue * len(self.PALETTE)) % len(self.PALETTE)
         base_color = self.PALETTE[idx]
 
-        # Blend with next color for smooth transitions
         next_idx = (idx + 1) % len(self.PALETTE)
         next_color = self.PALETTE[next_idx]
         blend = (hue * len(self.PALETTE)) % 1.0
@@ -174,7 +152,6 @@ class OceanTheme(Theme):
         g = int(base_color[1] * (1 - blend) + next_color[1] * blend)
         b = int(base_color[2] * (1 - blend) + next_color[2] * blend)
 
-        # Apply saturation (desaturate toward white)
         gray = (r + g + b) // 3
         r = int(r * saturation + gray * (1 - saturation))
         g = int(g * saturation + gray * (1 - saturation))
@@ -186,7 +163,7 @@ class OceanTheme(Theme):
         self, radius: int, color: tuple[int, int, int], max_alpha: int
     ) -> pygame.Surface:
         """
-        Create a glowing blob surface with concentric circles.
+        Create a glowing halo surface with concentric circles.
 
         Args:
             radius: Base radius of the glow.
@@ -198,15 +175,12 @@ class OceanTheme(Theme):
         """
         cache_key = (radius, color[0], color[1], color[2])
         if cache_key in self._glow_cache:
-            cached = self._glow_cache[cache_key].copy()
-            return cached
+            return self._glow_cache[cache_key].copy()
 
-        # Create surface with extra space for glow
         glow_radius = int(radius * 2.5)
         size = glow_radius * 2
         surface = pygame.Surface((size, size), pygame.SRCALPHA)
 
-        # Draw concentric circles with decreasing alpha
         layers = 8
         for i in range(layers, 0, -1):
             layer_radius = int(glow_radius * (i / layers))
@@ -216,7 +190,6 @@ class OceanTheme(Theme):
                 surface, layer_color, (glow_radius, glow_radius), layer_radius
             )
 
-        # Cache for reuse
         if len(self._glow_cache) < 100:
             self._glow_cache[cache_key] = surface.copy()
 
@@ -227,23 +200,24 @@ class OceanTheme(Theme):
         surface: pygame.Surface,
         creature: Creature,
         time: float,
+        scale: float = 1.0,
     ) -> None:
-        """Render a creature with glow effect and trail."""
-        color = self._get_creature_color(
+        """Render a creature with bloom glow halo and symbolic glyph."""
+        color = self.get_creature_color(
             creature.genome.hue, creature.genome.saturation
         )
 
-        # Pulsing animation (sine wave, ~2s period)
-        pulse = 1.0 + 0.15 * math.sin(time * 3.14 + creature.genome.hue * 6.28)
+        # Pulsing animation tied to genome
+        pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature.genome.hue * 6.28)
         base_radius = creature.get_radius()
-        radius = int(base_radius * pulse)
+        radius = max(4, int(base_radius * pulse * scale))
 
-        # Draw trail (fading afterimages)
+        # Draw trail (before glow so glow sits on top)
         if creature.trail:
             trail_len = len(creature.trail)
             for i, (tx, ty) in enumerate(creature.trail):
-                trail_alpha = int(30 * (i + 1) / trail_len)
-                trail_radius = max(2, int(radius * 0.5 * (i + 1) / trail_len))
+                trail_alpha = int(25 * (i + 1) / trail_len)
+                trail_radius = max(1, int(radius * 0.4 * (i + 1) / trail_len))
                 trail_surface = pygame.Surface(
                     (trail_radius * 2, trail_radius * 2), pygame.SRCALPHA
                 )
@@ -258,12 +232,36 @@ class OceanTheme(Theme):
                     (int(tx) - trail_radius, int(ty) - trail_radius),
                 )
 
-        # Draw main glow blob
-        max_alpha = 180
-        glow = self._create_glow_surface(radius, color, max_alpha)
+        # Draw bloom glow halo (behind the glyph)
+        glow = self._create_glow_surface(radius, color, 140)
         glow_size = glow.get_width()
         pos = (int(creature.x) - glow_size // 2, int(creature.y) - glow_size // 2)
         surface.blit(glow, pos)
+
+        # Draw glyph on top of glow
+        glyph_size = max(32, int(base_radius * 4 * scale))
+        # Invalidate glyph cache if size has changed significantly
+        if (creature.glyph_surface is not None and
+                abs(creature.glyph_surface.get_width() - glyph_size) > 4):
+            creature.glyph_surface = None
+
+        glyph = get_glyph_surface(creature, color, glyph_size)
+
+        # Rotate by creature's rotation_angle
+        try:
+            rotated = pygame.transform.rotate(glyph, creature.rotation_angle)
+            # Apply birth scale
+            if scale != 1.0 and scale < 0.99:
+                new_w = max(4, int(rotated.get_width() * scale))
+                new_h = max(4, int(rotated.get_height() * scale))
+                rotated = pygame.transform.smoothscale(rotated, (new_w, new_h))
+            rx = (rotated.get_width() - glyph.get_width()) // 2
+            ry = (rotated.get_height() - glyph.get_height()) // 2
+            surface.blit(rotated,
+                         (int(creature.x) - rotated.get_width() // 2,
+                          int(creature.y) - rotated.get_height() // 2))
+        except pygame.error:
+            pass
 
     def render_food(
         self,
@@ -272,16 +270,13 @@ class OceanTheme(Theme):
         time: float,
     ) -> None:
         """Render a food particle with twinkle effect."""
-        # Twinkle effect: random alpha flicker
         base_alpha = 150
         twinkle = math.sin(time * 5 + food.twinkle_phase) * 0.3 + 0.7
         alpha = int(base_alpha * twinkle)
 
-        # Pale cyan glow
         color = (200, 255, 255, alpha)
         radius = 3
 
-        # Draw soft glow
         glow_surface = pygame.Surface((radius * 4, radius * 4), pygame.SRCALPHA)
         pygame.draw.circle(
             glow_surface, (*color[:3], alpha // 3), (radius * 2, radius * 2), radius * 2
@@ -303,14 +298,12 @@ class OceanTheme(Theme):
     ) -> None:
         """Render ambient background particles."""
         for p in particles:
-            # Sinusoidal drift
             offset_x = math.sin(time * p.speed + p.phase) * 20
             offset_y = math.cos(time * p.speed * 0.7 + p.phase) * 15
 
             x = int(p.x + offset_x)
             y = int(p.y + offset_y)
 
-            # Draw soft circle
             color = (20, 40, 80, p.alpha)
             particle_surface = pygame.Surface(
                 (int(p.radius * 2), int(p.radius * 2)), pygame.SRCALPHA
@@ -366,9 +359,10 @@ class StubTheme(Theme):
         surface: pygame.Surface,
         creature: Creature,
         time: float,
+        scale: float = 1.0,
     ) -> None:
         """Basic creature rendering."""
-        radius = int(creature.get_radius())
+        radius = max(2, int(creature.get_radius() * scale))
         color = (100, 150, 200)
         pygame.draw.circle(surface, color, (int(creature.x), int(creature.y)), radius)
 
@@ -412,5 +406,4 @@ def get_theme(name: str) -> Theme:
     if name == "ocean":
         return OceanTheme()
     else:
-        # Return stub for unimplemented themes
         return StubTheme(name)
