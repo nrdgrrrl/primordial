@@ -23,10 +23,11 @@ class Settings:
 
     # Population settings
     initial_population: int = 80
-    max_population: int = 250
+    max_population: int = 220
 
     # Food settings
-    food_spawn_rate: float = 0.3  # food particles per frame (slightly reduced — scarcity matters)
+    food_spawn_rate: float = 0.6  # base rate; cycle oscillates 0→2× this
+    food_max_particles: int = 300  # food cap; lower = sharper famines
 
     # Food cycle settings (boom/bust sinusoidal oscillation)
     food_cycle_period: int = 1800   # frames per cycle (~30s at 60fps)
@@ -34,7 +35,7 @@ class Settings:
 
     # Evolution settings
     mutation_rate: float = 0.06       # slightly increased for faster trait drift
-    energy_to_reproduce: float = 0.75  # slightly easier to reproduce
+    energy_to_reproduce: float = 0.80  # harder to reproduce; requires sustained feeding
 
     # Cosmic ray (spontaneous single-trait mutation) settings
     cosmic_ray_rate: float = 0.0003  # probability per creature per frame

@@ -29,7 +29,8 @@ class FoodManager:
     """
 
     def __init__(
-        self, world_width: int, world_height: int, bucket_size: int = 100
+        self, world_width: int, world_height: int, bucket_size: int = 100,
+        max_particles: int = 500,
     ) -> None:
         """
         Initialize the food manager.
@@ -54,7 +55,7 @@ class FoodManager:
         self.particles: list[Food] = []
 
         # Maximum food particles allowed
-        self.max_particles = 500
+        self.max_particles = max_particles
 
     def _get_bucket(self, x: float, y: float) -> tuple[int, int]:
         """Get the bucket coordinates for a position."""

@@ -371,6 +371,7 @@ class Creature:
         world_height: int,
         genome: Genome | None = None,
         lineage_id: int = 0,
+        energy: float = 0.5,
     ) -> Creature:
         """
         Spawn a new creature at a random position.
@@ -390,6 +391,6 @@ class Creature:
             genome=genome if genome else Genome.random(),
             vx=random.uniform(-1, 1),
             vy=random.uniform(-1, 1),
-            energy=0.5,
+            energy=energy,
             lineage_id=lineage_id,
         )

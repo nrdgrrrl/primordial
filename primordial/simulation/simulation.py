@@ -40,7 +40,9 @@ class Simulation:
 
         # Simulation state
         self.creatures: list[Creature] = []
-        self.food_manager = FoodManager(width, height)
+        self.food_manager = FoodManager(
+            width, height, max_particles=settings.food_max_particles
+        )
         self.generation = 0
         self.paused = False
 
@@ -73,6 +75,7 @@ class Simulation:
         # Initialize population
         self._spawn_initial_population()
 
+
     # ------------------------------------------------------------------
     # Setup helpers
     # ------------------------------------------------------------------
@@ -84,16 +87,25 @@ class Simulation:
         return lid
 
     def _spawn_initial_population(self) -> None:
-        """Spawn the initial population of creatures."""
+        """Spawn the initial population of creatures and a seed food buffer."""
         for _ in range(self.settings.initial_population):
             lid = self._alloc_lineage_id()
-            creature = Creature.spawn(self.width, self.height, lineage_id=lid)
+            creature = Creature.spawn(
+                self.width, self.height, lineage_id=lid, energy=0.7
+            )
             self.creatures.append(creature)
+
+        # Pre-spawn a food buffer so creatures don't starve before the
+        # sinusoidal cycle ramps up from zero.
+        self.food_manager.spawn_batch(200)
 
     def reset(self) -> None:
         """Reset the simulation to initial state."""
         self.creatures.clear()
-        self.food_manager.clear()
+        self.food_manager = FoodManager(
+            self.width, self.height,
+            max_particles=self.settings.food_max_particles,
+        )
         self.generation = 0
         self.total_births = 0
         self.total_deaths = 0
@@ -146,23 +158,27 @@ class Simulation:
 
         overcrowding_penalty = self._get_overcrowding_penalty()
 
+        # Build a spatial bucket of creatures for efficient proximity queries
+        # (avoids O(n²) full scan in hunting code)
+        creature_bucket = self._build_creature_bucket()
+
         for creature in self.creatures:
             # --- Hunting / food seeking ---
             aggression = creature.genome.aggression
             if aggression > 0.6:
-                # Hunter: seek prey first; reduced food detection range
-                hunted = self._creature_hunt(creature)
+                # Hunter: seek prey first; mildly reduced food detection range
+                hunted = self._creature_hunt(creature, creature_bucket)
                 if not hunted:
-                    # Fall back to food if no prey found
-                    food_sense = creature.get_effective_sense_radius() * 0.7
+                    # Fall back to food if no prey found (0.85x sense — focused on prey)
+                    food_sense = creature.get_effective_sense_radius() * 0.85
                     self._creature_seek_food(creature, sense_override=food_sense)
             elif aggression < 0.4:
-                # Grazer: pure food seeking with 15% efficiency bonus applied at eat time
+                # Grazer: pure food seeking with 10% efficiency bonus at eat time
                 self._creature_seek_food(creature)
             else:
                 # Opportunist: eat food normally; attack only very small nearby creatures
                 self._creature_seek_food(creature)
-                self._creature_opportunist_attack(creature)
+                self._creature_opportunist_attack(creature, creature_bucket)
 
             # --- Movement ---
             creature.update_position(1.0, self.width, self.height)
@@ -173,10 +189,12 @@ class Simulation:
             energy_cost *= 1.0 + overcrowding_penalty
 
             # Aggression baseline drain (hunters must keep killing to stay alive)
-            energy_cost += aggression * 0.002
+            # ~0.0012/frame at max aggression — marginal; hunting supplements this
+            energy_cost += aggression * 0.0012
 
             # Longevity maintenance cost (long-lived creatures burn more just existing)
-            energy_cost += creature.genome.longevity * 0.001
+            # ~0.0004/frame at max longevity — small but compounds over long life
+            energy_cost += creature.genome.longevity * 0.0004
 
             # Zone modifier (soft selection by region)
             zone_mult = self.zone_manager.get_energy_modifier(creature)
@@ -267,8 +285,9 @@ class Simulation:
             dist = creature.distance_to(nearest_food.x, nearest_food.y, self.width, self.height)
 
             if dist < eat_distance:
-                # Grazer efficiency bonus: aggression < 0.4 → +15%
-                eff_bonus = 1.15 if creature.genome.aggression < 0.4 else 1.0
+                # Grazer efficiency bonus: aggression < 0.4 → +20%
+                # (stronger to help grazers coexist with hunters long-term)
+                eff_bonus = 1.20 if creature.genome.aggression < 0.4 else 1.0
                 energy_gain = nearest_food.energy * (0.5 + creature.genome.efficiency * 0.5) * eff_bonus
                 creature.energy = min(1.0, creature.energy + energy_gain)
                 self.food_manager.remove(nearest_food)
@@ -276,26 +295,72 @@ class Simulation:
             creature.wander(self.settings.creature_speed_base)
 
     # ------------------------------------------------------------------
+    # Creature spatial bucket (for hunting proximity queries)
+    # ------------------------------------------------------------------
+
+    _CREATURE_BUCKET_SIZE = 150  # pixels per grid cell
+
+    def _build_creature_bucket(self) -> dict[tuple[int, int], list[Creature]]:
+        """Build a spatial hash of living creatures for O(1) neighbour lookup."""
+        bucket: dict[tuple[int, int], list[Creature]] = {}
+        bs = self._CREATURE_BUCKET_SIZE
+        gw = max(1, self.width // bs + 1)
+        gh = max(1, self.height // bs + 1)
+        for c in self.creatures:
+            key = (int(c.x // bs) % gw, int(c.y // bs) % gh)
+            if key not in bucket:
+                bucket[key] = []
+            bucket[key].append(c)
+        return bucket
+
+    def _nearby_creatures(
+        self,
+        x: float,
+        y: float,
+        radius: float,
+        bucket: dict[tuple[int, int], list[Creature]],
+    ) -> list[Creature]:
+        """Return creatures within approximate radius using the spatial bucket."""
+        bs = self._CREATURE_BUCKET_SIZE
+        gw = max(1, self.width // bs + 1)
+        gh = max(1, self.height // bs + 1)
+        cells = int(radius // bs) + 1
+        cx = int(x // bs)
+        cy = int(y // bs)
+        result: list[Creature] = []
+        for dx in range(-cells, cells + 1):
+            for dy in range(-cells, cells + 1):
+                key = ((cx + dx) % gw, (cy + dy) % gh)
+                result.extend(bucket.get(key, []))
+        return result
+
+    # ------------------------------------------------------------------
     # Hunting / predation
     # ------------------------------------------------------------------
 
-    def _creature_hunt(self, creature: Creature) -> bool:
+    def _creature_hunt(
+        self, creature: Creature, bucket: dict[tuple[int, int], list[Creature]]
+    ) -> bool:
         """
-        Hunter behaviour: seek and attack the nearest smaller creature.
+        Hunter behaviour: seek and attack nearest creature within sense range.
+
+        Prey size limit: only attacks creatures up to 1.3× own radius (hunters
+        can't reliably take on much larger prey).  Damage scales with size ratio.
 
         Returns True if actively pursuing or attacking prey.
         """
         sense = creature.get_effective_sense_radius() * 1.5
         my_radius = creature.get_radius()
+        max_prey_radius = my_radius * 1.3
 
         best_prey: Creature | None = None
         best_dist = sense
 
-        for other in self.creatures:
+        for other in self._nearby_creatures(creature.x, creature.y, sense, bucket):
             if other is creature:
                 continue
-            if other.get_radius() >= my_radius:
-                continue  # only attack smaller creatures
+            if other.get_radius() > max_prey_radius:
+                continue
             dist = creature.distance_to(other.x, other.y, self.width, self.height)
             if dist < best_dist:
                 best_dist = dist
@@ -304,20 +369,19 @@ class Simulation:
         if best_prey is None:
             return False
 
-        # Steer toward prey
         creature.steer_toward(
             best_prey.x, best_prey.y,
             self.settings.creature_speed_base,
             self.width, self.height,
         )
 
-        # Deal damage when within attack range
-        attack_range = my_radius * 2
+        attack_range = my_radius * 4
         if best_dist < attack_range:
-            drain = creature.genome.aggression * 0.015
+            # Bigger attacker → more drain; attacking up-size gives less reward
+            size_ratio = min(2.0, max(0.5, my_radius / max(1.0, best_prey.get_radius())))
+            drain = creature.genome.aggression * 0.008 * size_ratio
             best_prey.energy = max(0.0, best_prey.energy - drain)
             creature.energy = min(1.0, creature.energy + drain)
-            # Record attack for renderer (attacker pos, target pos, attacker hue)
             self.active_attacks.append((
                 creature.x, creature.y,
                 best_prey.x, best_prey.y,
@@ -326,22 +390,24 @@ class Simulation:
 
         return True
 
-    def _creature_opportunist_attack(self, creature: Creature) -> None:
+    def _creature_opportunist_attack(
+        self, creature: Creature, bucket: dict[tuple[int, int], list[Creature]]
+    ) -> None:
         """
-        Opportunist behaviour: attack only creatures < 60% own size within size*1.2.
+        Opportunist behaviour: attack only creatures < 60% own size within range.
         """
         my_radius = creature.get_radius()
-        attack_range = my_radius * 1.2
+        attack_range = my_radius * 2.5
         prey_size_limit = my_radius * 0.6
 
-        for other in self.creatures:
+        for other in self._nearby_creatures(creature.x, creature.y, attack_range, bucket):
             if other is creature:
                 continue
             if other.get_radius() >= prey_size_limit:
                 continue
             dist = creature.distance_to(other.x, other.y, self.width, self.height)
             if dist < attack_range:
-                drain = creature.genome.aggression * 0.015
+                drain = creature.genome.aggression * 0.008
                 other.energy = max(0.0, other.energy - drain)
                 creature.energy = min(1.0, creature.energy + drain)
                 self.active_attacks.append((
