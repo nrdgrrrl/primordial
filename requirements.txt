@@ -1,2 +1,5 @@
 numpy==2.4.2
 pygame==2.6.1
+
+# build — not a runtime dependency; used only to produce standalone executables
+pyinstaller
