@@ -255,13 +255,27 @@ class OceanTheme(Theme):
                 new_w = max(4, int(rotated.get_width() * scale))
                 new_h = max(4, int(rotated.get_height() * scale))
                 rotated = pygame.transform.smoothscale(rotated, (new_w, new_h))
-            rx = (rotated.get_width() - glyph.get_width()) // 2
-            ry = (rotated.get_height() - glyph.get_height()) // 2
             surface.blit(rotated,
                          (int(creature.x) - rotated.get_width() // 2,
                           int(creature.y) - rotated.get_height() // 2))
         except pygame.error:
             pass
+
+        # Age-based desaturation: overlay a faint grey wash at blit time
+        # (does NOT touch the glyph cache — purely cosmetic blending layer)
+        age_frac = creature.get_age_fraction()
+        if age_frac > 0.7:
+            grey_alpha = int(((age_frac - 0.7) / 0.3) * 160)
+            grey_alpha = min(160, grey_alpha)
+            grey_r = int(radius * 2.5)
+            grey_surf = pygame.Surface((grey_r * 2, grey_r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(
+                grey_surf,
+                (80, 90, 110, grey_alpha),
+                (grey_r, grey_r),
+                grey_r,
+            )
+            surface.blit(grey_surf, (int(creature.x) - grey_r, int(creature.y) - grey_r))
 
     def render_food(
         self,

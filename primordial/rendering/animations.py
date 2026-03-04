@@ -225,6 +225,45 @@ class BirthScaleTracker:
 # ---------------------------------------------------------------------------
 
 
+class CosmicRayAnimation(Animation):
+    """
+    20-frame faint expanding ring for cosmic ray mutation events.
+
+    A single white ring expands outward from the creature position with
+    low alpha (max 50).  Quiet and rare — meant to feel like a natural event.
+    """
+
+    TOTAL_FRAMES = 20
+
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+        self.frame = 0
+
+    def tick(self) -> bool:
+        self.frame += 1
+        return self.frame < self.TOTAL_FRAMES
+
+    def draw(self, surface: pygame.Surface) -> None:
+        t = self.frame / self.TOTAL_FRAMES   # 0 → 1
+        radius = int(6 + t * 24)             # expands from 6 to 30 px
+        alpha = int(50 * (1.0 - t))          # fades out
+
+        if alpha <= 0 or radius <= 0:
+            return
+
+        size = (radius + 2) * 2
+        ring_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(
+            ring_surf,
+            (255, 255, 255, alpha),
+            (size // 2, size // 2),
+            radius,
+            1,  # 1px ring
+        )
+        surface.blit(ring_surf, (int(self.x) - size // 2, int(self.y) - size // 2))
+
+
 class ParentPulse(Animation):
     """Brief brightening glow on a parent creature at moment of reproduction."""
 
@@ -300,6 +339,10 @@ class AnimationManager:
     ) -> None:
         """Add a brief glow pulse on a reproducing parent."""
         self._animations.append(ParentPulse(x, y, color))
+
+    def add_cosmic_ray(self, x: float, y: float) -> None:
+        """Add a faint expanding ring at the cosmic ray mutation position."""
+        self._animations.append(CosmicRayAnimation(x, y))
 
     # ------------------------------------------------------------------
     # Per-frame interface

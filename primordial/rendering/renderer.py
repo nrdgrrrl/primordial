@@ -14,6 +14,16 @@ from .animations import AnimationManager
 from .hud import HUD
 from .themes import AmbientParticle, OceanTheme, Theme, get_theme
 
+# Zone type → background RGB (same palette as zones.py, duplicated here
+# so renderer has no import from simulation/)
+_ZONE_BG_COLORS: dict[str, tuple[int, int, int]] = {
+    "warm_vent":      (180, 90, 10),
+    "open_water":     (60, 120, 200),
+    "kelp_forest":    (0, 80, 40),
+    "hunting_ground": (100, 0, 10),
+    "deep_trench":    (15, 5, 80),
+}
+
 if TYPE_CHECKING:
     from ..simulation.simulation import Simulation
     from ..settings import Settings
@@ -125,17 +135,21 @@ class Renderer:
 
         # --- Process simulation events → create animations ---
         if isinstance(self.theme, OceanTheme):
-            self.animation_manager.process_events(
-                simulation.death_events,
-                simulation.birth_events,
-                lambda g: self.theme.get_creature_color(g.hue, g.saturation),
-            )
+            get_color = lambda g: self.theme.get_creature_color(g.hue, g.saturation)
         else:
-            self.animation_manager.process_events(
-                simulation.death_events,
-                simulation.birth_events,
-                lambda g: (150, 150, 200),
-            )
+            get_color = lambda g: (150, 150, 200)
+
+        self.animation_manager.process_events(
+            simulation.death_events,
+            simulation.birth_events,
+            get_color,
+        )
+
+        # Cosmic ray visual effects
+        for cx, cy in simulation.cosmic_ray_events:
+            self.animation_manager.add_cosmic_ray(cx, cy)
+        simulation.cosmic_ray_events.clear()
+
         simulation.death_events.clear()
         simulation.birth_events.clear()
 
@@ -144,6 +158,10 @@ class Renderer:
 
         # --- Ambient particles ---
         self.theme.render_ambient(self.screen, self.ambient_particles, anim_time)
+
+        # --- Zone backgrounds (very faint atmospheric gradient circles) ---
+        if isinstance(self.theme, OceanTheme):
+            self._draw_zone_backgrounds(simulation)
 
         # --- Territory shimmer (beneath creatures) ---
         if isinstance(self.theme, OceanTheme):
@@ -163,6 +181,10 @@ class Renderer:
             scale = birth_scale if birth_scale is not None else 1.0
             self.theme.render_creature(self.screen, creature, anim_time, scale=scale)
 
+        # --- Attack lines (drawn above creatures, very faint) ---
+        if isinstance(self.theme, OceanTheme) and simulation.active_attacks:
+            self._draw_attack_lines(simulation)
+
         # --- Animation effects (death bursts etc.) ---
         self.animation_manager.tick_and_draw(self.screen)
 
@@ -176,6 +198,77 @@ class Renderer:
         """Toggle HUD visibility."""
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
+
+    # ------------------------------------------------------------------
+    # Zone backgrounds
+    # ------------------------------------------------------------------
+
+    def _draw_zone_backgrounds(self, simulation: "Simulation") -> None:
+        """
+        Draw atmospheric radial gradient circles for each environmental zone.
+
+        Rendered beneath creatures, very low alpha (18-25) so they give
+        the screen a regional colour mood without being visually intrusive.
+        Zones never move — this surface could be cached, but at these sizes
+        the cost is negligible compared with creature rendering.
+        """
+        zone_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+        for zone in simulation.zone_manager.zones:
+            color = _ZONE_BG_COLORS.get(zone.zone_type, (60, 60, 60))
+            radius = int(zone.radius)
+            cx = int(zone.x)
+            cy = int(zone.y)
+
+            # Radial gradient: concentric circles from centre outward
+            layers = 6
+            for i in range(layers, 0, -1):
+                t = i / layers
+                layer_radius = int(radius * t)
+                # Alpha peaks at 20 at centre, 0 at edge
+                layer_alpha = int(20 * (t ** 2))
+                if layer_alpha <= 0 or layer_radius <= 0:
+                    continue
+                pygame.draw.circle(
+                    zone_surf,
+                    (*color, layer_alpha),
+                    (cx, cy),
+                    layer_radius,
+                )
+
+        self.screen.blit(zone_surf, (0, 0))
+
+    # ------------------------------------------------------------------
+    # Attack lines
+    # ------------------------------------------------------------------
+
+    def _draw_attack_lines(self, simulation: "Simulation") -> None:
+        """
+        Draw very faint thin lines between hunter and target during attacks.
+
+        Alpha ~40, coloured by the attacker's hue.  Subtle — just enough to
+        feel like energy is flowing between them.
+        """
+        if not simulation.active_attacks:
+            return
+
+        attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+        for ax, ay, tx, ty, hue in simulation.active_attacks:
+            if isinstance(self.theme, OceanTheme):
+                color = self.theme.get_creature_color(hue, 0.8)
+            else:
+                color = (200, 200, 200)
+
+            pygame.draw.line(
+                attack_surf,
+                (*color, 40),
+                (int(ax), int(ay)),
+                (int(tx), int(ty)),
+                1,
+            )
+
+        self.screen.blit(attack_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # Kin connection lines
