@@ -20,6 +20,10 @@ class Simulation:
     Manages creatures, food, and the simulation step logic.
     The simulation is completely decoupled from rendering - it only
     updates state and exposes it for the renderer to read.
+
+    Event queues (cleared by renderer each frame):
+    - death_events: list of dicts with position/genome info for dead creatures
+    - birth_events: list of newly created offspring creatures
     """
 
     def __init__(
@@ -47,13 +51,27 @@ class Simulation:
         self.total_births = 0
         self.total_deaths = 0
 
+        # Lineage counter — each new lineage gets a unique integer ID
+        self._next_lineage_id: int = 1
+
+        # Event queues read by renderer each frame (renderer clears them)
+        self.death_events: list[dict] = []
+        self.birth_events: list[Creature] = []
+
         # Initialize population
         self._spawn_initial_population()
+
+    def _alloc_lineage_id(self) -> int:
+        """Allocate and return a new unique lineage ID."""
+        lid = self._next_lineage_id
+        self._next_lineage_id += 1
+        return lid
 
     def _spawn_initial_population(self) -> None:
         """Spawn the initial population of creatures."""
         for _ in range(self.settings.initial_population):
-            creature = Creature.spawn(self.width, self.height)
+            lid = self._alloc_lineage_id()
+            creature = Creature.spawn(self.width, self.height, lineage_id=lid)
             self.creatures.append(creature)
 
     def reset(self) -> None:
@@ -63,6 +81,9 @@ class Simulation:
         self.generation = 0
         self.total_births = 0
         self.total_deaths = 0
+        self._next_lineage_id = 1
+        self.death_events.clear()
+        self.birth_events.clear()
         self._spawn_initial_population()
 
     def step(self) -> None:
@@ -73,7 +94,7 @@ class Simulation:
         1. Spawn food
         2. For each creature: move, seek food, eat, lose energy
         3. Handle reproduction
-        4. Remove dead creatures
+        4. Remove dead creatures (emit death_events)
         """
         if self.paused:
             return
@@ -110,18 +131,25 @@ class Simulation:
             if creature.energy <= 0:
                 dead_creatures.append(creature)
 
-        # Add new creatures
+        # Add new creatures and emit birth events
         for creature in new_creatures:
             self.creatures.append(creature)
+            self.birth_events.append(creature)
 
-        # Remove dead creatures
+        # Remove dead creatures and emit death events
         for creature in dead_creatures:
+            self.death_events.append({
+                "x": creature.x,
+                "y": creature.y,
+                "genome": creature.genome,
+                "glyph_surface": creature.glyph_surface,
+                "lineage_id": creature.lineage_id,
+            })
             self.creatures.remove(creature)
             self.total_deaths += 1
 
     def _spawn_food(self) -> None:
         """Spawn food particles based on spawn rate."""
-        # Spawn rate is particles per frame (can be fractional)
         spawn_count = int(self.settings.food_spawn_rate)
         fractional = self.settings.food_spawn_rate - spawn_count
 
@@ -143,7 +171,6 @@ class Simulation:
         )
 
         if nearest_food:
-            # Steer toward food
             creature.steer_toward(
                 nearest_food.x,
                 nearest_food.y,
@@ -152,25 +179,25 @@ class Simulation:
                 self.height,
             )
 
-            # Check if close enough to eat
             eat_distance = creature.get_radius() + 3
             dist = creature.distance_to(
                 nearest_food.x, nearest_food.y, self.width, self.height
             )
 
             if dist < eat_distance:
-                # Eat the food
                 energy_gain = nearest_food.energy * (0.5 + creature.genome.efficiency * 0.5)
                 creature.energy += energy_gain
                 creature.energy = min(creature.energy, 1.0)
                 self.food_manager.remove(nearest_food)
         else:
-            # Wander when no food nearby
             creature.wander(self.settings.creature_speed_base)
 
     def _reproduce(self, creature: Creature) -> Creature | None:
         """
         Handle creature reproduction.
+
+        The offspring inherits the parent's lineage_id unless the hue
+        mutates by more than 0.15 (speciation event → new lineage_id).
 
         Args:
             creature: The parent creature.
@@ -178,7 +205,6 @@ class Simulation:
         Returns:
             The offspring creature, or None if reproduction failed.
         """
-        # Check population cap
         if len(self.creatures) >= self.settings.max_population:
             return None
 
@@ -187,6 +213,18 @@ class Simulation:
 
         # Create offspring with mutated genome
         offspring_genome = creature.genome.mutate(self.settings.mutation_rate)
+
+        # Determine lineage: new lineage if hue drifted far enough (speciation)
+        hue_diff = abs(offspring_genome.hue - creature.genome.hue)
+        # Handle circular hue distance
+        if hue_diff > 0.5:
+            hue_diff = 1.0 - hue_diff
+
+        if hue_diff > 0.15:
+            offspring_lineage = self._alloc_lineage_id()
+        else:
+            offspring_lineage = creature.lineage_id
+
         offspring = Creature(
             x=creature.x + random.uniform(-10, 10),
             y=creature.y + random.uniform(-10, 10),
@@ -194,6 +232,7 @@ class Simulation:
             vx=random.uniform(-1, 1),
             vy=random.uniform(-1, 1),
             energy=creature.energy,
+            lineage_id=offspring_lineage,
         )
 
         # Wrap position
@@ -216,9 +255,20 @@ class Simulation:
         population_ratio = len(self.creatures) / self.settings.max_population
         if population_ratio < 0.5:
             return 0.0
-        # Quadratic ramp-up from 0 at 50% to 1.0 at 100% capacity
         excess = (population_ratio - 0.5) * 2
         return excess * excess
+
+    def get_lineage_counts(self) -> dict[int, int]:
+        """
+        Count creatures per lineage_id.
+
+        Returns:
+            Dict mapping lineage_id → creature count.
+        """
+        counts: dict[int, int] = {}
+        for c in self.creatures:
+            counts[c.lineage_id] = counts.get(c.lineage_id, 0) + 1
+        return counts
 
     @property
     def population(self) -> int:
@@ -241,8 +291,6 @@ class Simulation:
         """
         Get the average genome traits of the population.
 
-        Useful for LLM narration integration.
-
         Returns:
             Dictionary of trait names to average values.
         """
@@ -250,23 +298,16 @@ class Simulation:
             return {}
 
         n = len(self.creatures)
-        totals = {
-            "speed": 0.0,
-            "size": 0.0,
-            "sense_radius": 0.0,
-            "aggression": 0.0,
-            "hue": 0.0,
-            "saturation": 0.0,
-            "efficiency": 0.0,
-        }
+        trait_names = [
+            "speed", "size", "sense_radius", "aggression",
+            "hue", "saturation", "efficiency",
+            "complexity", "symmetry", "stroke_scale",
+            "appendages", "rotation_speed", "motion_style",
+        ]
+        totals = {t: 0.0 for t in trait_names}
 
         for creature in self.creatures:
-            totals["speed"] += creature.genome.speed
-            totals["size"] += creature.genome.size
-            totals["sense_radius"] += creature.genome.sense_radius
-            totals["aggression"] += creature.genome.aggression
-            totals["hue"] += creature.genome.hue
-            totals["saturation"] += creature.genome.saturation
-            totals["efficiency"] += creature.genome.efficiency
+            for t in trait_names:
+                totals[t] += getattr(creature.genome, t)
 
         return {k: v / n for k, v in totals.items()}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
+from typing import Any
 
 from .genome import Genome
 
@@ -17,6 +18,11 @@ class Creature:
     Creatures have position, velocity, energy, and a genome that determines
     their characteristics. They move with smooth steering behavior, seek food,
     reproduce when energy is high, and die when energy depletes.
+
+    Motion styles (from genome.motion_style):
+    - Glide (0.00-0.33): smooth, low-frequency curves
+    - Swim (0.34-0.66): sinusoidal lateral oscillation
+    - Dart (0.67-1.00): mostly still with periodic fast bursts
     """
 
     x: float
@@ -28,9 +34,40 @@ class Creature:
     age: int = 0
     trail: list[tuple[float, float]] = field(default_factory=list)
 
+    # Lineage tracking
+    lineage_id: int = 0
+
+    # Rotation state (degrees, used by renderer)
+    rotation_angle: float = 0.0
+
+    # Cached glyph surface (set by renderer, cleared on reproduction)
+    glyph_surface: Any = field(default=None)
+
+    # Swim oscillation state
+    _swim_phase: float = field(default=0.0)
+
+    # Dart burst state
+    _dart_burst_remaining: int = field(default=0)
+    _dart_cooldown: int = field(default=0)
+
     # Steering parameters
     STEER_STRENGTH: float = 0.1
     WANDER_STRENGTH: float = 0.3
+
+    def get_trail_length(self) -> int:
+        """
+        Get trail length based on motion style.
+
+        Returns:
+            Maximum trail positions (glide=14, swim=10, dart=5).
+        """
+        ms = self.genome.motion_style
+        if ms < 0.34:
+            return 14  # glide: long smooth trails
+        elif ms < 0.67:
+            return 10  # swim: sinuous trails
+        else:
+            return 5   # dart: short sharp trails
 
     def update_position(
         self, dt: float, world_width: int, world_height: int
@@ -38,11 +75,28 @@ class Creature:
         """
         Update creature position based on velocity.
 
+        Applies swim oscillation for swim-style creatures.
+        Updates rotation angle for glyph rendering.
+
         Args:
             dt: Time delta (typically 1.0 for frame-based simulation).
             world_width: Width of the world for wrapping.
             world_height: Height of the world for wrapping.
         """
+        ms = self.genome.motion_style
+
+        # Apply swim lateral oscillation before moving
+        if 0.34 <= ms < 0.67:
+            self._swim_phase += 0.15
+            speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
+            if speed > 0.01:
+                # Perpendicular direction to velocity
+                perp_x = -self.vy / speed
+                perp_y = self.vx / speed
+                osc_amp = speed * 0.35
+                self.x += perp_x * math.sin(self._swim_phase) * osc_amp * dt
+                self.y += perp_y * math.sin(self._swim_phase) * osc_amp * dt
+
         # Move by velocity
         self.x += self.vx * dt
         self.y += self.vy * dt
@@ -51,9 +105,14 @@ class Creature:
         self.x = self.x % world_width
         self.y = self.y % world_height
 
-        # Update trail (last 8 positions for rendering)
+        # Update rotation angle for glyph (degrees/frame)
+        rot_deg_per_frame = self.genome.rotation_speed * 2.0
+        self.rotation_angle = (self.rotation_angle + rot_deg_per_frame * dt) % 360.0
+
+        # Update trail (variable length based on motion style)
         self.trail.append((self.x, self.y))
-        if len(self.trail) > 8:
+        max_trail = self.get_trail_length()
+        if len(self.trail) > max_trail:
             self.trail.pop(0)
 
         # Increment age
@@ -70,8 +129,7 @@ class Creature:
         """
         Steer velocity toward a target position.
 
-        Uses smooth steering that blends current velocity with desired direction.
-        Handles toroidal world wrapping for shortest path calculation.
+        Dart-style creatures use stronger steering to snap toward targets.
 
         Args:
             target_x: Target x coordinate.
@@ -80,7 +138,6 @@ class Creature:
             world_width: World width for wrapping calculations.
             world_height: World height for wrapping calculations.
         """
-        # Calculate direction to target with toroidal wrapping
         dx = target_x - self.x
         dy = target_y - self.y
 
@@ -96,42 +153,111 @@ class Creature:
             dx /= dist
             dy /= dist
 
-        # Calculate desired velocity
-        max_speed = self.genome.speed * speed_base
+        # Dart style uses stronger steer and faster speed
+        ms = self.genome.motion_style
+        if ms >= 0.67:
+            steer = 0.25
+            speed_mult = 1.5
+            # Trigger a burst when food is sensed
+            if self._dart_burst_remaining <= 0 and self._dart_cooldown <= 0:
+                self._dart_burst_remaining = random.randint(15, 30)
+        else:
+            steer = self.STEER_STRENGTH
+            speed_mult = 1.0
+
+        max_speed = self.genome.speed * speed_base * speed_mult
         desired_vx = dx * max_speed
         desired_vy = dy * max_speed
 
-        # Smooth steering (blend current and desired velocity)
-        self.vx += (desired_vx - self.vx) * self.STEER_STRENGTH
-        self.vy += (desired_vy - self.vy) * self.STEER_STRENGTH
+        self.vx += (desired_vx - self.vx) * steer
+        self.vy += (desired_vy - self.vy) * steer
 
     def wander(self, speed_base: float) -> None:
         """
-        Add random wandering behavior when no food is nearby.
+        Add wandering behavior when no food is nearby.
+
+        Behavior varies by motion style:
+        - Glide: gentle low-frequency curves
+        - Swim: moderate wandering (oscillation applied in update_position)
+        - Dart: slow drift with periodic fast bursts
 
         Args:
             speed_base: Base speed from settings.
         """
-        # Add small random angle change
-        angle_change = random.gauss(0, self.WANDER_STRENGTH)
+        ms = self.genome.motion_style
 
-        # Get current angle and speed
+        if ms >= 0.67:
+            # Dart: mostly stationary with periodic bursts
+            self._wander_dart(speed_base)
+        elif ms < 0.34:
+            # Glide: very gentle direction changes
+            self._wander_glide(speed_base)
+        else:
+            # Swim: moderate wandering (oscillation handled in update_position)
+            self._wander_swim(speed_base)
+
+    def _wander_glide(self, speed_base: float) -> None:
+        """Gentle gliding wander - smooth low-frequency curves."""
+        angle_change = random.gauss(0, self.WANDER_STRENGTH * 0.25)
+
         current_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
         if current_speed < 0.01:
-            # If nearly stationary, pick random direction
+            angle = random.uniform(0, 2 * math.pi)
+            current_speed = self.genome.speed * speed_base * 0.4
+        else:
+            angle = math.atan2(self.vy, self.vx)
+
+        angle += angle_change
+        max_speed = self.genome.speed * speed_base * 0.7
+        target_speed = min(current_speed + 0.05, max_speed)
+        self.vx = math.cos(angle) * target_speed
+        self.vy = math.sin(angle) * target_speed
+
+    def _wander_swim(self, speed_base: float) -> None:
+        """Swim wander - moderate direction changes, oscillation in update_position."""
+        angle_change = random.gauss(0, self.WANDER_STRENGTH * 0.45)
+
+        current_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
+        if current_speed < 0.01:
             angle = random.uniform(0, 2 * math.pi)
             current_speed = self.genome.speed * speed_base * 0.5
         else:
             angle = math.atan2(self.vy, self.vx)
 
-        # Apply angle change
         angle += angle_change
-
-        # Set velocity
         max_speed = self.genome.speed * speed_base
-        target_speed = min(current_speed + 0.1, max_speed)
+        target_speed = min(current_speed + 0.08, max_speed)
         self.vx = math.cos(angle) * target_speed
         self.vy = math.sin(angle) * target_speed
+
+    def _wander_dart(self, speed_base: float) -> None:
+        """Dart wander - mostly stationary with periodic bursts."""
+        if self._dart_burst_remaining > 0:
+            # Currently bursting - maintain burst velocity
+            self._dart_burst_remaining -= 1
+        elif self._dart_cooldown > 0:
+            # Cooling down - slow drift
+            self._dart_cooldown -= 1
+            self.vx *= 0.92
+            self.vy *= 0.92
+        else:
+            # Check for random burst trigger (~every 3-5 seconds at 60fps)
+            if random.random() < 0.005:
+                angle = random.uniform(0, 2 * math.pi)
+                burst_speed = self.genome.speed * speed_base * 1.8
+                self.vx = math.cos(angle) * burst_speed
+                self.vy = math.sin(angle) * burst_speed
+                self._dart_burst_remaining = random.randint(10, 25)
+                self._dart_cooldown = random.randint(80, 150)
+            else:
+                # Very slow drift
+                self.vx *= 0.95
+                self.vy *= 0.95
+                if math.sqrt(self.vx * self.vx + self.vy * self.vy) < 0.05:
+                    # Tiny random nudge to prevent full stop
+                    angle = random.uniform(0, 2 * math.pi)
+                    self.vx = math.cos(angle) * 0.05
+                    self.vy = math.sin(angle) * 0.05
 
     def distance_to(
         self, x: float, y: float, world_width: int, world_height: int
@@ -151,7 +277,6 @@ class Creature:
         dx = abs(x - self.x)
         dy = abs(y - self.y)
 
-        # Consider wrapping for shortest distance
         if dx > world_width / 2:
             dx = world_width - dx
         if dy > world_height / 2:
@@ -196,6 +321,7 @@ class Creature:
         world_width: int,
         world_height: int,
         genome: Genome | None = None,
+        lineage_id: int = 0,
     ) -> Creature:
         """
         Spawn a new creature at a random position.
@@ -204,6 +330,7 @@ class Creature:
             world_width: World width for random placement.
             world_height: World height for random placement.
             genome: Optional genome; creates random if not provided.
+            lineage_id: Lineage identifier for kin tracking.
 
         Returns:
             A new Creature instance.
@@ -215,4 +342,5 @@ class Creature:
             vx=random.uniform(-1, 1),
             vy=random.uniform(-1, 1),
             energy=0.5,
+            lineage_id=lineage_id,
         )

@@ -21,6 +21,16 @@ class Genome:
     saturation: float = 0.5  # Color saturation
     efficiency: float = 0.5  # Energy extracted per food particle
 
+    # Glyph traits
+    complexity: float = 0.5    # 0-1 → 2-7 strokes in the glyph
+    symmetry: float = 0.5      # 0=asymmetric, 0.33=bilateral, 0.66=3-fold, 1.0=4-fold radial
+    stroke_scale: float = 0.5  # Overall proportion/delicacy of strokes
+    appendages: float = 0.3    # 0-1 → 0-4 extra limb strokes attached at perimeter
+    rotation_speed: float = 0.3  # Glyph rotation speed (slow drift to steady spin)
+
+    # Motion trait
+    motion_style: float = 0.5  # 0-0.33=glide, 0.34-0.66=swim, 0.67-1.0=dart
+
     @classmethod
     def random(cls) -> "Genome":
         """Create a genome with random trait values between 0.0 and 1.0."""
@@ -32,6 +42,12 @@ class Genome:
             hue=random.random(),
             saturation=random.random(),
             efficiency=random.random(),
+            complexity=random.random(),
+            symmetry=random.random(),
+            stroke_scale=random.random(),
+            appendages=random.random(),
+            rotation_speed=random.random(),
+            motion_style=random.random(),
         )
 
     def mutate(self, mutation_rate: float) -> "Genome":
@@ -61,6 +77,12 @@ class Genome:
             hue=mutate_trait(self.hue),
             saturation=mutate_trait(self.saturation),
             efficiency=mutate_trait(self.efficiency),
+            complexity=mutate_trait(self.complexity),
+            symmetry=mutate_trait(self.symmetry),
+            stroke_scale=mutate_trait(self.stroke_scale),
+            appendages=mutate_trait(self.appendages),
+            rotation_speed=mutate_trait(self.rotation_speed),
+            motion_style=mutate_trait(self.motion_style),
         )
 
     def copy(self) -> "Genome":
@@ -73,4 +95,10 @@ class Genome:
             hue=self.hue,
             saturation=self.saturation,
             efficiency=self.efficiency,
+            complexity=self.complexity,
+            symmetry=self.symmetry,
+            stroke_scale=self.stroke_scale,
+            appendages=self.appendages,
+            rotation_speed=self.rotation_speed,
+            motion_style=self.motion_style,
         )

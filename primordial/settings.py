@@ -40,6 +40,32 @@ class Settings:
     target_fps: int = 60
     show_hud: bool = True
 
+    # --- Glyph rendering ---
+    # Base canvas size for glyph surface (px); actual size scales with creature radius
+    glyph_size_base: int = 48
+
+    # --- Kin connection lines ---
+    # Max pixel distance between kin to draw connection line
+    kin_line_max_distance: float = 120.0
+    # Minimum lineage member count before kin lines are drawn
+    kin_line_min_group: int = 3
+
+    # --- Territory shimmer ---
+    # Number of dominant lineages to render shimmer for
+    territory_top_n: int = 3
+    # Lerp speed for centroid drift (0=snap, 1=instant)
+    territory_shimmer_lerp: float = 0.05
+    # Shimmer fade-out duration in seconds when lineage drops out of top N
+    territory_fade_seconds: float = 2.0
+
+    # --- Animations ---
+    # Frames for death dissolution animation
+    death_animation_frames: int = 40
+    # Frames for birth scale-up animation
+    birth_animation_frames: int = 30
+    # Number of scatter particles on death
+    death_particle_count: int = 5
+
     def __post_init__(self) -> None:
         """Validate settings after initialization."""
         if self.sim_mode not in self.VALID_SIM_MODES:
@@ -58,7 +84,6 @@ class Settings:
         Returns:
             A new Settings instance with values from the dict.
         """
-        # Filter to only valid field names
         valid_fields = {f.name for f in fields(cls)}
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
         return cls(**filtered_data)
