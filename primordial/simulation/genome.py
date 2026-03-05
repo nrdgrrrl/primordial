@@ -34,6 +34,9 @@ class Genome:
     # Lifespan trait (added in selection-pressure pass)
     longevity: float = 0.5  # 0=short-lived cheap, 1=long-lived costly
 
+    # Flocking trait (used in boids mode; inert in other modes — drifts randomly)
+    conformity: float = 0.5  # 0=individualist, 1=strong flock aligner
+
     @classmethod
     def random(cls) -> "Genome":
         """Create a genome with random trait values between 0.0 and 1.0."""
@@ -52,6 +55,7 @@ class Genome:
             rotation_speed=random.random(),
             motion_style=random.random(),
             longevity=random.random(),
+            conformity=random.random(),
         )
 
     def mutate(self, mutation_rate: float) -> "Genome":
@@ -88,6 +92,7 @@ class Genome:
             rotation_speed=mutate_trait(self.rotation_speed),
             motion_style=mutate_trait(self.motion_style),
             longevity=mutate_trait(self.longevity),
+            conformity=mutate_trait(self.conformity),
         )
 
     def mutate_one(self, std: float = 0.15) -> tuple["Genome", str]:
@@ -105,6 +110,7 @@ class Genome:
             "hue", "saturation", "efficiency",
             "complexity", "symmetry", "stroke_scale",
             "appendages", "rotation_speed", "motion_style", "longevity",
+            "conformity",
         ]
         trait = random.choice(trait_names)
         new_val = max(0.0, min(1.0, getattr(self, trait) + random.gauss(0, std)))
@@ -131,4 +137,5 @@ class Genome:
             rotation_speed=self.rotation_speed,
             motion_style=self.motion_style,
             longevity=self.longevity,
+            conformity=self.conformity,
         )

@@ -37,11 +37,21 @@ class Creature:
     # Lineage tracking
     lineage_id: int = 0
 
+    # Species (predator_prey mode: "prey" | "predator"; "none" in other modes)
+    species: str = field(default="none")
+
+    # Flock assignment (boids mode: >= 0 = flock id; -1 = loner / not in boids mode)
+    flock_id: int = field(default=-1)
+
     # Rotation state (degrees, used by renderer)
     rotation_angle: float = 0.0
 
     # Cached glyph surface (set by renderer, cleared on reproduction)
     glyph_surface: Any = field(default=None)
+
+    # Glyph pulse phase — initialised to genome.hue * 6.28 at spawn so pulse
+    # matches hue in all modes; in boids mode it is phase-locked toward flock average.
+    _glyph_phase: float = field(default=0.0)
 
     # Swim oscillation state
     _swim_phase: float = field(default=0.0)
@@ -372,7 +382,8 @@ class Creature:
         genome: Genome | None = None,
         lineage_id: int = 0,
         energy: float = 0.5,
-    ) -> Creature:
+        species: str = "none",
+    ) -> "Creature":
         """
         Spawn a new creature at a random position.
 
@@ -381,16 +392,21 @@ class Creature:
             world_height: World height for random placement.
             genome: Optional genome; creates random if not provided.
             lineage_id: Lineage identifier for kin tracking.
+            energy: Starting energy level.
+            species: Species tag ("none", "prey", or "predator").
 
         Returns:
             A new Creature instance.
         """
+        g = genome if genome else Genome.random()
         return cls(
             x=random.uniform(0, world_width),
             y=random.uniform(0, world_height),
-            genome=genome if genome else Genome.random(),
+            genome=g,
             vx=random.uniform(-1, 1),
             vy=random.uniform(-1, 1),
             energy=energy,
             lineage_id=lineage_id,
+            species=species,
+            _glyph_phase=g.hue * 6.28,
         )
