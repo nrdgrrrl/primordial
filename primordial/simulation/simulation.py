@@ -500,14 +500,14 @@ class Simulation:
         """Predator seeks nearest prey; kills on contact."""
         sense = predator.get_effective_sense_radius() * 2.0
         best_prey: Creature | None = None
-        best_dist = sense
+        best_dist_sq = sense * sense
 
         for other in self._nearby_creatures(predator.x, predator.y, sense, bucket):
             if other is predator or other.species != "prey" or other.energy <= 0.0:
                 continue
-            dist = predator.distance_to(other.x, other.y, self.width, self.height)
-            if dist < best_dist:
-                best_dist = dist
+            dist_sq = self._distance_sq(predator.x, predator.y, other.x, other.y)
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
                 best_prey = other
 
         if best_prey is None:
@@ -522,7 +522,7 @@ class Simulation:
 
         # Contact kill: distance < sum of radii
         contact_dist = predator.get_radius() + best_prey.get_radius()
-        if best_dist < contact_dist and best_prey.energy > 0.0:
+        if best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
             # Transfer from prey to predator; prevents multiple predators
             # farming energy from an already-dead prey in the same frame.
             energy_gain = min(0.5, best_prey.energy)
@@ -555,12 +555,7 @@ class Simulation:
             return False
 
         # Steer away from predator
-        dx = prey.x - nearest_pred.x
-        dy = prey.y - nearest_pred.y
-        if abs(dx) > self.width / 2:
-            dx -= math.copysign(self.width, dx)
-        if abs(dy) > self.height / 2:
-            dy -= math.copysign(self.height, dy)
+        dx, dy = self._wrapped_delta(nearest_pred.x, nearest_pred.y, prey.x, prey.y)
         dist = math.sqrt(dx * dx + dy * dy)
         if dist > 0:
             dx /= dist
@@ -667,8 +662,9 @@ class Simulation:
         overcrowding_penalty = self._get_overcrowding_penalty()
         creature_bucket = self._build_creature_bucket()
 
-        # Flock detection (BFS connected components)
-        self._update_flock_assignments(creature_bucket)
+        # Shared boids neighbor cache for this frame.
+        boid_neighbors = self._build_boid_neighbor_cache(creature_bucket)
+        self._update_flock_assignments(boid_neighbors)
 
         energy_to_reproduce = self._get_mode_param("energy_to_reproduce", 0.72)
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
@@ -677,7 +673,9 @@ class Simulation:
 
         for creature in self.creatures:
             sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n_neighbors, alignment_dot = \
-                self._compute_boid_forces(creature, creature_bucket)
+                self._compute_boid_forces(
+                    creature, boid_neighbors.get(id(creature), [])
+                )
 
             # Apply flocking forces
             creature.vx += sep_fx + align_fx + coh_fx
@@ -731,8 +729,33 @@ class Simulation:
         # Phase-sync glyph pulses within flocks
         self._update_boids_glyph_phases()
 
+    def _build_boid_neighbor_cache(
+        self, bucket: dict[tuple[int, int], list[Creature]]
+    ) -> dict[int, list[tuple[Creature, float, float, float]]]:
+        """
+        Build directed neighbor lists for boids.
+
+        Returns mapping:
+        creature_id -> list[(other_creature, dx, dy, dist_sq)]
+        where (dx, dy) is shortest toroidal vector from creature to neighbor.
+        """
+        neighbor_cache: dict[int, list[tuple[Creature, float, float, float]]] = {}
+        for creature in self.creatures:
+            sense = creature.get_effective_sense_radius() * 1.5
+            sense_sq = sense * sense
+            neighbors: list[tuple[Creature, float, float, float]] = []
+            for other in self._nearby_creatures(creature.x, creature.y, sense, bucket):
+                if other is creature:
+                    continue
+                dx, dy = self._wrapped_delta(creature.x, creature.y, other.x, other.y)
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < sense_sq:
+                    neighbors.append((other, dx, dy, dist_sq))
+            neighbor_cache[id(creature)] = neighbors
+        return neighbor_cache
+
     def _compute_boid_forces(
-        self, creature: Creature, bucket: dict
+        self, creature: Creature, neighbors: list[tuple[Creature, float, float, float]]
     ) -> tuple[float, float, float, float, float, float, int, float]:
         """
         Compute separation, alignment, and cohesion forces for a boid.
@@ -742,130 +765,104 @@ class Simulation:
         Returns:
             (sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n_neighbors, alignment_dot)
         """
-        sense = creature.get_effective_sense_radius() * 1.5
-        sep_threshold = creature.get_radius() * 3.0
-
-        # Gather actual neighbors with distances
-        actual_neighbors: list[tuple[Creature, float]] = []
-        for other in self._nearby_creatures(creature.x, creature.y, sense, bucket):
-            if other is creature:
-                continue
-            dist = creature.distance_to(other.x, other.y, self.width, self.height)
-            if dist < sense:
-                actual_neighbors.append((other, dist))
-
-        if not actual_neighbors:
+        if not neighbors:
             return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0
 
-        n = len(actual_neighbors)
+        n = len(neighbors)
+        sep_threshold = creature.get_radius() * 3.0
+        sep_threshold_sq = sep_threshold * sep_threshold
 
-        # --- Separation ---
         sep_x = sep_y = 0.0
-        for other, dist in actual_neighbors:
-            if dist < sep_threshold and dist > 0.01:
-                dx = creature.x - other.x
-                dy = creature.y - other.y
-                if abs(dx) > self.width / 2:
-                    dx -= math.copysign(self.width, dx)
-                if abs(dy) > self.height / 2:
-                    dy -= math.copysign(self.height, dy)
+        sum_vx = sum_vy = 0.0
+        sum_dx = sum_dy = 0.0
+
+        for other, dx, dy, dist_sq in neighbors:
+            sum_vx += other.vx
+            sum_vy += other.vy
+            sum_dx += dx
+            sum_dy += dy
+
+            if dist_sq < sep_threshold_sq and dist_sq > 1e-6:
+                dist = math.sqrt(dist_sq)
                 weight = (sep_threshold - dist) / sep_threshold
-                sep_x += (dx / dist) * weight
-                sep_y += (dy / dist) * weight
+                inv_dist = 1.0 / dist
+                sep_x += (-dx * inv_dist) * weight
+                sep_y += (-dy * inv_dist) * weight
+
         sep_strength = creature.genome.aggression * 0.25
         sep_fx = sep_x * sep_strength
         sep_fy = sep_y * sep_strength
 
-        # --- Alignment ---
-        avg_vx = sum(o.vx for o, _ in actual_neighbors) / n
-        avg_vy = sum(o.vy for o, _ in actual_neighbors) / n
-
-        my_speed = math.sqrt(creature.vx ** 2 + creature.vy ** 2)
-        avg_speed = math.sqrt(avg_vx ** 2 + avg_vy ** 2)
+        avg_vx = sum_vx / n
+        avg_vy = sum_vy / n
+        my_speed = math.sqrt(creature.vx * creature.vx + creature.vy * creature.vy)
+        avg_speed = math.sqrt(avg_vx * avg_vx + avg_vy * avg_vy)
         alignment_dot = 0.0
         if my_speed > 0.01 and avg_speed > 0.01:
-            alignment_dot = (creature.vx * avg_vx + creature.vy * avg_vy) / (my_speed * avg_speed)
+            alignment_dot = (
+                (creature.vx * avg_vx + creature.vy * avg_vy) / (my_speed * avg_speed)
+            )
 
         align_strength = creature.genome.conformity * 0.12
         align_fx = (avg_vx - creature.vx) * align_strength
         align_fy = (avg_vy - creature.vy) * align_strength
 
-        # --- Cohesion ---
-        avg_x = sum(o.x for o, _ in actual_neighbors) / n
-        avg_y = sum(o.y for o, _ in actual_neighbors) / n
-        dx = avg_x - creature.x
-        dy = avg_y - creature.y
-        if abs(dx) > self.width / 2:
-            dx -= math.copysign(self.width, dx)
-        if abs(dy) > self.height / 2:
-            dy -= math.copysign(self.height, dy)
-        dist_to_centroid = math.sqrt(dx ** 2 + dy ** 2)
-        if dist_to_centroid > 0.01:
+        avg_dx = sum_dx / n
+        avg_dy = sum_dy / n
+        dist_to_centroid_sq = avg_dx * avg_dx + avg_dy * avg_dy
+        if dist_to_centroid_sq > 1e-6:
+            inv_dist = 1.0 / math.sqrt(dist_to_centroid_sq)
             coh_strength = creature.genome.efficiency * 0.04
-            coh_fx = (dx / dist_to_centroid) * coh_strength
-            coh_fy = (dy / dist_to_centroid) * coh_strength
+            coh_fx = avg_dx * inv_dist * coh_strength
+            coh_fy = avg_dy * inv_dist * coh_strength
         else:
             coh_fx = coh_fy = 0.0
 
         return sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n, alignment_dot
 
-    def _update_flock_assignments(self, bucket: dict) -> None:
+    def _update_flock_assignments(
+        self, neighbor_cache: dict[int, list[tuple[Creature, float, float, float]]]
+    ) -> None:
         """
         BFS connected-components flock detection.
 
-        Two creatures are connected if either's sense_radius * 1.5 covers the other.
-        Loners (flock size = 1) get flock_id = -1.
+        Connectivity is undirected: two creatures are connected if either one
+        can sense the other this frame.
         """
-        # Pre-compute neighbor lists for all creatures (avoids repeated bucket lookups)
-        sense_sq_map: dict[int, float] = {}
-        for c in self.creatures:
-            sense = c.get_effective_sense_radius() * 1.5
-            sense_sq_map[id(c)] = sense * sense
-
-        neighbor_map: dict[int, list[Creature]] = {}
-        for c in self.creatures:
-            sense = math.sqrt(sense_sq_map[id(c)])
-            candidates = self._nearby_creatures(c.x, c.y, sense, bucket)
-            neighbors: list[Creature] = []
-            own_sq = sense_sq_map[id(c)]
-            for other in candidates:
-                if other is c:
+        creature_by_id = {id(c): c for c in self.creatures}
+        adjacency: dict[int, set[int]] = {cid: set() for cid in creature_by_id}
+        for cid, neighbors in neighbor_cache.items():
+            for other, _dx, _dy, _dist_sq in neighbors:
+                oid = id(other)
+                if oid not in adjacency:
                     continue
-                # Undirected connectivity: edge exists if either creature can
-                # sense the other.
-                dist_sq = self._distance_sq(c.x, c.y, other.x, other.y)
-                if dist_sq < max(own_sq, sense_sq_map.get(id(other), 0.0)):
-                    neighbors.append(other)
-            neighbor_map[id(c)] = neighbors
+                adjacency[cid].add(oid)
+                adjacency[oid].add(cid)
 
-        # BFS connected components
         assignment: dict[int, int] = {}
         next_flock = 0
-
-        for start in self.creatures:
-            if id(start) in assignment:
+        for cid in adjacency:
+            if cid in assignment:
                 continue
-            queue = [start]
-            assignment[id(start)] = next_flock
+            queue = [cid]
+            assignment[cid] = next_flock
             head = 0
             while head < len(queue):
                 current = queue[head]
                 head += 1
-                for neighbor in neighbor_map.get(id(current), []):
-                    if id(neighbor) not in assignment:
-                        assignment[id(neighbor)] = next_flock
-                        queue.append(neighbor)
+                for neighbor_id in adjacency[current]:
+                    if neighbor_id not in assignment:
+                        assignment[neighbor_id] = next_flock
+                        queue.append(neighbor_id)
             next_flock += 1
 
-        # Count flock sizes
         flock_sizes: dict[int, int] = {}
         for fid in assignment.values():
             flock_sizes[fid] = flock_sizes.get(fid, 0) + 1
 
-        # Assign flock_id; singletons get -1
-        for c in self.creatures:
-            fid = assignment.get(id(c), -1)
-            c.flock_id = fid if flock_sizes.get(fid, 0) > 1 else -1
+        for cid, creature in creature_by_id.items():
+            fid = assignment.get(cid, -1)
+            creature.flock_id = fid if flock_sizes.get(fid, 0) > 1 else -1
 
         self._flock_sizes = {k: v for k, v in flock_sizes.items() if v > 1}
         self._flock_count = len(self._flock_sizes)
@@ -1174,13 +1171,15 @@ class Simulation:
         cx = int(x // bs)
         cy = int(y // bs)
         result: list[Creature] = []
+        dedupe_cells = (cells * 2 + 1) > gw or (cells * 2 + 1) > gh
         seen_cells: set[tuple[int, int]] = set()
         for dx in range(-cells, cells + 1):
             for dy in range(-cells, cells + 1):
                 key = ((cx + dx) % gw, (cy + dy) % gh)
-                if key in seen_cells:
-                    continue
-                seen_cells.add(key)
+                if dedupe_cells:
+                    if key in seen_cells:
+                        continue
+                    seen_cells.add(key)
                 result.extend(bucket.get(key, []))
         return result
 
@@ -1193,6 +1192,18 @@ class Simulation:
         if dy > self.height / 2:
             dy = self.height - dy
         return dx * dx + dy * dy
+
+    def _wrapped_delta(
+        self, ax: float, ay: float, bx: float, by: float
+    ) -> tuple[float, float]:
+        """Shortest toroidal delta vector from (ax, ay) to (bx, by)."""
+        dx = bx - ax
+        dy = by - ay
+        if abs(dx) > self.width / 2:
+            dx -= math.copysign(self.width, dx)
+        if abs(dy) > self.height / 2:
+            dy -= math.copysign(self.height, dy)
+        return dx, dy
 
     # ------------------------------------------------------------------
     # Hunting / predation (energy mode)
@@ -1207,7 +1218,7 @@ class Simulation:
         max_prey_radius = my_radius * 1.3
 
         best_prey: Creature | None = None
-        best_dist = sense
+        best_dist_sq = sense * sense
 
         for other in self._nearby_creatures(creature.x, creature.y, sense, bucket):
             if other is creature:
@@ -1216,9 +1227,9 @@ class Simulation:
                 continue
             if other.get_radius() > max_prey_radius:
                 continue
-            dist = creature.distance_to(other.x, other.y, self.width, self.height)
-            if dist < best_dist:
-                best_dist = dist
+            dist_sq = self._distance_sq(creature.x, creature.y, other.x, other.y)
+            if dist_sq < best_dist_sq:
+                best_dist_sq = dist_sq
                 best_prey = other
 
         if best_prey is None:
@@ -1231,7 +1242,7 @@ class Simulation:
         )
 
         attack_range = my_radius * 4
-        if best_dist < attack_range:
+        if best_dist_sq < (attack_range * attack_range):
             size_ratio = min(2.0, max(0.5, my_radius / max(1.0, best_prey.get_radius())))
             drain = creature.genome.aggression * 0.008 * size_ratio
             transfer = min(drain, best_prey.energy)
@@ -1261,8 +1272,8 @@ class Simulation:
                 continue
             if other.get_radius() >= prey_size_limit:
                 continue
-            dist = creature.distance_to(other.x, other.y, self.width, self.height)
-            if dist < attack_range:
+            dist_sq = self._distance_sq(creature.x, creature.y, other.x, other.y)
+            if dist_sq < (attack_range * attack_range):
                 drain = creature.genome.aggression * 0.008
                 transfer = min(drain, other.energy)
                 if transfer > 0:
