@@ -229,12 +229,27 @@ def _configure_logging(debug_enabled: bool) -> str:
         log_dir = Path.home() / "Library" / "Application Support" / "Primordial"
     else:
         log_dir = Path.home() / ".config" / "primordial"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "primordial.log"
+    preferred_path = log_dir / "primordial.log"
+    fallback_path = Path.cwd() / "primordial.log"
 
-    handlers: list[logging.Handler] = [
-        logging.FileHandler(log_path, encoding="utf-8"),
-    ]
+    handlers: list[logging.Handler] = []
+    active_path: Path | None = None
+    fallback_reason: str | None = None
+
+    for candidate in (preferred_path, fallback_path):
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(candidate, encoding="utf-8"))
+            active_path = candidate
+            break
+        except OSError as exc:
+            fallback_reason = str(exc)
+
+    if not handlers:
+        # Last-resort fallback: avoid startup crash even if file logging is unavailable.
+        handlers.append(logging.StreamHandler(sys.stderr))
+        active_path = Path("<stderr>")
+
     if debug_enabled:
         handlers.append(logging.StreamHandler(sys.stdout))
 
@@ -244,7 +259,13 @@ def _configure_logging(debug_enabled: bool) -> str:
         handlers=handlers,
         force=True,
     )
-    return str(log_path)
+    if fallback_reason and active_path != preferred_path:
+        logging.getLogger(__name__).warning(
+            "Log file fallback engaged (%s). Active log path: %s",
+            fallback_reason,
+            active_path,
+        )
+    return str(active_path)
 
 
 def _apply_runtime_overrides(settings: Settings, runtime_args: RuntimeArgs) -> None:
@@ -281,11 +302,8 @@ def _run_profile_session(
     Run a 60-second profile session, dump .pstats and text report, then return base path.
     """
     out_dir = Path(settings.config_path).parent
-    out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    base = out_dir / f"profile-{stamp}"
-    pstats_path = base.with_suffix(".pstats")
-    text_path = base.with_suffix(".txt")
+    base_name = f"profile-{stamp}"
 
     profiler = cProfile.Profile()
     end_time = time.perf_counter() + 60.0
@@ -302,11 +320,23 @@ def _run_profile_session(
         clock.tick(max(1, settings.target_fps))
     profiler.disable()
 
-    profiler.dump_stats(str(pstats_path))
-    with text_path.open("w", encoding="utf-8") as fp:
-        stats = pstats.Stats(profiler, stream=fp).sort_stats("cumulative")
-        stats.print_stats(120)
-    return str(base)
+    for candidate_dir in (out_dir, Path.cwd()):
+        try:
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            base = candidate_dir / base_name
+            pstats_path = base.with_suffix(".pstats")
+            text_path = base.with_suffix(".txt")
+            profiler.dump_stats(str(pstats_path))
+            with text_path.open("w", encoding="utf-8") as fp:
+                stats = pstats.Stats(profiler, stream=fp).sort_stats("cumulative")
+                stats.print_stats(120)
+            if candidate_dir != out_dir:
+                logger.warning("Profile output fallback path in use: %s", candidate_dir)
+            return str(base)
+        except OSError as exc:
+            logger.warning("Profile write failed at %s: %s", candidate_dir, exc)
+
+    raise RuntimeError("Unable to write profile output to any candidate directory.")
 
 
 def _run_config_dialog() -> None:
