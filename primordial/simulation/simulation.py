@@ -122,11 +122,10 @@ class Simulation:
         # Check user config overrides (loaded from [modes.*] TOML sections)
         mode_params = getattr(self.settings, "mode_params", {})
         if mode in mode_params and key in mode_params[mode]:
-            return type(fallback)(mode_params[mode][key]) if fallback is not None else mode_params[mode][key]
+            return mode_params[mode][key]
         # Built-in mode defaults
         if mode in _MODE_DEFAULTS and key in _MODE_DEFAULTS[mode]:
-            val = _MODE_DEFAULTS[mode][key]
-            return type(fallback)(val) if fallback is not None else val
+            return _MODE_DEFAULTS[mode][key]
         # Fall back to settings attribute or provided fallback
         if hasattr(self.settings, key):
             return getattr(self.settings, key)
@@ -166,8 +165,12 @@ class Simulation:
 
     def _spawn_initial_population_predator_prey(self) -> None:
         """Spawn mixed predator/prey population."""
-        predator_fraction = self._get_mode_param("predator_fraction", 0.30)
-        initial_pop = self._get_mode_param("initial_population", self.settings.initial_population)
+        predator_fraction = float(self._get_mode_param("predator_fraction", 0.30))
+        predator_fraction = max(0.0, min(1.0, predator_fraction))
+        initial_pop = max(
+            0,
+            int(self._get_mode_param("initial_population", self.settings.initial_population)),
+        )
         n_predators = int(initial_pop * predator_fraction)
 
         for i in range(initial_pop):
@@ -292,6 +295,21 @@ class Simulation:
             self.settings.zone_strength,
         )
         self._spawn_initial_population()
+
+    def resize(self, width: int, height: int) -> None:
+        """Resize simulation world bounds and rebuild dependent spatial data."""
+        self.width = width
+        self.height = height
+        self.food_manager.resize_world(width, height)
+
+        for creature in self.creatures:
+            creature.x = creature.x % width
+            creature.y = creature.y % height
+
+        # Zones are world-space geometry; regenerate after resize.
+        self.zone_manager = ZoneManager(
+            width, height, self.settings.zone_count, self.settings.zone_strength
+        )
 
     # ------------------------------------------------------------------
     # Main step dispatcher
@@ -420,6 +438,9 @@ class Simulation:
         cosmic_rate = self.settings.cosmic_ray_rate
 
         for creature in self.creatures:
+            if creature.species not in {"predator", "prey"}:
+                creature.species = "predator" if creature.genome.aggression >= 0.5 else "prey"
+
             if creature.species == "predator":
                 self._predator_hunt_prey(creature, creature_bucket)
                 creature.update_position(1.0, self.width, self.height)
@@ -482,7 +503,7 @@ class Simulation:
         best_dist = sense
 
         for other in self._nearby_creatures(predator.x, predator.y, sense, bucket):
-            if other is predator or other.species != "prey":
+            if other is predator or other.species != "prey" or other.energy <= 0.0:
                 continue
             dist = predator.distance_to(other.x, other.y, self.width, self.height)
             if dist < best_dist:
@@ -501,8 +522,10 @@ class Simulation:
 
         # Contact kill: distance < sum of radii
         contact_dist = predator.get_radius() + best_prey.get_radius()
-        if best_dist < contact_dist:
-            energy_gain = min(0.5, best_prey.genome.size * 3 * 0.1)
+        if best_dist < contact_dist and best_prey.energy > 0.0:
+            # Transfer from prey to predator; prevents multiple predators
+            # farming energy from an already-dead prey in the same frame.
+            energy_gain = min(0.5, best_prey.energy)
             predator.energy = min(1.0, predator.energy + energy_gain)
             best_prey.energy = 0.0
             self.active_attacks.append((
@@ -794,15 +817,26 @@ class Simulation:
         Loners (flock size = 1) get flock_id = -1.
         """
         # Pre-compute neighbor lists for all creatures (avoids repeated bucket lookups)
-        neighbor_map: dict[int, list[Creature]] = {}
+        sense_sq_map: dict[int, float] = {}
         for c in self.creatures:
             sense = c.get_effective_sense_radius() * 1.5
+            sense_sq_map[id(c)] = sense * sense
+
+        neighbor_map: dict[int, list[Creature]] = {}
+        for c in self.creatures:
+            sense = math.sqrt(sense_sq_map[id(c)])
             candidates = self._nearby_creatures(c.x, c.y, sense, bucket)
-            neighbor_map[id(c)] = [
-                other for other in candidates
-                if other is not c and
-                c.distance_to(other.x, other.y, self.width, self.height) < sense
-            ]
+            neighbors: list[Creature] = []
+            own_sq = sense_sq_map[id(c)]
+            for other in candidates:
+                if other is c:
+                    continue
+                # Undirected connectivity: edge exists if either creature can
+                # sense the other.
+                dist_sq = self._distance_sq(c.x, c.y, other.x, other.y)
+                if dist_sq < max(own_sq, sense_sq_map.get(id(other), 0.0)):
+                    neighbors.append(other)
+            neighbor_map[id(c)] = neighbors
 
         # BFS connected components
         assignment: dict[int, int] = {}
@@ -1140,11 +1174,25 @@ class Simulation:
         cx = int(x // bs)
         cy = int(y // bs)
         result: list[Creature] = []
+        seen_cells: set[tuple[int, int]] = set()
         for dx in range(-cells, cells + 1):
             for dy in range(-cells, cells + 1):
                 key = ((cx + dx) % gw, (cy + dy) % gh)
+                if key in seen_cells:
+                    continue
+                seen_cells.add(key)
                 result.extend(bucket.get(key, []))
         return result
+
+    def _distance_sq(self, ax: float, ay: float, bx: float, by: float) -> float:
+        """Toroidal squared distance helper."""
+        dx = abs(bx - ax)
+        dy = abs(by - ay)
+        if dx > self.width / 2:
+            dx = self.width - dx
+        if dy > self.height / 2:
+            dy = self.height - dy
+        return dx * dx + dy * dy
 
     # ------------------------------------------------------------------
     # Hunting / predation (energy mode)
@@ -1163,6 +1211,8 @@ class Simulation:
 
         for other in self._nearby_creatures(creature.x, creature.y, sense, bucket):
             if other is creature:
+                continue
+            if other.energy <= 0.0:
                 continue
             if other.get_radius() > max_prey_radius:
                 continue
@@ -1184,13 +1234,15 @@ class Simulation:
         if best_dist < attack_range:
             size_ratio = min(2.0, max(0.5, my_radius / max(1.0, best_prey.get_radius())))
             drain = creature.genome.aggression * 0.008 * size_ratio
-            best_prey.energy = max(0.0, best_prey.energy - drain)
-            creature.energy = min(1.0, creature.energy + drain)
-            self.active_attacks.append((
-                creature.x, creature.y,
-                best_prey.x, best_prey.y,
-                creature.genome.hue,
-            ))
+            transfer = min(drain, best_prey.energy)
+            if transfer > 0:
+                best_prey.energy = max(0.0, best_prey.energy - transfer)
+                creature.energy = min(1.0, creature.energy + transfer)
+                self.active_attacks.append((
+                    creature.x, creature.y,
+                    best_prey.x, best_prey.y,
+                    creature.genome.hue,
+                ))
 
         return True
 
@@ -1205,19 +1257,23 @@ class Simulation:
         for other in self._nearby_creatures(creature.x, creature.y, attack_range, bucket):
             if other is creature:
                 continue
+            if other.energy <= 0.0:
+                continue
             if other.get_radius() >= prey_size_limit:
                 continue
             dist = creature.distance_to(other.x, other.y, self.width, self.height)
             if dist < attack_range:
                 drain = creature.genome.aggression * 0.008
-                other.energy = max(0.0, other.energy - drain)
-                creature.energy = min(1.0, creature.energy + drain)
-                self.active_attacks.append((
-                    creature.x, creature.y,
-                    other.x, other.y,
-                    creature.genome.hue,
-                ))
-                break
+                transfer = min(drain, other.energy)
+                if transfer > 0:
+                    other.energy = max(0.0, other.energy - transfer)
+                    creature.energy = min(1.0, creature.energy + transfer)
+                    self.active_attacks.append((
+                        creature.x, creature.y,
+                        other.x, other.y,
+                        creature.genome.hue,
+                    ))
+                    break
 
     # ------------------------------------------------------------------
     # Cosmic ray mutations

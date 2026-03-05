@@ -141,6 +141,28 @@ class Renderer:
         # Invalidate zone cache — new sim will have different zones
         self._zone_surf_cached = None
 
+    def resize(
+        self, width: int, height: int, screen: pygame.Surface | None = None
+    ) -> None:
+        """Resize renderer surfaces and invalidate size-dependent caches."""
+        self.width = width
+        self.height = height
+        if screen is not None:
+            self.screen = screen
+
+        self._line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._shimmer_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._zone_surf_cached = None
+        self._shimmer_states.clear()
+        self.ambient_particles = self.theme.create_ambient_particles(
+            self.width, self.height, 30
+        )
+        if isinstance(self.theme, OceanTheme):
+            self.theme._trail_surf = pygame.Surface(
+                (self.width, self.height), pygame.SRCALPHA
+            )
+
     def draw(self, simulation: Simulation) -> None:
         """
         Render the current simulation state.

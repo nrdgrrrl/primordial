@@ -63,6 +63,27 @@ class FoodManager:
         by = int(y / self.bucket_size) % self.grid_height
         return (bx, by)
 
+    def resize_world(self, world_width: int, world_height: int) -> None:
+        """
+        Resize world bounds and rebuild food buckets safely.
+
+        Existing particles are wrapped into the new bounds so lookups stay valid
+        after resolution/fullscreen changes.
+        """
+        self.world_width = world_width
+        self.world_height = world_height
+        self.grid_width = (world_width + self.bucket_size - 1) // self.bucket_size
+        self.grid_height = (world_height + self.bucket_size - 1) // self.bucket_size
+
+        self.buckets.clear()
+        for food in self.particles:
+            food.x = food.x % world_width
+            food.y = food.y % world_height
+            bucket = self._get_bucket(food.x, food.y)
+            if bucket not in self.buckets:
+                self.buckets[bucket] = []
+            self.buckets[bucket].append(food)
+
     def spawn(self, x: float | None = None, y: float | None = None) -> Food | None:
         """
         Spawn a new food particle.

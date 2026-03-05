@@ -8,11 +8,14 @@ Supports Windows screensaver modes: /s (screensaver), /p HWND (preview), /c (con
 
 from __future__ import annotations
 
+import logging
 import platform
 import sys
 import time
 
 import pygame
+
+logger = logging.getLogger(__name__)
 
 # Fix blurry rendering on Windows high-DPI displays.
 # Must run before pygame.init(); silently ignored on non-Windows and older Windows.
@@ -20,8 +23,8 @@ try:
     if platform.system() == "Windows":
         import ctypes
         ctypes.windll.shcore.SetProcessDpiAwareness(2)  # type: ignore[attr-defined]
-except Exception:
-    pass
+except (AttributeError, OSError):
+    logger.debug("DPI awareness API unavailable on this platform.")
 
 from .rendering import Renderer
 from .settings import Settings
@@ -334,15 +337,8 @@ def toggle_fullscreen(
             screen = pygame.display.set_mode((width, height))
 
     pygame.mouse.set_visible(not settings.fullscreen)
-
-    renderer.screen = screen
-    renderer.width = width
-    renderer.height = height
-
-    simulation.width = width
-    simulation.height = height
-    simulation.food_manager.world_width = width
-    simulation.food_manager.world_height = height
+    renderer.resize(width, height, screen=screen)
+    simulation.resize(width, height)
 
 
 if __name__ == "__main__":
