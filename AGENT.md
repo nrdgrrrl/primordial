@@ -536,6 +536,7 @@ The parser is tolerant (`parse_known_args`) so Windows screensaver args (`/s`, `
 `primordial/main.py` configures stdlib logging on startup:
 
 - Log file: `primordial.log` in the same platform config directory as `config.toml`
+- If that path is not writable, output falls back to the current working directory
 - `--debug` adds a stdout handler at `DEBUG` level
 - Non-debug runs log at `INFO` to file only
 

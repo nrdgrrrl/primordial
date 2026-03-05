@@ -2,13 +2,13 @@
 
 ## Summary
 
-- Total findings: **26**
+- Total findings: **27**
 - Status totals:
-  - **FIXED:** 19
+  - **FIXED:** 20
   - **DEFERRED:** 5
   - **WONTFIX:** 2
 - Category totals:
-  - **Correctness / Robustness:** 11
+  - **Correctness / Robustness:** 12
   - **Performance:** 9
   - **Memory:** 3
   - **Code Quality / DX:** 3
@@ -44,6 +44,7 @@
 | `primordial/rendering/animations.py` | Performance | Cosmic ray and parent pulse animations allocated new surfaces each frame. | FIXED | Added frame caches (global for cosmic ring, per-color for parent pulse). |
 | `primordial/rendering/settings_overlay.py` | Performance | Overlay shade surface recreated every draw. | FIXED | Cached shade surface per resolution and reused each frame. |
 | `primordial/rendering/renderer.py`, `primordial/rendering/hud.py`, `primordial/main.py`, `primordial/utils/cli.py` | Code Quality / DX | No first-class debug/profile runtime workflow. | FIXED | Added `--debug`, `--profile`, `--mode`, `--theme`; debug HUD timings + FPS/pop graph; 60s profile dump flow. |
+| `primordial/main.py` | Correctness / Robustness | Logging/profile outputs could crash startup on unwritable config directories. | FIXED | Added fallback output paths (working directory) for log and profile files. |
 | `primordial/main.py` | Code Quality / DX | No persistent file logging suitable for screensaver mode diagnosis. | FIXED | Added stdlib logging setup writing `primordial.log` in config dir; debug mode mirrors logs to stdout. |
 | `Makefile` | Code Quality / DX | Repetitive dev commands for run/build/profile/clean. | FIXED | Added `make run/debug/profile/build/clean` shortcuts. |
 | `primordial/rendering/renderer.py` | Performance | Kin/flock connection rendering remains pairwise O(k²) within groups. | DEFERRED | Current frame budgets are acceptable; approximate graph thinning can be added if large flocks become common. |

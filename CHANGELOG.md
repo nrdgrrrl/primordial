@@ -117,6 +117,9 @@ after resolution changes.
   - external metrics from main loop (`event_ms`, `sim_ms`)
   - renderer sub-system timing breakdown shown in HUD in debug mode
   - FPS and population history mini-graphs (debug overlay)
+- Hardened output paths for restricted environments:
+  - log file creation falls back to working directory if config path is not writable
+  - profile report writes (`.pstats` + `.txt`) fall back similarly instead of crashing
 - Added `Makefile` tasks:
   - `make run`, `make debug`, `make profile`, `make build`, `make clean`
 
