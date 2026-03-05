@@ -55,6 +55,9 @@ Immutable dataclass holding creature traits (all `float` 0.0–1.0):
 **Original traits:**
 - `speed`, `size`, `sense_radius`, `aggression`, `hue`, `saturation`, `efficiency`
 
+**Boids trait (added in modes pass):**
+- `conformity` — 0–1; controls alignment force strength in boids mode; inert (random drifts) in other modes
+
 **Glyph traits (added in enhancement pass):**
 - `complexity` — 0–1 → maps to 2–7 strokes in the glyph
 - `symmetry` — 0=asymmetric, 0.33=bilateral, 0.66=3-fold radial, 1.0=4-fold radial
@@ -97,6 +100,13 @@ Mutable dataclass representing a single organism:
 - **Glide**: very gentle direction changes, slow speed
 - **Swim**: moderate wandering + sinusoidal lateral oscillation applied in `update_position`
 - **Dart**: mostly stationary (`vx *= 0.95`) with random bursts at ~1.8× max speed every 3–5 seconds
+
+**Mode-specific fields:**
+- `species: str` — "none" (all non-predator_prey modes), "prey", or "predator"
+- `flock_id: int` — -1 (loner / not in boids mode), ≥0 = boids flock component id
+- `_glyph_phase: float` — pulse animation phase; initialised to `genome.hue * 6.28`
+  at spawn; updated on every cosmic-ray mutation and reproduction; in boids mode
+  slowly phase-locks toward flock average via `_update_boids_glyph_phases()`
 
 **Key methods (unchanged):**
 - `update_position(dt, world_width, world_height)` — move, wrap, update trail and rotation
@@ -317,14 +327,37 @@ zone_strength: float = 0.8          # global zone effect multiplier (0 = disable
 
 ## Sim Mode Contract
 
-A new simulation mode must:
+All four modes are implemented as `_step_<mode>()` private methods on the single
+`Simulation` class. `step()` dispatches to the appropriate method based on
+`settings.sim_mode`. A new mode must:
 
-1. Be a class with constructor `__init__(self, width: int, height: int, settings: Settings)`
-2. Implement `step(self) -> None`
-3. Implement `reset(self) -> None`
-4. Expose properties: `creatures`, `food_manager`, `population`, `generation`, `oldest_age`, `food_count`, `paused`, `settings`
-5. Expose event queues: `death_events: list[dict]`, `birth_events: list[Creature]`
-6. Add mode name to `Settings.VALID_SIM_MODES`
+1. Add `_step_<mode>(self) -> None` to Simulation
+2. Add `_spawn_initial_population_<mode>(self) -> None` and register it in
+   `_spawn_initial_population()`
+3. Add mode name to `Settings.VALID_SIM_MODES`
+4. Add per-mode defaults to `_MODE_DEFAULTS` dict in `simulation.py`
+5. Write `[modes.<name>]` section in `Config.to_toml()`
+
+**What a mode may override:**
+- Food spawning (call or skip `_spawn_food()`)
+- Energy model (regen, costs, thresholds)
+- Movement behaviour (may call `wander()`, `steer_toward()`, or custom helpers)
+- Death conditions (energy ≤ 0, age ≥ max_lifespan, or age-only for drift)
+- Position update (may use `update_position()` or custom `_drift_update_position()`)
+
+**What a mode must preserve:**
+- Shared infrastructure: spatial bucket, zone manager, cosmic rays, aging
+- Event queues: `death_events`, `birth_events`, `active_attacks`, `cosmic_ray_events`
+- Creature fields: all modes use same Creature/Genome dataclasses
+- Toroidal world wrapping
+
+**Boids flock detection algorithm:**
+1. Pre-compute neighbor list per creature using spatial bucket (O(n × local_density))
+2. BFS connected-components: two creatures connected if either's `sense_radius*1.5` covers the other
+3. Singletons (flock size = 1) assigned `flock_id = -1`
+4. Performance: O(n × avg_neighborhood) ≈ O(3000) at pop=300, well within 60fps budget
+5. Phase sync: `_update_boids_glyph_phases()` lerps each creature's `_glyph_phase` toward
+   circular flock average by factor 0.05 per frame
 
 ## Visual Theme Contract
 
@@ -337,11 +370,10 @@ A new theme must:
 
 ## Known Stubs
 
-**Simulation modes (not implemented):**
-- `predator_prey`, `boids`, `drift`
-
 **Visual themes (not implemented):**
 - `petri`, `geometric`, `chaotic`
+
+All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now fully implemented.
 
 ## Performance Notes
 

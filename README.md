@@ -48,7 +48,7 @@ The screensaver will launch in fullscreen mode by default.
 
 ### The Genome System
 
-Each creature has a **genome** — a set of 14 heritable traits that determine its characteristics. All traits are floats in the range 0.0–1.0 and can mutate slightly each generation.
+Each creature has a **genome** — a set of 15 heritable traits that determine its characteristics. All traits are floats in the range 0.0–1.0 and can mutate slightly each generation.
 
 #### Survival Traits
 
@@ -76,6 +76,12 @@ Each creature's body is a **procedurally generated symbolic glyph** derived enti
 | **rotation_speed** | 0–1 | Glyph slowly drifts (0) to steadily spins (1) |
 
 Glyphs are built from a **stroke vocabulary**: arcs, straight lines, loops (small ovals), forks (Y-splits), spirals, and dots. The combination chosen is always the same for a given genome — so you can learn to recognize lineages by glyph family resemblance.
+
+#### Social Trait — Flocking Behaviour
+
+| Trait | Range | Effect |
+|-------|-------|--------|
+| **conformity** | 0–1 | Tendency to align velocity with neighbours (0 = pure individualist, 1 = strong aligner). Primarily expressed in **boids** mode but is heritable and evolves under selection pressure in all modes. |
 
 #### Motion Trait — How They Move
 
@@ -122,7 +128,7 @@ Over a 10–30 minute run, you can observe real selection pressure at work:
 5. **Food Cycles**: Food spawn rate oscillates sinusoidally over ~30 seconds — alternating feast and famine. Boom-bust ecological cycles emerge from this pressure.
 6. **Zones**: Five environmental zones grant ±20% energy modifiers based on trait matching. Creatures evolve toward zones that favor their profile.
 7. **Reproduction**: At energy ≥ 0.8, split into parent + offspring (halved energy each); offspring genome is mutated
-8. **Mutation**: Each of 14 traits has a ~6% chance of shifting (gaussian, std 0.08), clamped to 0–1
+8. **Mutation**: Each of 15 traits has a ~6% chance of shifting (gaussian, std 0.08), clamped to 0–1
 9. **Cosmic Rays**: Each creature has a small per-frame chance of a single spontaneous trait mutation (independent of reproduction)
 10. **Aging**: Creatures have a maximum lifespan determined by `longevity`. Speed declines after 70% of max lifespan; sense radius after 85%. Death by old age emits scatter particles.
 11. **Speciation**: If hue mutates more than 0.15 in one step, the offspring starts a new lineage
@@ -135,6 +141,72 @@ Over a 10–30 minute run, you can observe real selection pressure at work:
 - When population exceeds 50% of max, energy costs increase quadratically
 - Food cycles, predation, and aging interact to produce complex boom-bust dynamics
 - Generation count tracks total reproductions; oldest creature tracked as % of max lifespan
+
+## Simulation Modes
+
+Primordial ships with four fully independent simulation modes selectable in the settings overlay (`S`) or via `config.toml`.
+
+### Energy Mode (default)
+
+The classic Primordial experience. Creatures forage for food, hunt each other, and evolve under Darwinian selection pressure. Features food cycles (feast/famine), environmental zones, hunter/grazer arms races, and kin territory shimmer.
+
+**Best for:** watching genuine natural selection and glyph-family divergence over 10–30 minute runs.
+
+HUD shows: population, generation count, hunter/grazer/opportunist ratio, dominant trait values, food cycle bar.
+
+### Predator Prey Mode
+
+A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%) or **prey** (70%). Predators hunt prey on contact and drain energy proportional to prey size; prey flee from nearby predators. Populations oscillate in classic predator-prey cycles.
+
+- Arms race evolution: predator aggression and prey speed evolve under mutual selection pressure.
+- Cosmic ray hits can flip species identity when aggression crosses the 0.5 threshold.
+- Automatic ecosystem rescue when either species nears extinction (inject a small cohort of the depleted species).
+- Predators render in warm hues (high hue), prey in cool hues (low hue).
+
+**Best for:** oscillating population dynamics — watch predator and prey counts chase each other in boom-bust waves.
+
+HUD shows: predator count, prey count, avg predator speed vs. avg prey speed, dominant trait values.
+
+### Boids Mode
+
+A Reynolds boids flocking simulation where genome traits directly control the three boid forces:
+
+| Force | Controlled by |
+|-------|---------------|
+| Separation (avoid crowding) | `aggression` |
+| Alignment (match velocity) | `conformity` |
+| Cohesion (stay with group) | `efficiency` |
+
+Creatures gain a small passive energy bonus for being in a flock of 3–12 neighbours (optimal flock size). Flocks are detected each frame via BFS on the neighbour graph. Creatures in the same flock synchronise their glyph pulse phase over time — flocks pulse together.
+
+Kin lines are replaced by **flock lines**: faint connections between creatures sharing a flock ID.
+
+**Best for:** mesmerising murmuration-style motion and watching emergent flock structures form and break apart.
+
+HUD shows: population, flock count, largest flock size, average conformity, generation count.
+
+### Drift Mode
+
+A purely aesthetic, meditative mode inspired by genetic drift — evolution without selection. There is no food. Creatures regen energy passively (+0.002/frame) and can only die of old age. All creatures use the glide motion style regardless of genome. Cosmic ray rate is doubled, causing continuous gentle mutation visible as glyph shimmer.
+
+- Very slow, dreamlike movement: halved rotation speed, doubled trail length.
+- No hunger, no predation, no zones — only time and mutation.
+- Populations are smaller (default 60) for a quieter, more spacious canvas.
+
+**Best for:** a calm ambient display, and observing pure neutral genetic drift detached from selection pressure.
+
+HUD shows: population, generation count, lineage count, most variable trait (the trait currently drifting fastest), average conformity.
+
+## Which Mode Should I Use?
+
+| If you want… | Use |
+|---|---|
+| Classic evolution — food, predation, zones | **energy** |
+| Oscillating predator/prey population cycles | **predator_prey** |
+| Flocking murmurations and emergent group behaviour | **boids** |
+| A calm ambient display, pure visual drift | **drift** |
+
+You can switch modes at any time with `S` → change Mode → Apply. The simulation fades to black, resets with the new mode's starting population, and fades back in.
 
 ## Settings
 
@@ -198,7 +270,7 @@ primordial/
 │   │   ├── __init__.py
 │   │   ├── creature.py      # Creature class with motion styles and aging
 │   │   ├── food.py          # Food and FoodManager (spatial bucket)
-│   │   ├── genome.py        # Genome — 14 heritable traits
+│   │   ├── genome.py        # Genome — 15 heritable traits
 │   │   ├── zones.py         # Environmental zones and ZoneManager
 │   │   └── simulation.py    # Main simulation logic + event queues
 │   └── rendering/
@@ -219,10 +291,16 @@ primordial/
 
 ### Adding a New Simulation Mode
 
-1. Create a class in `primordial/simulation/` with `__init__(width, height, settings)`, `step()`, `reset()`, and all required properties (see AGENT.md for full contract)
-2. The class must also expose `death_events: list[dict]` and `birth_events: list[Creature]` for the AnimationManager
-3. Add mode name to `Config.VALID_SIM_MODES`
-4. Update `main.py` to instantiate based on `settings.sim_mode`
+All modes live inside the single `Simulation` class in `primordial/simulation/simulation.py` as `_step_<mode>()` / `_spawn_initial_population_<mode>()` methods. To add a mode:
+
+1. Add a `_spawn_initial_population_<name>()` method and dispatch it from `_spawn_initial_population()`.
+2. Add a `_step_<name>()` method and dispatch it from `step()`.
+3. Add mode-specific built-in defaults to `_MODE_DEFAULTS` dict.
+4. Add mode name to `Config.VALID_SIM_MODES` and the settings overlay option list.
+5. Add HUD lines in `hud.py` (`_lines_<name>()` + dispatch in `render()`).
+6. Optionally add a `[modes.<name>]` TOML section in `Config.to_toml()`.
+
+See AGENT.md for the full Sim Mode Contract.
 
 ### Adding a New Visual Theme
 

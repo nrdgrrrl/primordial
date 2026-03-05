@@ -2,6 +2,118 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-03-05] — All Four Simulation Modes Implemented
+
+### Summary
+
+This pass fully implements the three previously-stubbed simulation modes:
+`predator_prey`, `boids`, and `drift`. The "coming soon" overlay has been
+removed for all four modes. Each mode is genuinely distinct in its energy
+model, selection pressure, visual feel, and HUD stats.
+
+---
+
+## [2026-03-05] — feat: drift mode — meditative evolution through pure random drift
+
+**What changed** (`simulation/simulation.py`, `rendering/*`):
+
+- Passive energy regen (+0.002/frame); no food; no movement cost; die only of old age
+- All creatures use glide motion regardless of `motion_style` genome trait
+- Very slow, smoothly curving paths via `_drift_wander()` with per-creature
+  rotation direction stored in repurposed `_swim_phase` field
+- Soft boundary repulsion keeps creatures away from screen edges
+- Cosmic ray rate doubled (0.0006/frame default) — drift is mutation-driven
+- `_drift_update_position()`: skips swim oscillation, halves glyph rotation
+  speed, doubles trail length for long gossamer trails
+- Zone effects applied as a very gentle energy nudge (no kill)
+- HUD: population, generation, distinct lineage count, most-variable trait
+- Mode defaults: pop=60, max_pop=200, mutation_rate=0.04, energy_to_reproduce=0.95
+
+---
+
+## [2026-03-05] — feat: boids mode — flocking simulation with evolved flock behaviour
+
+**What changed** (`simulation/simulation.py`, `rendering/renderer.py`):
+
+- No food; energy from being in a well-formed flock (3–12 neighbours optimal)
+- Three genome-controlled boid rules:
+  - Separation: avoid crowding (strength = `aggression`)
+  - Alignment: match flock heading (strength = `conformity`)
+  - Cohesion: steer toward flock centroid (strength = `efficiency`)
+- Energy model: optimal band regenerates at rate ∝ alignment quality;
+  isolation (<3 neighbours) and crowding (>12) both drain energy
+- Flock detection: BFS connected-components via spatial bucket pre-computation;
+  O(n × avg_neighborhood) per frame; singletons get `flock_id = -1`
+- Glyph pulse phase-sync: each frame, `_glyph_phase` lerps toward flock
+  circular average → synchronized bioluminescent pulse within each flock
+- Flock lines: faint lines drawn between same-flock creatures (replaces kin
+  lines in boids mode); loners show no connections
+- HUD: flock count, avg/largest flock size, avg conformity trait, loner count
+- Mode defaults: pop=150, max_pop=300, mutation_rate=0.07, energy_to_reproduce=0.72
+
+---
+
+## [2026-03-05] — feat: predator_prey mode — Lotka-Volterra ecosystem
+
+**What changed** (`simulation/simulation.py`):
+
+- Init: 30% predators (warm hues 0.48–0.88, aggression 0.62–0.95),
+  70% prey (cool hues 0.05–0.45, aggression 0.0–0.38)
+- Predators: hunt nearest prey within `sense_radius*2`; kill on contact
+  (energy gain = `prey.size * 3 * 0.1`); pay 1.4× movement cost;
+  wander when no prey found; ignore food
+- Prey: flee nearest predator within `sense_radius*1.2`; seek food when safe
+- Ecosystem balance:
+  - >60% predators: reduce predator reproduction threshold by 20%
+  - <15% prey: predators pay 2× energy cost (prey scarcity)
+  - Predators extinct: convert 3 highest-aggression prey → prevents sim death
+  - Prey extinct: convert 10 lowest-aggression predators → prevents sim death
+- Cosmic ray species flip: aggression crossing 0.5 triggers species conversion
+  + new lineage_id (visible speciation event)
+- HUD: predator/prey counts, avg speed per species, food cycle bar
+- Mode defaults: pop=120, predator_fraction=0.30, food_spawn_rate=0.5,
+  mutation_rate=0.08, energy_to_reproduce=0.70
+
+---
+
+## [2026-03-05] — feat: conformity genome trait + species/flock_id/glyph_phase fields
+
+**What changed** (`simulation/genome.py`, `simulation/creature.py`):
+
+- `Genome`: 15th trait `conformity` (0.0–1.0) controls boids alignment
+  strength; inert in other modes (drifts randomly via normal mutation)
+- `Genome`: updated `random()`, `mutate()`, `copy()`, `mutate_one()`
+- `Creature`: `species: str` field ("none"|"prey"|"predator")
+- `Creature`: `flock_id: int` field (-1=loner, >=0=flock component id)
+- `Creature`: `_glyph_phase: float` — initialised to `genome.hue * 6.28`
+  at spawn; updated on mutations and births to track hue; in boids mode
+  slowly phase-locks toward flock average for synchronized pulse effect
+- `OceanTheme`: pulse animation now uses `creature._glyph_phase` instead
+  of `genome.hue * 6.28` (behavior identical in non-boids modes)
+- `Creature.spawn()`: added `species` parameter
+
+---
+
+## [2026-03-05] — feat: mode-specific HUD, renderer flock lines, config mode_params, transition fade
+
+**What changed** (`rendering/hud.py`, `rendering/renderer.py`, `config/config.py`, `main.py`):
+
+- HUD: mode-aware rendering — each mode shows relevant stats only:
+  - energy: H/G/O counts, food cycle bar, zone, avg lifespan (unchanged)
+  - predator_prey: predator/prey counts, avg speed per species, food cycle bar
+  - boids: flock count, avg/largest flock, avg conformity, loner count
+  - drift: population, generation, lineage count, most-variable trait
+- Renderer: removed "coming soon" stub overlay for all four modes
+- Renderer: `_draw_flock_lines()` — faint lines between same-flock creatures
+  in boids mode; drawn instead of kin lines
+- Renderer: `set_mode()` updates stub detection and invalidates zone cache
+- Config: `mode_params` dict loaded from `[modes.*]` TOML sections;
+  default `[modes.predator_prey/boids/drift]` sections written to config.toml
+- Main loop: 2-second fade-to-black transition when mode changes in settings
+  overlay; simulation resets at peak opacity and fades back in
+
+---
+
 ## [2026-03-05] — audit + config persistence + in-app settings overlay
 
 ### Audit pass
