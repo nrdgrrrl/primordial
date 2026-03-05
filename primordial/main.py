@@ -86,9 +86,6 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
     # launch to absorb any spurious mouse events some systems emit at startup.
     grace_until: float = time.time() + 2.0 if scr_args.mode == "screensaver" else 0.0
 
-    # Track last mouse position for delta calculation
-    last_mouse_pos: tuple[int, int] | None = None
-
     running = True
     while running:
         for event in pygame.event.get():
@@ -114,7 +111,19 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
                 pass
 
             elif event.type == pygame.KEYDOWN:
-                running = handle_keydown(event, simulation, renderer, settings, screen)
+                if renderer.settings_overlay.visible:
+                    action = renderer.settings_overlay.handle_event(event)
+                    if action == "apply":
+                        if settings.fullscreen != bool(screen.get_flags() & pygame.FULLSCREEN):
+                            toggle_fullscreen(settings, simulation, renderer)
+                        renderer.set_theme(settings.visual_theme)
+                        simulation.paused = False
+                    elif action == "discard" and renderer.settings_overlay.fade_dir < 0:
+                        simulation.paused = False
+                else:
+                    running = handle_keydown(event, simulation, renderer, settings, screen, scr_args.mode)
+                    if renderer.settings_overlay.visible:
+                        simulation.paused = True
 
         # Update simulation
         simulation.step()
@@ -142,12 +151,7 @@ def _run_config_dialog() -> None:
 
     settings = Settings()
 
-    # Resolve path to settings.py for display
-    try:
-        from .utils.paths import get_base_path
-        settings_path = str(get_base_path() / "primordial" / "settings.py")
-    except Exception:
-        settings_path = "primordial/settings.py"
+    settings_path = str(settings.config_path)
 
     font_title = pygame.font.Font(None, 28)
     font_body = pygame.font.Font(None, 20)
@@ -205,7 +209,7 @@ def _run_config_dialog() -> None:
         y += 14
 
         # Edit instructions
-        edit_surf = font_small.render("Edit settings.py to configure:", True, DIM_COLOR)
+        edit_surf = font_small.render("Edit config.toml to configure:", True, DIM_COLOR)
         screen.blit(edit_surf, (40, y))
         y += 18
         path_surf = font_small.render(settings_path, True, TEXT_COLOR)
@@ -231,6 +235,7 @@ def handle_keydown(
     renderer: Renderer,
     settings: Settings,
     screen: pygame.Surface,
+    mode: str,
 ) -> bool:
     """
     Handle keyboard input.
@@ -244,6 +249,8 @@ def handle_keydown(
         return False
     elif key == pygame.K_h:
         renderer.toggle_hud()
+    elif key == pygame.K_s and mode != "screensaver":
+        renderer.toggle_settings_overlay()
     elif key == pygame.K_SPACE:
         simulation.paused = not simulation.paused
     elif key == pygame.K_f:
@@ -266,15 +273,23 @@ def toggle_fullscreen(
     """Toggle between fullscreen and windowed mode."""
     settings.fullscreen = not settings.fullscreen
 
-    if settings.fullscreen:
-        display_info = pygame.display.Info()
-        width = display_info.current_w
-        height = display_info.current_h
-        screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
-    else:
-        width = 1280
-        height = 720
-        screen = pygame.display.set_mode((width, height))
+    try:
+        pygame.display.toggle_fullscreen()
+        screen = pygame.display.get_surface()
+        if screen is None:
+            raise pygame.error("No display surface")
+        width = screen.get_width()
+        height = screen.get_height()
+    except pygame.error:
+        if settings.fullscreen:
+            display_info = pygame.display.Info()
+            width = display_info.current_w
+            height = display_info.current_h
+            screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
+        else:
+            width = 1280
+            height = 720
+            screen = pygame.display.set_mode((width, height))
 
     pygame.mouse.set_visible(not settings.fullscreen)
 
