@@ -12,6 +12,7 @@ import pygame
 
 from .animations import AnimationManager
 from .hud import HUD
+from .settings_overlay import SettingsOverlay
 from .themes import AmbientParticle, OceanTheme, Theme, get_theme
 
 # Zone type → background RGB (same palette as zones.py, duplicated here
@@ -118,6 +119,8 @@ class Renderer:
         # Cached zone background (zones never move; render once)
         self._zone_surf_cached: pygame.Surface | None = None
 
+        self.settings_overlay = SettingsOverlay(settings)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -216,10 +219,21 @@ class Renderer:
         # --- HUD ---
         self.hud.render(self.screen, simulation, self.fps)
 
+        if self.settings_overlay.visible or self.settings_overlay.fade > 0:
+            self.settings_overlay.update()
+            self.settings_overlay.draw(self.screen)
+
     def toggle_hud(self) -> None:
         """Toggle HUD visibility."""
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
+
+    def toggle_settings_overlay(self) -> None:
+        """Open/close settings overlay."""
+        if self.settings_overlay.visible:
+            self.settings_overlay.close()
+        else:
+            self.settings_overlay.open()
 
     # ------------------------------------------------------------------
     # Zone backgrounds

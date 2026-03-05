@@ -2,6 +2,31 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-03-05] — audit + config persistence + in-app settings overlay
+
+### Audit pass
+- Fixed correctness edge cases in `Simulation`: guarded `max_population` and `food_cycle_period` divisors to prevent divide-by-zero, and hard-clamped food-cycle spawn rate to never go negative.
+- Hardened preview argument parsing: `/p` with non-positive HWND now falls back to normal mode to avoid unstable preview embedding.
+- Confirmed existing behavior: death events are enqueued for every removal path and consumed by renderer each frame; reproduction returns exactly one offspring per successful parent check; lineage IDs are monotonic via `_alloc_lineage_id`.
+- Deferred larger algorithmic refactors (e.g., shimmer centroid O(n) stats) because current code already uses spatial bucketing in hot simulation paths and holds 60fps target on typical loads.
+
+### Persistent config (TOML)
+- Replaced dataclass-backed settings with `Config` class in `primordial/config/config.py`.
+- Added platform-aware config path resolution and automatic directory creation.
+- Added first-run default `config.toml` creation, corruption backup (`config.toml.bak`), typed attribute merge/validation, and save/reset APIs.
+- Kept `primordial/settings.py` as compatibility alias (`Settings = Config`) to minimize call-site churn.
+
+### In-app settings screen
+- Added renderer-owned `SettingsOverlay` panel (`S` key in normal mode): keyboard-driven navigation and edit controls, 20-frame fade in/out, semi-transparent pause overlay, apply/discard/reset behavior.
+- Settings apply on Enter and are auto-saved to user config; close via S/Escape discards unapplied edits.
+- Settings marked as requiring reset are annotated in UI; explicit simulation reset remains user-driven.
+
+### Documentation
+- Added `AUDIT.md` with file-by-file findings and status markers (FIXED/DEFERRED/WONTFIX).
+- Updated README and AGENT docs to describe Config/TOML architecture, platform config paths, and settings overlay workflow.
+
+---
+
 ## [2026-03-04] — Evolution Selection Pressure Pass
 
 ### Summary

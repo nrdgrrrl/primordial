@@ -260,8 +260,9 @@ class Simulation:
         """Current food spawn rate accounting for the boom/bust cycle."""
         if not self.settings.food_cycle_enabled:
             return self.settings.food_spawn_rate
-        t = self._frame / self.settings.food_cycle_period
-        return self.settings.food_spawn_rate * (0.5 + 0.5 * math.sin(2 * math.pi * t))
+        period = max(1, self.settings.food_cycle_period)
+        t = self._frame / period
+        return max(0.0, self.settings.food_spawn_rate * (0.5 + 0.5 * math.sin(2 * math.pi * t)))
 
     # ------------------------------------------------------------------
     # Food seeking
@@ -481,7 +482,7 @@ class Simulation:
 
     def _get_overcrowding_penalty(self) -> float:
         """Calculate energy cost penalty for overcrowding."""
-        population_ratio = len(self.creatures) / self.settings.max_population
+        population_ratio = len(self.creatures) / max(1, self.settings.max_population)
         if population_ratio < 0.5:
             return 0.0
         excess = (population_ratio - 0.5) * 2
@@ -525,7 +526,7 @@ class Simulation:
         """
         if not self.settings.food_cycle_enabled:
             return 1.0
-        t = self._frame / self.settings.food_cycle_period
+        t = self._frame / max(1, self.settings.food_cycle_period)
         return 0.5 + 0.5 * math.sin(2 * math.pi * t)
 
     @property

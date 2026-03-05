@@ -8,7 +8,7 @@ Primordial is a fullscreen Python screensaver featuring a cellular evolution sim
 
 **Design philosophy:**
 - Simulation and rendering are strictly decoupled
-- All behavior is driven by the `Settings` dataclass — no hardcoded magic numbers
+- All behavior is driven by the `Config` object — no hardcoded magic numbers
 - Performance-sensitive code uses spatial bucketing (no O(n²) loops)
 - Creatures are data-driven: the genome determines all behavior
 - Visual themes are pluggable and don't affect simulation logic
@@ -26,7 +26,10 @@ primordial/                  ← project root
 └── primordial/              ← Python package
     ├── main.py              # Real entry point, pygame init, game loop, event handling
     │                        #   main(scr_args) branches on screensaver mode
-    ├── settings.py          # Settings dataclass — all tuneable parameters
+    ├── config/
+    │   ├── config.py        # Config class + persistent TOML load/save
+    │   └── __init__.py
+    ├── settings.py          # Compatibility alias to Config
     ├── utils/
     │   ├── paths.py         # get_base_path() — resolves paths in dev + frozen builds
     │   └── screensaver.py   # ScreensaverArgs + parse_screensaver_args()
@@ -287,7 +290,7 @@ All four systems create converging selection pressure:
 - Decrease `food_max_particles` (sharper famines — stronger selection per cycle)
 - Increase `aggression * drain` coefficient — makes hunters riskier, slows aggression takeover
 
-### Settings (`settings.py`)
+### Configuration (`config/config.py`)
 
 Single dataclass. Fields added in this pass:
 
@@ -493,3 +496,22 @@ automatically on each `python build.py` run.
 ## Ollama Integration Note
 
 A future enhancement will add LLM narration. `get_dominant_traits()` now returns all 13 genome traits including the new glyph and motion traits.
+
+
+## Config file and settings overlay
+
+- `Config` loads/saves `config.toml` under the user profile path:
+  - Windows: `~/AppData/Roaming/Primordial/config.toml`
+  - macOS: `~/Library/Application Support/Primordial/config.toml`
+  - Linux: `~/.config/primordial/config.toml`
+- On first run, defaults are written automatically.
+- If parse fails, config is backed up to `config.toml.bak` and defaults are restored.
+- In normal mode, `S` opens an in-app renderer-owned settings overlay.
+- Overlay behavior: Arrow keys navigate/adjust, Enter applies+saves, Esc/S discards, R twice resets defaults.
+- Settings that require reset are marked in the overlay; simulation reset is only triggered by explicit `R`.
+
+When adding a new setting, update all of:
+1. Config class defaults (`primordial/config/config.py`)
+2. TOML template (`config.toml` and `Config.to_toml()`)
+3. Settings overlay widget list (`primordial/rendering/settings_overlay.py`)
+4. AGENT.md settings reference table/notes

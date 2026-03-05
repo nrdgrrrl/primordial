@@ -26,6 +26,8 @@ def parse_screensaver_args() -> ScreensaverArgs:
     if args[0] in ("/p", "-p") and len(args) > 1:
         try:
             hwnd = int(args[1])
+            if hwnd <= 0:
+                return ScreensaverArgs(mode="normal")
             return ScreensaverArgs(mode="preview", preview_hwnd=hwnd)
         except ValueError:
             return ScreensaverArgs(mode="normal")

@@ -1,0 +1,30 @@
+[simulation]
+mode = "energy"           # energy | predator_prey | boids | drift
+initial_population = 80
+max_population = 220
+food_spawn_rate = 0.6
+food_cycle_enabled = true
+food_cycle_period = 1800
+mutation_rate = 0.06
+cosmic_ray_rate = 0.0003
+energy_to_reproduce = 0.8
+creature_speed_base = 1.5
+zone_count = 5
+zone_strength = 0.8
+
+[creature]
+energy_to_reproduce = 0.8
+
+[display]
+visual_theme = "ocean"    # ocean | petri | geometric | chaotic
+fullscreen = true
+target_fps = 60
+show_hud = true
+
+[evolution]
+mutation_rate = 0.06
+cosmic_ray_rate = 0.0003
+food_cycle_enabled = true
+food_cycle_period = 1800
+zone_count = 5
+zone_strength = 0.8

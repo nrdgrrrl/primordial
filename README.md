@@ -40,6 +40,7 @@ The screensaver will launch in fullscreen mode by default.
 | `Space` | Pause/unpause simulation |
 | `F` | Toggle fullscreen/windowed mode |
 | `R` | Reset simulation (new population) |
+| `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
 
@@ -137,53 +138,35 @@ Over a 10–30 minute run, you can observe real selection pressure at work:
 
 ## Settings
 
-All settings are configured in `primordial/settings.py`:
+Configuration is now TOML-backed and persistent across app updates.
 
-```python
-# Simulation
-sim_mode: str = "energy"          # "energy" implemented; others coming soon
-visual_theme: str = "ocean"       # "ocean" implemented; others coming soon
-initial_population: int = 80
-max_population: int = 220
-food_spawn_rate: float = 0.6      # base food particles per frame (cycles 0→2×)
-food_max_particles: int = 300     # food cap; lower = sharper famines
-mutation_rate: float = 0.06       # chance of mutation per trait per generation
-energy_to_reproduce: float = 0.80
-creature_speed_base: float = 1.5
+- Press **`S`** in normal mode to open the in-app settings overlay.
+- Config is also editable by hand in `config.toml`.
+- File locations:
+  - **Windows:** `~/AppData/Roaming/Primordial/config.toml`
+  - **macOS:** `~/Library/Application Support/Primordial/config.toml`
+  - **Linux:** `~/.config/primordial/config.toml`
 
-# Food cycle (sinusoidal boom/bust)
-food_cycle_period: int = 1800     # frames per feast/famine cycle (~30s at 60fps)
-food_cycle_enabled: bool = True
+### Settings Reference
 
-# Cosmic ray mutations
-cosmic_ray_rate: float = 0.0003   # probability per creature per frame
-
-# Environmental zones
-zone_count: int = 5               # number of zones placed at startup
-zone_strength: float = 0.8        # global zone effect multiplier (0 = disabled)
-
-# Display
-fullscreen: bool = True
-target_fps: int = 60
-show_hud: bool = True
-
-# Glyph rendering
-glyph_size_base: int = 48         # base glyph canvas size in pixels
-
-# Kin connection lines
-kin_line_max_distance: float = 120.0  # max px between kin for a line
-kin_line_min_group: int = 3           # min lineage size before drawing lines
-
-# Territory shimmer
-territory_top_n: int = 3              # dominant lineages to show shimmer
-territory_shimmer_lerp: float = 0.05  # centroid drift speed (0=snap)
-territory_fade_seconds: float = 2.0   # fade-out when lineage leaves top-N
-
-# Animations
-death_animation_frames: int = 40
-birth_animation_frames: int = 30
-death_particle_count: int = 5
-```
+| Section | Key | Type / Range | Description |
+|---|---|---|---|
+| simulation | mode | enum: energy/predator_prey/boids/drift | Active simulation mode |
+| simulation | initial_population | int >= 0 | Initial creature count (requires reset) |
+| simulation | max_population | int >= 1 | Soft population cap |
+| simulation | food_spawn_rate | float >= 0 | Base food spawn rate |
+| simulation | food_cycle_enabled | bool | Enables feast/famine cycle |
+| simulation | food_cycle_period | int >= 1 | Frames per food cycle |
+| simulation | mutation_rate | float 0..1 | Per-trait mutation chance |
+| simulation | cosmic_ray_rate | float 0..1 | Per-frame spontaneous mutation chance |
+| simulation | energy_to_reproduce | float 0.05..1 | Reproduction energy threshold |
+| simulation | creature_speed_base | float > 0 | Global movement scale |
+| simulation/evolution | zone_count | int >= 0 | Number of generated environmental zones |
+| simulation/evolution | zone_strength | float 0..1 | Zone effect intensity |
+| display | visual_theme | enum: ocean/petri/geometric/chaotic | Rendering theme |
+| display | fullscreen | bool | Fullscreen/windowed mode |
+| display | target_fps | int >= 1 | Frame limit |
+| display | show_hud | bool | HUD visibility |
 
 ### Tuning
 
@@ -209,7 +192,8 @@ primordial/
 ├── primordial/
 │   ├── __init__.py
 │   ├── main.py              # Entry point, game loop, controls
-│   ├── settings.py          # Configuration dataclass
+│   ├── config/              # TOML-backed Config class and path logic
+│   ├── settings.py          # Compatibility alias to Config
 │   ├── simulation/
 │   │   ├── __init__.py
 │   │   ├── creature.py      # Creature class with motion styles and aging
@@ -237,7 +221,7 @@ primordial/
 
 1. Create a class in `primordial/simulation/` with `__init__(width, height, settings)`, `step()`, `reset()`, and all required properties (see AGENT.md for full contract)
 2. The class must also expose `death_events: list[dict]` and `birth_events: list[Creature]` for the AnimationManager
-3. Add mode name to `Settings.VALID_SIM_MODES`
+3. Add mode name to `Config.VALID_SIM_MODES`
 4. Update `main.py` to instantiate based on `settings.sim_mode`
 
 ### Adding a New Visual Theme
@@ -245,7 +229,7 @@ primordial/
 1. Create a class in `themes.py` inheriting from `Theme`
 2. Implement all abstract methods including `render_creature(surface, creature, time, scale=1.0)`
 3. Register in `get_theme()`
-4. Add name to `Settings.VALID_VISUAL_THEMES`
+4. Add name to `Config.VALID_VISUAL_THEMES`
 
 ## Screensaver Installation (Windows)
 
