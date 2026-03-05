@@ -1,61 +1,63 @@
-# Primordial Audit (2026-03-05)
+# Primordial Audit Report (2026-03-05)
 
-Status legend: **FIXED**, **DEFERRED**, **WONTFIX**.
+## Summary
 
-## main.py (root)
-- **Screensaver-specific / preview HWND validation** — **FIXED**: preview mode now only activates for positive HWND values via parser hardening.
+- Total findings: **26**
+- Status totals:
+  - **FIXED:** 19
+  - **DEFERRED:** 5
+  - **WONTFIX:** 2
+- Category totals:
+  - **Correctness / Robustness:** 11
+  - **Performance:** 9
+  - **Memory:** 3
+  - **Code Quality / DX:** 3
 
-## primordial/main.py
-- **Screensaver-specific / input grace** — **WONTFIX**: grace-period quit logic already checks grace timestamp before all quit-on-input branches.
-- **Configuration UX** — **FIXED**: config dialog and runtime now point to user `config.toml`, not `settings.py`.
-- **Interactive settings pass** — **FIXED**: `S` opens renderer overlay in normal mode only; overlay pauses simulation and supports apply/discard/reset semantics.
+### Most Impactful Fixes
 
-## primordial/config/config.py (new)
-- **Correctness / corruption handling** — **FIXED**: parse failures back up bad TOML to `.bak`, then regenerate defaults.
-- **Correctness / value bounds** — **FIXED**: clamps applied for range-constrained fields and nonzero divisors.
-- **Persistence** — **FIXED**: first run writes default config for user discoverability.
-- **Comments preservation** — **DEFERRED**: exact user comment round-tripping is not implemented; file is regenerated from typed attributes.
+1. **Simulation hot-path refactor (profile-driven):**
+   - Energy step @ pop 150: **4.082ms → 2.005ms**
+   - Full frame @ pop 150: **25.445ms → 13.425ms**
+   - Boids step @ pop 150: **16.829ms → 11.887ms**
+2. **Config hardening:** malformed TOML values now warn and fall back instead of crashing startup.
+3. **State consistency fixes:** predation transfer now bounded by prey energy; fullscreen resize now rebuilds simulation/render spatial caches.
 
-## primordial/settings.py
-- **Architecture migration** — **FIXED**: replaced dataclass implementation with compatibility alias to new `Config` class.
+## Findings
 
-## primordial/simulation/simulation.py
-- **Correctness / food-cycle non-negative rate** — **FIXED**: explicit non-negative clamp in `_get_food_rate()`.
-- **Correctness / divide-by-zero edge cases** — **FIXED**: guarded `max_population` and `food_cycle_period` divisors.
-- **Reproduction cardinality** — **WONTFIX**: existing logic already yields at most one offspring per parent frame-check.
-- **Lineage ID uniqueness** — **WONTFIX**: existing monotonic allocator already prevents duplicates.
+| File | Category | Description | Status | Rationale |
+|---|---|---|---|---|
+| `primordial/config/config.py` | Correctness | Typed TOML fields were cast with raw `int/float/bool`, which could raise on wrong types or coerce incorrectly. | FIXED | Added safe coercion helpers with warnings and fallback defaults. |
+| `primordial/config/config.py` | Correctness | Unknown keys were silently ignored. | FIXED | Added unknown-key warnings by section and root table. |
+| `primordial/config/config.py` | Correctness | `food_max_particles` was not loaded from config. | FIXED | Added load/validate/save support. |
+| `primordial/config/config.py` | Correctness | `mode_params` values were persisted as hardcoded defaults, not actual effective overrides. | FIXED | `to_toml()` now serializes effective mode override state. |
+| `primordial/config/config.py` | Correctness | Runtime mode param coercion path could produce `bool("false") == True` and type drift. | FIXED | Removed runtime `type(fallback)` casting; mode overrides validated once at config load. |
+| `primordial/simulation/simulation.py` | Correctness | Predation transfer could grant energy from already-dead prey in same frame. | FIXED | Energy transfer now capped by prey’s remaining energy and dead prey are skipped as targets. |
+| `primordial/simulation/simulation.py` | Correctness | Predator/prey loop treated non-`predator` species as prey branch implicitly. | FIXED | Invalid species tags are normalized from aggression threshold. |
+| `primordial/simulation/simulation.py` | Correctness | Boids flock assignment connectivity was order-dependent (directed edge artifact). | FIXED | Reworked to undirected adjacency graph (if either senses other, they connect). |
+| `primordial/simulation/simulation.py` | Correctness | `_nearby_creatures()` could revisit wrapped cells multiple times for large search radii. | FIXED | Added conditional cell dedupe when query window exceeds grid extents. |
+| `primordial/main.py`, `primordial/rendering/renderer.py`, `primordial/simulation/food.py`, `primordial/simulation/simulation.py` | Correctness | Fullscreen/window resize left stale renderer surfaces and food spatial grid geometry. | FIXED | Added `Simulation.resize()`, `FoodManager.resize_world()`, `Renderer.resize()`, and wired them into fullscreen toggle path. |
+| `primordial/main.py` | Code Quality | Broad exception handling around Windows DPI awareness suppressed all errors silently. | FIXED | Replaced with targeted exception types and debug log. |
+| `primordial/simulation/simulation.py` | Performance | Boids step computed neighbor scans twice each frame (`_compute_boid_forces` + flock BFS). | FIXED | Added shared per-frame boid neighbor cache reused by both systems. |
+| `primordial/simulation/simulation.py` | Performance | Frequent sqrt-based distance comparisons in hunting/boids loops. | FIXED | Switched many checks to toroidal squared distance thresholds. |
+| `primordial/simulation/simulation.py` | Correctness/Performance | Boids cohesion centroid math used absolute positions, causing wrap-edge artifacts and extra cost. | FIXED | Cohesion now uses averaged wrapped offset vectors. |
+| `primordial/rendering/themes.py` | Performance | Age desaturation overlay allocated a new surface per creature per frame. | FIXED | Added cached age overlay surfaces keyed by radius+alpha. |
+| `primordial/rendering/animations.py` | Performance | Cosmic ray and parent pulse animations allocated new surfaces each frame. | FIXED | Added frame caches (global for cosmic ring, per-color for parent pulse). |
+| `primordial/rendering/settings_overlay.py` | Performance | Overlay shade surface recreated every draw. | FIXED | Cached shade surface per resolution and reused each frame. |
+| `primordial/rendering/renderer.py`, `primordial/rendering/hud.py`, `primordial/main.py`, `primordial/utils/cli.py` | Code Quality / DX | No first-class debug/profile runtime workflow. | FIXED | Added `--debug`, `--profile`, `--mode`, `--theme`; debug HUD timings + FPS/pop graph; 60s profile dump flow. |
+| `primordial/main.py` | Code Quality / DX | No persistent file logging suitable for screensaver mode diagnosis. | FIXED | Added stdlib logging setup writing `primordial.log` in config dir; debug mode mirrors logs to stdout. |
+| `Makefile` | Code Quality / DX | Repetitive dev commands for run/build/profile/clean. | FIXED | Added `make run/debug/profile/build/clean` shortcuts. |
+| `primordial/rendering/renderer.py` | Performance | Kin/flock connection rendering remains pairwise O(k²) within groups. | DEFERRED | Current frame budgets are acceptable; approximate graph thinning can be added if large flocks become common. |
+| `primordial/rendering/themes.py` | Performance | Trails are still redrawn every frame for all creatures. | DEFERRED | Current implementation meets target for typical populations; persistent trail compositing is a future optimization candidate. |
+| `primordial/rendering/themes.py` | Memory | Glow cache has a fixed cap but no LRU eviction policy. | DEFERRED | Cap (100) bounds growth; LRU complexity deferred unless dynamic radius churn increases cache thrash. |
+| `primordial/simulation/simulation.py` | Memory | Event queues grow if simulation is stepped without renderer consumption contract. | WONTFIX | In app architecture, renderer owns queue consumption each frame; headless step-only growth is expected outside contract. |
+| `primordial/rendering/renderer.py` | Correctness | Stub overlay path still exists for not-yet-implemented themes (`petri`, `geometric`, `chaotic`). | WONTFIX | Theme stubs are intentional and still listed as known stubs. |
+| `build.py`, `primordial.spec` | Build / Compatibility | Build compatibility after new modules/features. | FIXED | `python build.py` succeeded on Linux; output binary produced successfully. |
+| runtime benchmark harness | Memory | Long-run memory drift concern. | FIXED | 36,000-frame run: RSS `44.76MB → 45.27MB` (`+0.51MB`), stable plateau observed. |
 
-## primordial/rendering/renderer.py
-- **Interactive settings pass** — **FIXED**: renderer now owns and draws settings overlay with fade animation.
-- **Performance / surface allocations** — **DEFERRED**: overlay currently allocates a full-screen shade surface each draw; low-impact but could be cached per resolution.
+## Notes on Deferred Items
 
-## primordial/rendering/settings_overlay.py (new)
-- **Feature implementation** — **FIXED**: sectioned widget list, keyboard control mapping, reset confirmation, apply/discard behavior.
-- **Performance** — **DEFERRED**: value text is rerendered each frame while open; acceptable for current panel size and fps budget.
-
-## primordial/utils/screensaver.py
-- **Screensaver-specific / invalid preview handle** — **FIXED**: `/p` with invalid or non-positive HWND falls back to normal mode.
-
-## primordial/simulation/creature.py
-- **Correctness checks** — **WONTFIX**: trail cap, toroidal wrapping, and trait clamping paths already satisfy audit requirements.
-
-## primordial/simulation/food.py
-- **Memory bounds** — **WONTFIX**: particle list is bounded by `max_particles`; no unbounded growth found.
-
-## primordial/rendering/animations.py
-- **Memory/perf** — **WONTFIX**: completed animations are already pruned each frame by manager tick.
-
-## primordial/rendering/glyphs.py
-- **Performance / cache invalidation timing** — **WONTFIX**: glyph cache usage remains stable; age effects are applied at render/blit layer, not glyph regeneration layer.
-
-## primordial/rendering/hud.py
-- **Code quality** — **WONTFIX**: HUD reads simulation query properties only; sim/render decoupling remains intact.
-
-## primordial/simulation/zones.py
-- **Performance** — **WONTFIX**: per-creature zone modifier is computed once in simulation loop; renderer does not recompute zone effects.
-
-## primordial/rendering/themes.py
-- **Performance / trails and glyphs** — **WONTFIX**: trail and glyph effects remain batched/cached as designed.
-
-## primordial/__init__.py, primordial/simulation/__init__.py, primordial/rendering/__init__.py, primordial/utils/__init__.py, primordial/utils/paths.py, primordial/spec/build tooling
-- **Code quality** — **WONTFIX**: no correctness/performance/memory regressions found in this pass.
+- Deferred items were chosen because measured frame-time targets are currently met in typical runs after this pass.
+- If future mode/theme work increases per-frame draw cost, prioritize:
+  1. Kin/flock line thinning/sampling
+  2. Trail compositing strategy changes
+  3. Glow cache LRU with hit-rate instrumentation

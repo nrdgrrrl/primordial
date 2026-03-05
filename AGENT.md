@@ -19,8 +19,10 @@ Primordial is a fullscreen Python screensaver featuring a cellular evolution sim
 primordial/                  ← project root
 ├── main.py                  # Top-level entry point for direct run and PyInstaller
 │                            #   Parses screensaver args, sets SDL_WINDOWID if preview,
-│                            #   then delegates to primordial.main.main(scr_args)
+│                            #   parses runtime flags (--debug/--profile/--mode/--theme),
+│                            #   then delegates to primordial.main.main(scr_args, runtime_args)
 ├── build.py                 # Cross-platform build script (produces dist/primordial[.exe/.scr])
+├── Makefile                 # Dev shortcuts: run, debug, profile, build, clean
 ├── primordial.spec          # PyInstaller spec — commit this for reproducible builds
 ├── requirements.txt         # Runtime deps + pyinstaller under # build
 └── primordial/              ← Python package
@@ -32,7 +34,8 @@ primordial/                  ← project root
     ├── settings.py          # Compatibility alias to Config
     ├── utils/
     │   ├── paths.py         # get_base_path() — resolves paths in dev + frozen builds
-    │   └── screensaver.py   # ScreensaverArgs + parse_screensaver_args()
+    │   ├── screensaver.py   # ScreensaverArgs + parse_screensaver_args()
+    │   └── cli.py           # RuntimeArgs + parse_runtime_args() for --debug/--profile/--mode/--theme
     ├── simulation/
     │   ├── genome.py        # Genome dataclass — heritable traits (13 traits)
     │   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
@@ -119,7 +122,10 @@ Mutable dataclass representing a single organism:
 
 ### FoodManager (`simulation/food.py`)
 
-Unchanged. Spatial bucketing for efficient nearest-neighbor queries. See original docs.
+Spatial bucketing for efficient nearest-neighbor queries.
+
+**Notable method:** `resize_world(width, height)` rewraps particles and rebuilds
+buckets after display/simulation size changes.
 
 ### Simulation (`simulation/simulation.py`)
 
@@ -377,21 +383,35 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 
 ## Performance Notes
 
-### Glyph Caching
+### Measured Baselines (2026-03-05)
 
-Glyph surfaces are cached on `creature.glyph_surface`. Building a glyph involves ~2–7 stroke draws on a small surface (32–80px); this is acceptable at creation time but must not happen every frame. The cache is invalidated when the surface size changes by more than 4px (creature grew/shrunk significantly) or when the creature reproduces (offspring has new genome → `glyph_surface = None`).
+Headless benchmark harness (`SDL_VIDEODRIVER=dummy`, 1920×1080):
 
-### Kin Lines
+- **Energy mode step time (before → after audit pass):**
+  - pop 50: `1.284ms → 0.803ms`
+  - pop 150: `4.082ms → 2.005ms`
+  - pop 250: `7.684ms → 3.310ms`
+- **Full frame time @ pop 150 (step + render):**
+  - `25.445ms → 13.425ms`
+- **Boids step time (before → after):**
+  - pop 80: `17.135ms → 12.535ms`
+  - pop 150: `16.829ms → 11.887ms`
+  - pop 250: `16.638ms → 12.803ms`
 
-Creatures are bucketed by `lineage_id` before drawing kin lines — only within-lineage pairs are compared. With typical lineage diversity, most lineages have 1–5 members; the expected per-frame cost is O(n × avg_lineage_size), not O(n²).
+### Hot-path Approaches Used
 
-### Territory Shimmer
+- **Boids neighbor reuse:** `_build_boid_neighbor_cache()` computes neighbors once per frame; both force computation and flock BFS reuse it.
+- **Distance math reductions:** frequent sqrt distance checks were replaced by toroidal squared-distance comparisons (`_distance_sq`), only taking sqrt when normalization is needed.
+- **Toroidal cohesion fix:** boids cohesion now averages wrapped offset vectors rather than absolute coordinates, avoiding edge-wrap centroid artifacts.
+- **Render allocation cleanup:** cached age-overlay surfaces, cached cosmic-ray frame surfaces, cached parent-pulse color/frame surfaces, and cached settings shade surface.
+- **Resize safety:** `Simulation.resize()` + `Renderer.resize()` prevent stale grids/surfaces after fullscreen/window changes.
 
-Shimmer state is computed once per frame per dominant lineage (top 3). Centroid and spread are recomputed from the members list. This is O(n) total per frame and negligible vs. rendering cost.
+### Memory Stability Check
 
-### Trail Lengths
+10-minute-equivalent headless run (36,000 frames, energy mode, pop=180):
 
-Trail lengths are motion-style-dependent (14/10/5 positions). Dart-style creatures use very short trails, reducing the per-creature draw cost for the most common burst-pause pattern.
+- RSS `44.76 MB → 45.27 MB` (`+0.51 MB`).
+- No unbounded growth observed in simulation-owned structures during continuous stepping.
 
 ## Do Not Break
 
@@ -490,11 +510,40 @@ dist/primordial.scr   ← identical copy; right-click → Install for screensave
 Both files are the same binary; `.scr` is just the extension Windows recognises
 as a screensaver. No `--add-data` or other flags differ between the two.
 
+## Runtime CLI Flags
+
+`primordial/utils/cli.py` provides `RuntimeArgs` via `parse_runtime_args()`.
+
+Supported flags:
+
+- `--debug`
+  - Enables console logging (file logging is always on)
+  - Enables debug HUD timing lines
+  - Enables FPS + population history graph overlay
+- `--profile`
+  - Runs the app for 60 seconds
+  - Dumps cProfile binary + text report to the config directory
+  - Exits automatically
+- `--mode <energy|predator_prey|boids|drift>`
+  - Non-persistent mode override for this launch only
+- `--theme <ocean|petri|geometric|chaotic>`
+  - Non-persistent theme override for this launch only
+
+The parser is tolerant (`parse_known_args`) so Windows screensaver args (`/s`, `/p`, `/c`) continue to work.
+
+### Logging
+
+`primordial/main.py` configures stdlib logging on startup:
+
+- Log file: `primordial.log` in the same platform config directory as `config.toml`
+- `--debug` adds a stdout handler at `DEBUG` level
+- Non-debug runs log at `INFO` to file only
+
 ## Build Process
 
 ### Entry points
 
-- `main.py` (project root) — top-level entry point; delegates to `primordial.main.main()`.
+- `main.py` (project root) — top-level entry point; delegates to `primordial.main.main(scr_args, runtime_args)`.
   Used by PyInstaller and can also be run directly with `python main.py`.
 - `primordial/main.py` — real implementation; uses relative imports, so it cannot be
   the direct PyInstaller target.
@@ -538,6 +587,8 @@ A future enhancement will add LLM narration. `get_dominant_traits()` now returns
   - Linux: `~/.config/primordial/config.toml`
 - On first run, defaults are written automatically.
 - If parse fails, config is backed up to `config.toml.bak` and defaults are restored.
+- Unknown config keys are ignored with warning logs (not fatal).
+- Type mismatches are coerced safely; invalid values fall back to defaults and are clamped on save.
 - In normal mode, `S` opens an in-app renderer-owned settings overlay.
 - Overlay behavior: Arrow keys navigate/adjust, Enter applies+saves, Esc/S discards, R twice resets defaults.
 - Settings that require reset are marked in the overlay; simulation reset is only triggered by explicit `R`.

@@ -2,6 +2,155 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-03-05] — Comprehensive Audit + Optimization Pass
+
+### Summary
+
+This pass focused on correctness hardening, measured performance work, and
+developer tooling. The app now handles malformed config data safely, avoids
+several silent state-consistency failures, and exposes first-class debug/profile
+CLI workflows.
+
+---
+
+## [2026-03-05] — fix: config validation hardening, safe coercion, and mode override safety
+
+**What changed** (`primordial/config/config.py`, `simulation/simulation.py`):
+
+- Reworked config merge path to be type-safe:
+  - invalid types now warn and keep defaults instead of raising exceptions
+  - unknown keys are explicitly warned and ignored
+  - malformed section types are ignored safely
+- Added validation and persistence for previously-missed fields:
+  - `food_max_particles`
+  - rendering config values (`glyph_size_base`, kin/shimmer/animation tuning)
+- Fixed mode override coercion bug (`bool("false") -> True`) by removing runtime
+  `type(fallback)` casting and validating mode overrides once at config load.
+- `to_toml()` now serializes effective mode override values from `mode_params`
+  instead of hardcoded static mode blocks.
+
+**Why:** malformed or hand-edited `config.toml` values could previously crash
+startup or silently coerce to incorrect values.
+
+---
+
+## [2026-03-05] — fix: state consistency in predation, resize/fullscreen, and boids connectivity
+
+**What changed** (`simulation/simulation.py`, `simulation/food.py`,
+`rendering/renderer.py`, `primordial/main.py`):
+
+- Predation energy transfer is now bounded by prey energy:
+  - prevents multiple attackers farming energy from already-dead targets in the
+    same frame.
+- Predator-prey species normalization:
+  - creatures with invalid species tags are reclassified deterministically from aggression.
+- Added `Simulation.resize()` + `FoodManager.resize_world()`:
+  - resizes now rebuild food grid buckets safely and wrap entities into new bounds.
+- Added `Renderer.resize()`:
+  - recreates size-dependent surfaces, clears shimmer state, invalidates zone cache,
+    and refreshes ambient particles.
+- Boids flock connectivity now uses undirected adjacency semantics (if either
+  boid senses the other, they connect), eliminating order-dependent flock splits.
+- `_nearby_creatures()` now deduplicates wrapped cell keys only when needed to
+  avoid duplicate neighbor scans at large radii.
+
+**Why:** these paths previously allowed subtle state drift and stale geometry
+after resolution changes.
+
+---
+
+## [2026-03-05] — perf: profile-driven simulation hot path refactor
+
+**Baseline harness** (headless dummy SDL, 1920×1080):
+
+- Energy mode step time:
+  - pop 50: **1.284ms**
+  - pop 150: **4.082ms**
+  - pop 250: **7.684ms**
+- Full frame (step+render) at pop 150: **25.445ms**
+- Boids mode step time:
+  - pop 80: **17.135ms**
+  - pop 150: **16.829ms**
+  - pop 250: **16.638ms**
+
+**What changed** (`simulation/simulation.py`):
+
+- Replaced repeated boids neighbor scanning with a shared per-frame neighbor cache.
+- Split boids flow into:
+  - `_build_boid_neighbor_cache()`
+  - `_compute_boid_forces(...neighbors...)`
+  - `_update_flock_assignments(...neighbor_cache...)`
+- Reduced expensive distance math:
+  - added toroidal squared-distance helpers
+  - replaced many sqrt-based comparisons with squared thresholds
+  - reused wrapped delta vectors where possible.
+- Fixed toroidal cohesion behavior by averaging neighbor offset vectors rather
+  than naive absolute coordinates.
+
+**Measured result (same harness):**
+
+- Energy mode step time:
+  - pop 50: **0.803ms** (from 1.284ms, **1.60× faster**)
+  - pop 150: **2.005ms** (from 4.082ms, **2.04× faster**)
+  - pop 250: **3.310ms** (from 7.684ms, **2.32× faster**)
+- Full frame at pop 150: **13.425ms** (from 25.445ms, **1.89× faster**)
+- Boids step time:
+  - pop 80: **12.535ms** (from 17.135ms, **1.37× faster**)
+  - pop 150: **11.887ms** (from 16.829ms, **1.42× faster**)
+  - pop 250: **12.803ms** (from 16.638ms, **1.30× faster**)
+
+---
+
+## [2026-03-05] — feat: runtime developer tooling (`--debug`, `--profile`, `--mode`, `--theme`)
+
+**What changed** (`main.py`, `primordial/main.py`, `primordial/utils/cli.py`,
+`rendering/renderer.py`, `rendering/hud.py`, `Makefile`):
+
+- Added CLI runtime flags:
+  - `--debug` enables debug HUD timing lines + FPS/population graph overlay
+  - `--profile` runs for 60 seconds, writes `.pstats` + text report, exits
+  - `--mode <name>` sets sim mode at launch without editing config
+  - `--theme <name>` sets visual theme at launch without editing config
+- Added tolerant runtime parser (`parse_runtime_args`) that coexists with `/s`,
+  `/p`, `/c` screensaver args.
+- Added per-frame debug timing pipeline:
+  - external metrics from main loop (`event_ms`, `sim_ms`)
+  - renderer sub-system timing breakdown shown in HUD in debug mode
+  - FPS and population history mini-graphs (debug overlay)
+- Added `Makefile` tasks:
+  - `make run`, `make debug`, `make profile`, `make build`, `make clean`
+
+**Why:** this makes iterative tuning and future audit/profile work repeatable.
+
+---
+
+## [2026-03-05] — perf: reduced per-frame rendering allocations
+
+**What changed** (`rendering/themes.py`, `rendering/animations.py`,
+`rendering/settings_overlay.py`):
+
+- Added age-overlay surface cache in `OceanTheme` (radius+alpha key) to avoid
+  allocating a new greyscale wash surface per old creature per frame.
+- Added frame caches for `CosmicRayAnimation` and color/frame caches for
+  `ParentPulse` to eliminate per-frame temporary surface creation.
+- Cached settings overlay shade surface and reuse per resolution.
+
+**Why:** removes allocation churn and reduces GC pressure in long runs.
+
+---
+
+## [2026-03-05] — validation: memory + build checks
+
+**What changed / verified:**
+
+- 10-minute-equivalent headless run (36,000 frames) remained memory-stable:
+  - RSS **44.76 MB → 45.27 MB** (`+0.51 MB`).
+- PyInstaller pipeline verified after changes:
+  - `python build.py` succeeded on Linux.
+  - `dist/primordial` produced (33.1 MB).
+
+---
+
 ## [2026-03-05] — All Four Simulation Modes Implemented
 
 ### Summary

@@ -25,11 +25,39 @@ pip install -r requirements.txt
 # Make sure your virtual environment is activated
 source .venv/bin/activate
 
-# Run the screensaver
-python -m primordial.main
+# Run (normal mode)
+python main.py
+
+# Launch a specific mode/theme for this run only
+python main.py --mode boids --theme ocean
+
+# Enable debug overlays and verbose console logging
+python main.py --debug
+
+# Run a 60-second cProfile capture and exit
+python main.py --profile
 ```
 
 The screensaver will launch in fullscreen mode by default.
+
+### Runtime CLI Flags
+
+| Flag | Effect |
+|---|---|
+| `--debug` | Enables debug HUD timing lines, FPS/population graph overlay, and verbose console logging |
+| `--profile` | Runs for 60 seconds, writes `.pstats` + text profile report to config directory, then exits |
+| `--mode <name>` | Launch override: `energy`, `predator_prey`, `boids`, `drift` |
+| `--theme <name>` | Launch override: `ocean`, `petri`, `geometric`, `chaotic` |
+
+### Make Targets
+
+```bash
+make run       # python main.py
+make debug     # python main.py --debug
+make profile   # python main.py --profile
+make build     # python build.py
+make clean     # remove build/dist and __pycache__ dirs
+```
 
 ## Keyboard Controls
 
@@ -43,6 +71,16 @@ The screensaver will launch in fullscreen mode by default.
 | `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
+
+## Performance
+
+Recent profile-driven optimization (2026-03-05) improved headless benchmark performance significantly:
+
+- Energy mode step @ pop 150: `4.082ms → 2.005ms`
+- Energy mode full frame @ pop 150: `25.445ms → 13.425ms`
+- Boids mode step @ pop 150: `16.829ms → 11.887ms`
+
+At 1920×1080 this keeps typical runs within the 60fps target envelope in normal mode, with heavy boids scenes still the most expensive.
 
 ## How It Works
 
@@ -218,6 +256,7 @@ Configuration is now TOML-backed and persistent across app updates.
   - **Windows:** `~/AppData/Roaming/Primordial/config.toml`
   - **macOS:** `~/Library/Application Support/Primordial/config.toml`
   - **Linux:** `~/.config/primordial/config.toml`
+- Runtime logs are written beside config as `primordial.log` (all modes, including screensaver).
 
 ### Settings Reference
 
@@ -227,6 +266,7 @@ Configuration is now TOML-backed and persistent across app updates.
 | simulation | initial_population | int >= 0 | Initial creature count (requires reset) |
 | simulation | max_population | int >= 1 | Soft population cap |
 | simulation | food_spawn_rate | float >= 0 | Base food spawn rate |
+| simulation | food_max_particles | int >= 1 | Hard cap on world food particles |
 | simulation | food_cycle_enabled | bool | Enables feast/famine cycle |
 | simulation | food_cycle_period | int >= 1 | Frames per food cycle |
 | simulation | mutation_rate | float 0..1 | Per-trait mutation chance |
@@ -239,6 +279,7 @@ Configuration is now TOML-backed and persistent across app updates.
 | display | fullscreen | bool | Fullscreen/windowed mode |
 | display | target_fps | int >= 1 | Frame limit |
 | display | show_hud | bool | HUD visibility |
+| rendering | glyph_size_base, kin/shimmer/animation fields | validated numeric ranges | Renderer tuning knobs (advanced) |
 
 ### Tuning
 
@@ -261,11 +302,17 @@ These are the levers most likely to change the feel of the simulation:
 
 ```
 primordial/
+├── main.py                  # Top-level launcher (screensaver args + runtime CLI flags)
+├── Makefile                 # run/debug/profile/build/clean shortcuts
 ├── primordial/
 │   ├── __init__.py
-│   ├── main.py              # Entry point, game loop, controls
+│   ├── main.py              # Real entry point, game loop, controls, logging
 │   ├── config/              # TOML-backed Config class and path logic
 │   ├── settings.py          # Compatibility alias to Config
+│   ├── utils/
+│   │   ├── screensaver.py   # /s /p /c parsing
+│   │   ├── cli.py           # --debug/--profile/--mode/--theme parsing
+│   │   └── paths.py         # Frozen/dev path resolver
 │   ├── simulation/
 │   │   ├── __init__.py
 │   │   ├── creature.py      # Creature class with motion styles and aging
@@ -370,7 +417,7 @@ pyinstaller primordial.spec
 
 | Platform | Tested | Notes |
 |----------|--------|-------|
-| Linux x86-64 | ✅ | Verified — `dist/primordial` 31.9 MB |
+| Linux x86-64 | ✅ | Verified — `dist/primordial` 33.1 MB |
 | Windows x86-64 | ❌ untested | Should work; `dist/primordial.exe` produced cross-platform build is untested |
 | macOS | ❌ untested | `--noconsole` becomes `--windowed`; may need code signing |
 

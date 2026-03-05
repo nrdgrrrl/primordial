@@ -6,6 +6,9 @@ It simply delegates to the real entry point inside the primordial package.
 
 Usage (from source):
     python main.py           # normal mode
+    python main.py --debug   # debug overlays + verbose console logs
+    python main.py --profile # 60-second cProfile run, then exit
+    python main.py --mode boids --theme ocean
     python main.py /s        # screensaver mode
     python main.py /p HWND   # preview mode
     python main.py /c        # config mode
