@@ -99,8 +99,9 @@ class Renderer:
         self.frame_times: deque[float] = deque(maxlen=60)
         self.fps = 0.0
 
-        # Stub mode/theme detection
-        self._is_stub_mode = settings.sim_mode != "energy"
+        # Stub mode/theme detection — all four sim modes are now implemented
+        _IMPLEMENTED_MODES = {"energy", "predator_prey", "boids", "drift"}
+        self._is_stub_mode = settings.sim_mode not in _IMPLEMENTED_MODES
         self._is_stub_theme = settings.visual_theme != "ocean"
 
         # Animation manager
@@ -132,6 +133,13 @@ class Renderer:
             self.width, self.height, 30
         )
         self._is_stub_theme = theme_name != "ocean"
+
+    def set_mode(self, mode_name: str) -> None:
+        """Update stub detection when sim mode changes."""
+        _IMPLEMENTED_MODES = {"energy", "predator_prey", "boids", "drift"}
+        self._is_stub_mode = mode_name not in _IMPLEMENTED_MODES
+        # Invalidate zone cache — new sim will have different zones
+        self._zone_surf_cached = None
 
     def draw(self, simulation: Simulation) -> None:
         """
@@ -182,9 +190,12 @@ class Renderer:
         for food in simulation.food_manager:
             self.theme.render_food(self.screen, food, anim_time)
 
-        # --- Kin connection lines (beneath creatures) ---
+        # --- Kin/flock connection lines (beneath creatures) ---
         if isinstance(self.theme, OceanTheme):
-            self._draw_kin_lines(simulation)
+            if simulation.settings.sim_mode == "boids":
+                self._draw_flock_lines(simulation)
+            else:
+                self._draw_kin_lines(simulation)
 
         # --- Creature trails (batched onto shared surface, then blitted once) ---
         if isinstance(self.theme, OceanTheme):
@@ -359,6 +370,66 @@ class Renderer:
                     alpha = int(30 * (1.0 - dist / max_dist))
                     alpha = max(15, min(30, alpha))
 
+                    pygame.draw.line(
+                        self._line_surf,
+                        (*base_color, alpha),
+                        (int(a.x), int(a.y)),
+                        (int(b.x), int(b.y)),
+                        1,
+                    )
+
+        self.screen.blit(self._line_surf, (0, 0))
+
+    # ------------------------------------------------------------------
+    # Flock connection lines (boids mode)
+    # ------------------------------------------------------------------
+
+    def _draw_flock_lines(self, simulation: "Simulation") -> None:
+        """
+        Draw faint lines between creatures in the same flock (boids mode).
+
+        Same visual treatment as kin lines but grouped by flock_id.
+        Lone creatures outside any flock are not connected.
+        """
+        settings = self.settings
+        max_dist = settings.kin_line_max_distance * 1.5
+        max_dist_sq = max_dist * max_dist
+
+        # Bucket by flock_id
+        flock_buckets: dict[int, list] = defaultdict(list)
+        for c in simulation.creatures:
+            if c.flock_id != -1:
+                flock_buckets[c.flock_id].append(c)
+
+        self._line_surf.fill((0, 0, 0, 0))
+
+        for flock_id, members in flock_buckets.items():
+            if len(members) < 2:
+                continue
+
+            hue = members[0].genome.hue
+            if isinstance(self.theme, OceanTheme):
+                base_color = self.theme.get_creature_color(hue, 0.6)
+            else:
+                base_color = (200, 200, 200)
+
+            n = len(members)
+            for i in range(n):
+                a = members[i]
+                for j in range(i + 1, n):
+                    b = members[j]
+                    dx = b.x - a.x
+                    dy = b.y - a.y
+                    if abs(dx) > self.width / 2:
+                        dx -= math.copysign(self.width, dx)
+                    if abs(dy) > self.height / 2:
+                        dy -= math.copysign(self.height, dy)
+                    dist_sq = dx * dx + dy * dy
+                    if dist_sq > max_dist_sq:
+                        continue
+                    dist = math.sqrt(dist_sq)
+                    alpha = int(25 * (1.0 - dist / max_dist))
+                    alpha = max(10, min(25, alpha))
                     pygame.draw.line(
                         self._line_surf,
                         (*base_color, alpha),

@@ -86,6 +86,19 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
     # launch to absorb any spurious mouse events some systems emit at startup.
     grace_until: float = time.time() + 2.0 if scr_args.mode == "screensaver" else 0.0
 
+    # Mode transition fade state — 2-second (120-frame) cross-fade on mode change
+    _prev_mode: str = settings.sim_mode   # mode saved when overlay is opened
+    _transition_alpha: int = 0            # 0=transparent, 255=opaque
+    _transition_dir: int = 0              # +1=fading out, -1=fading in, 0=idle
+    _transition_surf: pygame.Surface | None = None
+
+    def _begin_mode_transition() -> None:
+        """Start the 2-second mode-change fade."""
+        nonlocal _transition_alpha, _transition_dir, _transition_surf
+        _transition_alpha = 0
+        _transition_dir = 1  # start fading to black
+        _transition_surf = pygame.Surface((width, height), pygame.SRCALPHA)
+
     running = True
     while running:
         for event in pygame.event.get():
@@ -117,19 +130,48 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
                         if settings.fullscreen != bool(screen.get_flags() & pygame.FULLSCREEN):
                             toggle_fullscreen(settings, simulation, renderer)
                         renderer.set_theme(settings.visual_theme)
-                        simulation.paused = False
+                        renderer.set_mode(settings.sim_mode)
+                        # Trigger fade transition if mode changed
+                        if settings.sim_mode != _prev_mode:
+                            _begin_mode_transition()
+                        else:
+                            simulation.paused = False
                     elif action == "discard" and renderer.settings_overlay.fade_dir < 0:
                         simulation.paused = False
                 else:
                     running = handle_keydown(event, simulation, renderer, settings, screen, scr_args.mode)
                     if renderer.settings_overlay.visible:
+                        # Save current mode so we can detect a change on apply
+                        _prev_mode = settings.sim_mode
                         simulation.paused = True
 
-        # Update simulation
-        simulation.step()
+        # Mode transition: fade out → reset sim → fade in
+        if _transition_dir != 0 and _transition_surf is not None:
+            step = 4  # ~60 frames total (30 out, 30 in) at 60fps ≈ 1s each way
+            if _transition_dir == 1:
+                _transition_alpha = min(200, _transition_alpha + step)
+                if _transition_alpha >= 200:
+                    # Mid-point: reinitialise simulation
+                    simulation.reset()
+                    simulation.paused = False
+                    _transition_dir = -1
+            else:
+                _transition_alpha = max(0, _transition_alpha - step)
+                if _transition_alpha <= 0:
+                    _transition_dir = 0
+
+        # Update simulation (paused during full fade-out)
+        if _transition_dir != 1 or _transition_alpha < 200:
+            simulation.step()
 
         # Render
         renderer.draw(simulation)
+
+        # Overlay the transition fade
+        if _transition_dir != 0 and _transition_surf is not None and _transition_alpha > 0:
+            _transition_surf.fill((0, 0, 0, _transition_alpha))
+            screen.blit(_transition_surf, (0, 0))
+
         pygame.display.flip()
 
         # Preview runs at half speed to save CPU

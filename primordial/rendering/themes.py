@@ -225,7 +225,7 @@ class OceanTheme(Theme):
             return
 
         color = self.get_creature_color(creature.genome.hue, creature.genome.saturation)
-        pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature.genome.hue * 6.28)
+        pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature._glyph_phase)
         radius = max(4, int(creature.get_radius() * pulse * scale))
 
         trail_len = len(creature.trail)
@@ -251,8 +251,8 @@ class OceanTheme(Theme):
             creature.genome.hue, creature.genome.saturation
         )
 
-        # Pulsing animation tied to genome
-        pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature.genome.hue * 6.28)
+        # Pulsing animation — uses _glyph_phase so boids flocks can phase-sync
+        pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature._glyph_phase)
         base_radius = creature.get_radius()
         radius = max(4, int(base_radius * pulse * scale))
 

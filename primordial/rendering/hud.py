@@ -15,9 +15,7 @@ class HUD:
     """
     Heads-up display for simulation information.
 
-    Shows generation count, population, oldest creature age (% lifespan),
-    hunter/grazer ratio, food cycle bar, dominant zone, average lifespan,
-    current mode/theme, and FPS in a semi-transparent panel.
+    Shows mode-specific stats in a semi-transparent panel.
     """
 
     def __init__(self, font_size: int = 16) -> None:
@@ -31,41 +29,48 @@ class HUD:
     def render(
         self,
         surface: pygame.Surface,
-        simulation: Simulation,
+        simulation: "Simulation",
         fps: float,
     ) -> None:
         if not self.visible:
             return
 
-        # ------------------------------------------------------------------
-        # Oldest as % of max lifespan
-        # ------------------------------------------------------------------
+        mode = simulation.settings.sim_mode
+
+        if mode == "predator_prey":
+            self._render_panel(surface, simulation, fps,
+                               self._lines_predator_prey(simulation),
+                               show_food_bar=True)
+        elif mode == "boids":
+            self._render_panel(surface, simulation, fps,
+                               self._lines_boids(simulation),
+                               show_food_bar=False)
+        elif mode == "drift":
+            self._render_panel(surface, simulation, fps,
+                               self._lines_drift(simulation),
+                               show_food_bar=False)
+        else:
+            self._render_panel(surface, simulation, fps,
+                               self._lines_energy(simulation),
+                               show_food_bar=True)
+
+    # ------------------------------------------------------------------
+    # Mode-specific line builders
+    # ------------------------------------------------------------------
+
+    def _lines_energy(self, simulation: "Simulation") -> list[str]:
         oldest_str = "—"
         if simulation.creatures:
             oldest = max(simulation.creatures, key=lambda c: c.age)
             pct = oldest.get_age_fraction() * 100
             oldest_str = f"{pct:.0f}%"
 
-        # ------------------------------------------------------------------
-        # Hunter / Grazer counts
-        # ------------------------------------------------------------------
         hunters, grazers, opps = simulation.get_hunter_grazer_counts()
-
-        # ------------------------------------------------------------------
-        # Dominant zone
-        # ------------------------------------------------------------------
         dom_zone = simulation.zone_manager.get_dominant_zone(simulation.creatures)
-
-        # ------------------------------------------------------------------
-        # Average old-age lifespan
-        # ------------------------------------------------------------------
         avg_ls = simulation.avg_old_age_lifespan_seconds
         avg_ls_str = f"{avg_ls:.0f}s" if avg_ls > 0 else "—"
 
-        # ------------------------------------------------------------------
-        # Text lines
-        # ------------------------------------------------------------------
-        lines = [
+        return [
             f"Generation: {simulation.generation}",
             f"Population: {simulation.population}",
             f"Oldest: {oldest_str} lifespan",
@@ -75,16 +80,66 @@ class HUD:
             f"Food: {simulation.food_count}",
             f"Mode: {simulation.settings.sim_mode}",
             f"Theme: {simulation.settings.visual_theme}",
-            f"FPS: {fps:.0f}",
         ]
 
-        if simulation.paused:
-            lines.insert(0, "[PAUSED]")
+    def _lines_predator_prey(self, simulation: "Simulation") -> list[str]:
+        pred_count, prey_count = simulation.get_species_counts()
+        pred_speed, prey_speed = simulation.get_species_avg_speeds()
+        dom_zone = simulation.zone_manager.get_dominant_zone(simulation.creatures)
 
-        # ------------------------------------------------------------------
-        # Calculate panel dimensions
-        # ------------------------------------------------------------------
-        # Extra height for the food bar row
+        return [
+            f"Predators: {pred_count}  /  Prey: {prey_count}",
+            f"Pred speed: {pred_speed:.2f}  Prey speed: {prey_speed:.2f}",
+            f"Generation: {simulation.generation}",
+            f"Zone: {dom_zone}",
+            f"Mode: predator_prey",
+            f"Theme: {simulation.settings.visual_theme}",
+        ]
+
+    def _lines_boids(self, simulation: "Simulation") -> list[str]:
+        flock_count, avg_size, largest = simulation.get_flock_stats()
+        avg_conformity = simulation.get_avg_conformity()
+        loners = sum(1 for c in simulation.creatures if c.flock_id == -1)
+
+        return [
+            f"Population: {simulation.population}",
+            f"Flocks: {flock_count}  Avg size: {avg_size:.1f}",
+            f"Largest flock: {largest}  Loners: {loners}",
+            f"Avg conformity: {avg_conformity:.2f}",
+            f"Generation: {simulation.generation}",
+            f"Mode: boids",
+            f"Theme: {simulation.settings.visual_theme}",
+        ]
+
+    def _lines_drift(self, simulation: "Simulation") -> list[str]:
+        lineage_count = simulation.get_lineage_count()
+        most_var = simulation.get_most_variable_trait()
+
+        return [
+            f"Population: {simulation.population}",
+            f"Generation: {simulation.generation}",
+            f"Lineages: {lineage_count}",
+            f"Most variable: {most_var}",
+            f"Mode: drift",
+            f"Theme: {simulation.settings.visual_theme}",
+        ]
+
+    # ------------------------------------------------------------------
+    # Shared panel renderer
+    # ------------------------------------------------------------------
+
+    def _render_panel(
+        self,
+        surface: pygame.Surface,
+        simulation: "Simulation",
+        fps: float,
+        lines: list[str],
+        show_food_bar: bool,
+    ) -> None:
+        if simulation.paused:
+            lines = ["[PAUSED]"] + lines
+        lines.append(f"FPS: {fps:.0f}")
+
         food_bar_height = 12
         food_bar_margin = 6
 
@@ -93,69 +148,54 @@ class HUD:
             text_surface = self.font.render(line, True, (255, 255, 255))
             max_width = max(max_width, text_surface.get_width())
 
-        # Food bar width: 80px label "Feast/Famine" takes some space too
-        feast_label = self.font.render("Feast", True, (255, 255, 255))
-        famine_label = self.font.render("Famine", True, (255, 255, 255))
-        bar_label_w = max(feast_label.get_width(), famine_label.get_width())
-        bar_row_width = 80 + bar_label_w * 2 + 8
-        max_width = max(max_width, bar_row_width)
+        if show_food_bar:
+            feast_label = self.font.render("Feast", True, (255, 255, 255))
+            famine_label = self.font.render("Famine", True, (255, 255, 255))
+            bar_label_w = max(feast_label.get_width(), famine_label.get_width())
+            bar_row_width = 80 + bar_label_w * 2 + 8
+            max_width = max(max_width, bar_row_width)
 
         panel_width = max_width + self.padding * 2
         panel_height = (
             len(lines) * self.line_height
-            + food_bar_height + food_bar_margin
+            + (food_bar_height + food_bar_margin if show_food_bar else 0)
             + self.padding * 2
         )
 
-        # ------------------------------------------------------------------
-        # Draw panel
-        # ------------------------------------------------------------------
         panel = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
-        panel.fill((0, 0, 0, 102))  # 40% alpha black
+        panel.fill((0, 0, 0, 102))
 
         y = self.padding
-
-        # Text lines
         for line in lines:
             text_surface = self.font.render(line, True, (255, 255, 255))
             panel.blit(text_surface, (self.padding, y))
             y += self.line_height
 
-        # ------------------------------------------------------------------
-        # Food cycle bar
-        # ------------------------------------------------------------------
-        y += food_bar_margin // 2
+        if show_food_bar:
+            y += food_bar_margin // 2
+            phase = simulation.food_cycle_phase
 
-        phase = simulation.food_cycle_phase  # 0.0=famine, 1.0=feast
+            famine_surf = self.font.render("Famine", True, (160, 120, 80))
+            feast_surf = self.font.render("Feast", True, (120, 220, 140))
 
-        # Label "Famine" on left, "Feast" on right
-        famine_surf = self.font.render("Famine", True, (160, 120, 80))
-        feast_surf = self.font.render("Feast", True, (120, 220, 140))
+            bar_x = self.padding + famine_surf.get_width() + 4
+            bar_w = 80
+            bar_y = y
 
-        bar_x = self.padding + famine_surf.get_width() + 4
-        bar_w = 80
-        bar_y = y + (food_bar_height - food_bar_height) // 2
+            pygame.draw.rect(panel, (60, 60, 80, 180),
+                             (bar_x, bar_y, bar_w, food_bar_height), border_radius=3)
 
-        # Background track
-        pygame.draw.rect(panel, (60, 60, 80, 180), (bar_x, bar_y, bar_w, food_bar_height), border_radius=3)
+            fill_w = max(2, int(bar_w * phase))
+            fill_r = int(180 * (1 - phase) + 40 * phase)
+            fill_g = int(60 * (1 - phase) + 180 * phase)
+            fill_b = int(40 * (1 - phase) + 80 * phase)
+            pygame.draw.rect(panel, (fill_r, fill_g, fill_b, 220),
+                             (bar_x, bar_y, fill_w, food_bar_height), border_radius=3)
 
-        # Fill based on phase
-        fill_w = max(2, int(bar_w * phase))
-        # Color gradient: red at famine, green at feast
-        fill_r = int(180 * (1 - phase) + 40 * phase)
-        fill_g = int(60 * (1 - phase) + 180 * phase)
-        fill_b = int(40 * (1 - phase) + 80 * phase)
-        pygame.draw.rect(panel, (fill_r, fill_g, fill_b, 220),
-                         (bar_x, bar_y, fill_w, food_bar_height), border_radius=3)
+            label_y = bar_y + (food_bar_height - famine_surf.get_height()) // 2
+            panel.blit(famine_surf, (self.padding, label_y))
+            panel.blit(feast_surf, (bar_x + bar_w + 4, label_y))
 
-        # Labels centred vertically with bar
-        label_y = bar_y + (food_bar_height - famine_surf.get_height()) // 2
-        panel.blit(famine_surf, (self.padding, label_y))
-        panel.blit(feast_surf, (bar_x + bar_w + 4, label_y))
-
-        # ------------------------------------------------------------------
-        # Blit panel to screen (bottom-left)
-        # ------------------------------------------------------------------
         screen_height = surface.get_height()
         pos = (10, screen_height - panel_height - 10)
         surface.blit(panel, pos)

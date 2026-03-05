@@ -49,6 +49,9 @@ class Config:
         self.zone_count = 5
         self.zone_strength = 0.8
 
+        # Per-mode parameter overrides loaded from [modes.*] TOML sections
+        self.mode_params: dict[str, dict] = {}
+
         self.glyph_size_base = 48
         self.kin_line_max_distance = 120.0
         self.kin_line_min_group = 3
@@ -107,6 +110,13 @@ class Config:
         self.food_cycle_period = int(evolution.get("food_cycle_period", self.food_cycle_period))
         self.zone_count = int(evolution.get("zone_count", self.zone_count))
         self.zone_strength = float(evolution.get("zone_strength", self.zone_strength))
+
+        # Per-mode overrides from [modes.*] sections
+        modes_data = data.get("modes", {})
+        self.mode_params = {}
+        for mode_name, mode_data in modes_data.items():
+            if isinstance(mode_data, dict):
+                self.mode_params[mode_name] = mode_data
 
     def _validate(self) -> None:
         if self.sim_mode not in self.VALID_SIM_MODES:
@@ -169,6 +179,30 @@ food_cycle_enabled = {str(self.food_cycle_enabled).lower()}
 food_cycle_period = {self.food_cycle_period}
 zone_count = {self.zone_count}
 zone_strength = {self.zone_strength:.4f}
+
+# Per-mode parameter overrides — these override the base [simulation] values
+# when that mode is active. Edit to tune each mode independently.
+[modes.predator_prey]
+initial_population = 120
+predator_fraction = 0.30
+food_spawn_rate = 0.5000
+mutation_rate = 0.0800
+energy_to_reproduce = 0.7000
+
+[modes.boids]
+initial_population = 150
+max_population = 300
+mutation_rate = 0.0700
+energy_to_reproduce = 0.7200
+zone_strength = 0.5000
+
+[modes.drift]
+initial_population = 60
+max_population = 200
+mutation_rate = 0.0400
+cosmic_ray_rate = 0.000600
+energy_to_reproduce = 0.9500
+zone_strength = 0.6000
 """
 
 
