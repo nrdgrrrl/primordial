@@ -122,6 +122,7 @@ class OceanTheme(Theme):
     def __init__(self) -> None:
         """Initialize the ocean theme."""
         self._glow_cache: dict[tuple[int, int, int, int], pygame.Surface] = {}
+        self._age_overlay_cache: dict[tuple[int, int], pygame.Surface] = {}
 
         # Pre-rendered food surfaces at 16 alpha levels (avoid per-frame alloc)
         # Food: radius=3, color=(200,255,255), alpha range [60, 150]
@@ -136,6 +137,18 @@ class OceanTheme(Theme):
 
         # Shared trail surface (lazy-init to screen size on first use)
         self._trail_surf: pygame.Surface | None = None
+
+    def _get_age_overlay(self, radius: int, alpha: int) -> pygame.Surface:
+        """Cached grey age-wash overlay by radius and alpha."""
+        key = (radius, alpha)
+        cached = self._age_overlay_cache.get(key)
+        if cached is not None:
+            return cached
+        surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (80, 90, 110, alpha), (radius, radius), radius)
+        if len(self._age_overlay_cache) < 160:
+            self._age_overlay_cache[key] = surf
+        return surf
 
     @property
     def name(self) -> str:
@@ -292,13 +305,7 @@ class OceanTheme(Theme):
             grey_alpha = int(((age_frac - 0.7) / 0.3) * 160)
             grey_alpha = min(160, grey_alpha)
             grey_r = int(radius * 2.5)
-            grey_surf = pygame.Surface((grey_r * 2, grey_r * 2), pygame.SRCALPHA)
-            pygame.draw.circle(
-                grey_surf,
-                (80, 90, 110, grey_alpha),
-                (grey_r, grey_r),
-                grey_r,
-            )
+            grey_surf = self._get_age_overlay(grey_r, grey_alpha)
             surface.blit(grey_surf, (int(creature.x) - grey_r, int(creature.y) - grey_r))
 
     def render_food(

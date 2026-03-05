@@ -31,6 +31,7 @@ class HUD:
         surface: pygame.Surface,
         simulation: "Simulation",
         fps: float,
+        debug_lines: list[str] | None = None,
     ) -> None:
         if not self.visible:
             return
@@ -40,19 +41,23 @@ class HUD:
         if mode == "predator_prey":
             self._render_panel(surface, simulation, fps,
                                self._lines_predator_prey(simulation),
-                               show_food_bar=True)
+                               show_food_bar=True,
+                               debug_lines=debug_lines)
         elif mode == "boids":
             self._render_panel(surface, simulation, fps,
                                self._lines_boids(simulation),
-                               show_food_bar=False)
+                               show_food_bar=False,
+                               debug_lines=debug_lines)
         elif mode == "drift":
             self._render_panel(surface, simulation, fps,
                                self._lines_drift(simulation),
-                               show_food_bar=False)
+                               show_food_bar=False,
+                               debug_lines=debug_lines)
         else:
             self._render_panel(surface, simulation, fps,
                                self._lines_energy(simulation),
-                               show_food_bar=True)
+                               show_food_bar=True,
+                               debug_lines=debug_lines)
 
     # ------------------------------------------------------------------
     # Mode-specific line builders
@@ -135,10 +140,13 @@ class HUD:
         fps: float,
         lines: list[str],
         show_food_bar: bool,
+        debug_lines: list[str] | None = None,
     ) -> None:
         if simulation.paused:
             lines = ["[PAUSED]"] + lines
         lines.append(f"FPS: {fps:.0f}")
+        if debug_lines:
+            lines.extend(debug_lines)
 
         food_bar_height = 12
         food_bar_margin = 6

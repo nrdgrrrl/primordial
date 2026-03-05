@@ -74,9 +74,11 @@ class Renderer:
         self,
         screen: pygame.Surface,
         settings: Settings,
+        debug: bool = False,
     ) -> None:
         self.screen = screen
         self.settings = settings
+        self.debug_enabled = debug
         self.width = screen.get_width()
         self.height = screen.get_height()
 
@@ -98,6 +100,11 @@ class Renderer:
         # FPS tracking
         self.frame_times: deque[float] = deque(maxlen=60)
         self.fps = 0.0
+        self._fps_history: deque[float] = deque(maxlen=240)
+        self._population_history: deque[int] = deque(maxlen=240)
+        self._debug_font = pygame.font.Font(None, 18)
+        self._debug_timing: dict[str, float] = {}
+        self._external_debug_metrics: dict[str, float] = {}
 
         # Stub mode/theme detection — all four sim modes are now implemented
         _IMPLEMENTED_MODES = {"energy", "predator_prey", "boids", "drift"}
@@ -141,6 +148,12 @@ class Renderer:
         # Invalidate zone cache — new sim will have different zones
         self._zone_surf_cached = None
 
+    def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
+        """Attach frame metrics measured outside the renderer (event/sim timing)."""
+        if not self.debug_enabled:
+            return
+        self._external_debug_metrics = metrics
+
     def resize(
         self, width: int, height: int, screen: pygame.Surface | None = None
     ) -> None:
@@ -170,11 +183,17 @@ class Renderer:
         Args:
             simulation: Simulation instance to render.
         """
+        frame_t0 = time.perf_counter()
+        timings: dict[str, float] = {}
+
         current_time = time.time()
         anim_time = current_time - self.start_time
         dt_real = self._update_fps(current_time)
+        self._fps_history.append(self.fps)
+        self._population_history.append(simulation.population)
 
         # --- Process simulation events → create animations ---
+        t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
             get_color = lambda g: self.theme.get_creature_color(g.hue, g.saturation)
         else:
@@ -193,33 +212,47 @@ class Renderer:
 
         simulation.death_events.clear()
         simulation.birth_events.clear()
+        timings["events_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Clear screen ---
+        t0 = time.perf_counter()
         self.screen.fill(self.theme.background_color)
+        timings["clear_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Ambient particles ---
+        t0 = time.perf_counter()
         self.theme.render_ambient(self.screen, self.ambient_particles, anim_time)
+        timings["ambient_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Zone backgrounds (very faint atmospheric gradient circles) ---
+        t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
             self._draw_zone_backgrounds(simulation)
+        timings["zones_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Territory shimmer (beneath creatures) ---
+        t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
             self._draw_territory_shimmer(simulation, anim_time, dt_real)
+        timings["territory_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Food particles ---
+        t0 = time.perf_counter()
         for food in simulation.food_manager:
             self.theme.render_food(self.screen, food, anim_time)
+        timings["food_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Kin/flock connection lines (beneath creatures) ---
+        t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
             if simulation.settings.sim_mode == "boids":
                 self._draw_flock_lines(simulation)
             else:
                 self._draw_kin_lines(simulation)
+        timings["links_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Creature trails (batched onto shared surface, then blitted once) ---
+        t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
             if (self.theme._trail_surf is None or
                     self.theme._trail_surf.get_size() != (self.width, self.height)):
@@ -232,29 +265,48 @@ class Renderer:
                 scale = birth_scale if birth_scale is not None else 1.0
                 self.theme.render_creature_trail(creature, anim_time, scale=scale)
             self.screen.blit(self.theme._trail_surf, (0, 0))
+        timings["trails_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Creatures ---
+        t0 = time.perf_counter()
         for creature in simulation.creatures:
             birth_scale = self.animation_manager.get_birth_scale(creature)
             scale = birth_scale if birth_scale is not None else 1.0
             self.theme.render_creature(self.screen, creature, anim_time, scale=scale)
+        timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Attack lines (drawn above creatures, very faint) ---
+        t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme) and simulation.active_attacks:
             self._draw_attack_lines(simulation)
+        timings["attacks_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Animation effects (death bursts etc.) ---
+        t0 = time.perf_counter()
         self.animation_manager.tick_and_draw(self.screen)
+        timings["anim_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Stub overlay ---
+        t0 = time.perf_counter()
         self._draw_stub_overlay(simulation)
+        timings["stub_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- HUD ---
-        self.hud.render(self.screen, simulation, self.fps)
+        t0 = time.perf_counter()
+        debug_lines = self._build_debug_lines(timings) if self.debug_enabled else None
+        self.hud.render(self.screen, simulation, self.fps, debug_lines=debug_lines)
+        timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
 
+        t0 = time.perf_counter()
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
             self.settings_overlay.update()
             self.settings_overlay.draw(self.screen)
+        timings["settings_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        if self.debug_enabled:
+            timings["draw_total_ms"] = (time.perf_counter() - frame_t0) * 1000.0
+            self._debug_timing = timings
+            self._draw_debug_graph_overlay(simulation)
 
     def toggle_hud(self) -> None:
         """Toggle HUD visibility."""
@@ -587,6 +639,86 @@ class Renderer:
     # ------------------------------------------------------------------
     # FPS and stub overlay helpers
     # ------------------------------------------------------------------
+
+    def _build_debug_lines(self, timings: dict[str, float]) -> list[str]:
+        """Build compact debug timing lines for the HUD."""
+        event_ms = self._external_debug_metrics.get("event_ms", 0.0)
+        sim_ms = self._external_debug_metrics.get("sim_ms", 0.0)
+        draw_ms = timings.get("draw_total_ms", self._debug_timing.get("draw_total_ms", 0.0))
+        return [
+            f"Dbg frame: evt {event_ms:.2f}ms  sim {sim_ms:.2f}ms  draw {draw_ms:.2f}ms",
+            "Dbg render: clear {clear:.2f}  amb {amb:.2f}  zones {zones:.2f}  "
+            "terr {terr:.2f}  food {food:.2f}  links {links:.2f}".format(
+                clear=timings.get("clear_ms", 0.0),
+                amb=timings.get("ambient_ms", 0.0),
+                zones=timings.get("zones_ms", 0.0),
+                terr=timings.get("territory_ms", 0.0),
+                food=timings.get("food_ms", 0.0),
+                links=timings.get("links_ms", 0.0),
+            ),
+            "Dbg render: trails {trails:.2f}  creatures {creatures:.2f}  "
+            "attacks {attacks:.2f}  anim {anim:.2f}  hud {hud:.2f}".format(
+                trails=timings.get("trails_ms", 0.0),
+                creatures=timings.get("creatures_ms", 0.0),
+                attacks=timings.get("attacks_ms", 0.0),
+                anim=timings.get("anim_ms", 0.0),
+                hud=timings.get("hud_ms", 0.0),
+            ),
+        ]
+
+    def _draw_debug_graph_overlay(self, simulation: "Simulation") -> None:
+        """Draw FPS and population history graphs in debug mode."""
+        panel_w = 320
+        panel_h = 170
+        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel.fill((5, 10, 20, 190))
+        pygame.draw.rect(panel, (90, 150, 210), panel.get_rect(), 1)
+
+        label = self._debug_font.render("DEBUG", True, (180, 230, 255))
+        panel.blit(label, (8, 6))
+
+        fps_rect = pygame.Rect(10, 26, 300, 56)
+        pop_rect = pygame.Rect(10, 98, 300, 56)
+        pygame.draw.rect(panel, (30, 40, 60), fps_rect, 1)
+        pygame.draw.rect(panel, (30, 40, 60), pop_rect, 1)
+
+        if len(self._fps_history) > 1:
+            points: list[tuple[int, int]] = []
+            target = max(1.0, float(self.settings.target_fps))
+            max_fps = max(target * 1.2, max(self._fps_history))
+            for i, v in enumerate(self._fps_history):
+                x = fps_rect.left + int(i * (fps_rect.width - 1) / (len(self._fps_history) - 1))
+                y = fps_rect.bottom - int((v / max_fps) * (fps_rect.height - 2))
+                points.append((x, y))
+            if len(points) > 1:
+                pygame.draw.lines(panel, (120, 230, 170), False, points, 1)
+
+            target_y = fps_rect.bottom - int((target / max_fps) * (fps_rect.height - 2))
+            pygame.draw.line(panel, (230, 200, 120), (fps_rect.left, target_y), (fps_rect.right, target_y), 1)
+
+        if len(self._population_history) > 1:
+            points = []
+            max_pop = max(1, max(self._population_history), self.settings.max_population)
+            for i, v in enumerate(self._population_history):
+                x = pop_rect.left + int(i * (pop_rect.width - 1) / (len(self._population_history) - 1))
+                y = pop_rect.bottom - int((v / max_pop) * (pop_rect.height - 2))
+                points.append((x, y))
+            if len(points) > 1:
+                pygame.draw.lines(panel, (140, 180, 255), False, points, 1)
+
+        fps_text = self._debug_font.render(
+            f"FPS {self.fps:5.1f} / {self.settings.target_fps}",
+            True,
+            (220, 245, 255),
+        )
+        pop_text = self._debug_font.render(
+            f"Pop {simulation.population:4d}",
+            True,
+            (220, 245, 255),
+        )
+        panel.blit(fps_text, (14, 28))
+        panel.blit(pop_text, (14, 100))
+        self.screen.blit(panel, (10, 10))
 
     def _update_fps(self, current_time: float) -> float:
         """Update FPS calculation. Returns dt in seconds."""

@@ -8,10 +8,14 @@ Supports Windows screensaver modes: /s (screensaver), /p HWND (preview), /c (con
 
 from __future__ import annotations
 
+import cProfile
 import logging
 import platform
+import pstats
 import sys
 import time
+from datetime import datetime
+from pathlib import Path
 
 import pygame
 
@@ -29,13 +33,28 @@ except (AttributeError, OSError):
 from .rendering import Renderer
 from .settings import Settings
 from .simulation import Simulation
+from .utils.cli import RuntimeArgs
 from .utils.screensaver import ScreensaverArgs
 
 
-def main(scr_args: ScreensaverArgs | None = None) -> None:
+def main(
+    scr_args: ScreensaverArgs | None = None,
+    runtime_args: RuntimeArgs | None = None,
+) -> None:
     """Main entry point for Primordial."""
     if scr_args is None:
         scr_args = ScreensaverArgs(mode="normal")
+    if runtime_args is None:
+        runtime_args = RuntimeArgs()
+
+    log_path = _configure_logging(runtime_args.debug)
+    logger.info(
+        "Starting Primordial mode=%s debug=%s profile=%s log=%s",
+        scr_args.mode,
+        runtime_args.debug,
+        runtime_args.profile,
+        log_path,
+    )
 
     # Config mode: show a simple settings dialog without running the simulation.
     if scr_args.mode == "config":
@@ -45,8 +64,9 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
     # Initialize pygame
     pygame.init()
 
-    # Load settings
+    # Load settings and apply runtime overrides.
     settings = Settings()
+    _apply_runtime_overrides(settings, runtime_args)
 
     # Set up display based on mode
     if scr_args.mode == "screensaver":
@@ -55,16 +75,13 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
         height = display_info.current_h
         screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
         pygame.mouse.set_visible(False)
-
     elif scr_args.mode == "preview":
         # SDL_WINDOWID was already set by root main.py; just create a surface
         # that fits into the preview pane (typically ~152×112 px).
         width, height = 152, 112
         screen = pygame.display.set_mode((width, height))
         pygame.mouse.set_visible(False)
-
     else:
-        # Normal mode — existing behaviour unchanged.
         if settings.fullscreen:
             display_info = pygame.display.Info()
             width = display_info.current_w
@@ -80,30 +97,41 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
 
     # Initialize simulation and renderer
     simulation = Simulation(width, height, settings)
-    renderer = Renderer(screen, settings)
+    renderer = Renderer(screen, settings, debug=runtime_args.debug)
 
     # Clock for FPS limiting
     clock = pygame.time.Clock()
+
+    if runtime_args.profile:
+        if scr_args.mode != "normal":
+            logger.warning("--profile is only supported in normal mode; ignoring.")
+        else:
+            profile_base = _run_profile_session(simulation, renderer, clock, settings)
+            pygame.quit()
+            logger.info("Profile run complete: %s.[pstats|txt]", profile_base)
+            sys.exit(0)
 
     # Grace period for screensaver mode: ignore all input for 2 seconds after
     # launch to absorb any spurious mouse events some systems emit at startup.
     grace_until: float = time.time() + 2.0 if scr_args.mode == "screensaver" else 0.0
 
-    # Mode transition fade state — 2-second (120-frame) cross-fade on mode change
-    _prev_mode: str = settings.sim_mode   # mode saved when overlay is opened
-    _transition_alpha: int = 0            # 0=transparent, 255=opaque
-    _transition_dir: int = 0              # +1=fading out, -1=fading in, 0=idle
+    # Mode transition fade state
+    _prev_mode: str = settings.sim_mode
+    _transition_alpha: int = 0
+    _transition_dir: int = 0  # +1=fading out, -1=fading in, 0=idle
     _transition_surf: pygame.Surface | None = None
 
     def _begin_mode_transition() -> None:
-        """Start the 2-second mode-change fade."""
         nonlocal _transition_alpha, _transition_dir, _transition_surf
         _transition_alpha = 0
-        _transition_dir = 1  # start fading to black
-        _transition_surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        _transition_dir = 1
+        _transition_surf = pygame.Surface(
+            (renderer.width, renderer.height), pygame.SRCALPHA
+        )
 
     running = True
     while running:
+        event_start = time.perf_counter()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -130,11 +158,10 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
                 if renderer.settings_overlay.visible:
                     action = renderer.settings_overlay.handle_event(event)
                     if action == "apply":
-                        if settings.fullscreen != bool(screen.get_flags() & pygame.FULLSCREEN):
+                        if settings.fullscreen != bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
                             toggle_fullscreen(settings, simulation, renderer)
                         renderer.set_theme(settings.visual_theme)
                         renderer.set_mode(settings.sim_mode)
-                        # Trigger fade transition if mode changed
                         if settings.sim_mode != _prev_mode:
                             _begin_mode_transition()
                         else:
@@ -142,19 +169,20 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
                     elif action == "discard" and renderer.settings_overlay.fade_dir < 0:
                         simulation.paused = False
                 else:
-                    running = handle_keydown(event, simulation, renderer, settings, screen, scr_args.mode)
+                    running = handle_keydown(
+                        event, simulation, renderer, settings, renderer.screen, scr_args.mode
+                    )
                     if renderer.settings_overlay.visible:
-                        # Save current mode so we can detect a change on apply
                         _prev_mode = settings.sim_mode
                         simulation.paused = True
+        event_ms = (time.perf_counter() - event_start) * 1000.0
 
         # Mode transition: fade out → reset sim → fade in
         if _transition_dir != 0 and _transition_surf is not None:
-            step = 4  # ~60 frames total (30 out, 30 in) at 60fps ≈ 1s each way
+            step = 4
             if _transition_dir == 1:
                 _transition_alpha = min(200, _transition_alpha + step)
                 if _transition_alpha >= 200:
-                    # Mid-point: reinitialise simulation
                     simulation.reset()
                     simulation.paused = False
                     _transition_dir = -1
@@ -163,26 +191,122 @@ def main(scr_args: ScreensaverArgs | None = None) -> None:
                 if _transition_alpha <= 0:
                     _transition_dir = 0
 
-        # Update simulation (paused during full fade-out)
+        sim_ms = 0.0
         if _transition_dir != 1 or _transition_alpha < 200:
+            sim_start = time.perf_counter()
             simulation.step()
+            sim_ms = (time.perf_counter() - sim_start) * 1000.0
 
-        # Render
+        renderer.set_external_debug_metrics({
+            "event_ms": event_ms,
+            "sim_ms": sim_ms,
+        })
         renderer.draw(simulation)
 
         # Overlay the transition fade
         if _transition_dir != 0 and _transition_surf is not None and _transition_alpha > 0:
+            if _transition_surf.get_size() != (renderer.width, renderer.height):
+                _transition_surf = pygame.Surface(
+                    (renderer.width, renderer.height), pygame.SRCALPHA
+                )
             _transition_surf.fill((0, 0, 0, _transition_alpha))
-            screen.blit(_transition_surf, (0, 0))
+            renderer.screen.blit(_transition_surf, (0, 0))
 
         pygame.display.flip()
 
-        # Preview runs at half speed to save CPU
         target_fps = settings.target_fps // 2 if scr_args.mode == "preview" else settings.target_fps
         clock.tick(target_fps)
 
     pygame.quit()
     sys.exit(0)
+
+
+def _configure_logging(debug_enabled: bool) -> str:
+    """Configure file logging (+ console logging in debug mode)."""
+    if platform.system() == "Windows":
+        log_dir = Path.home() / "AppData" / "Roaming" / "Primordial"
+    elif platform.system() == "Darwin":
+        log_dir = Path.home() / "Library" / "Application Support" / "Primordial"
+    else:
+        log_dir = Path.home() / ".config" / "primordial"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "primordial.log"
+
+    handlers: list[logging.Handler] = [
+        logging.FileHandler(log_path, encoding="utf-8"),
+    ]
+    if debug_enabled:
+        handlers.append(logging.StreamHandler(sys.stdout))
+
+    logging.basicConfig(
+        level=logging.DEBUG if debug_enabled else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    return str(log_path)
+
+
+def _apply_runtime_overrides(settings: Settings, runtime_args: RuntimeArgs) -> None:
+    """Apply non-persistent CLI overrides."""
+    if runtime_args.mode:
+        if runtime_args.mode in settings.VALID_SIM_MODES:
+            settings.sim_mode = runtime_args.mode
+        else:
+            logger.warning(
+                "Ignoring invalid --mode '%s'. Valid: %s",
+                runtime_args.mode,
+                ", ".join(settings.VALID_SIM_MODES),
+            )
+    if runtime_args.theme:
+        if runtime_args.theme in settings.VALID_VISUAL_THEMES:
+            settings.visual_theme = runtime_args.theme
+        else:
+            logger.warning(
+                "Ignoring invalid --theme '%s'. Valid: %s",
+                runtime_args.theme,
+                ", ".join(settings.VALID_VISUAL_THEMES),
+            )
+    if runtime_args.debug:
+        settings.show_hud = True
+
+
+def _run_profile_session(
+    simulation: Simulation,
+    renderer: Renderer,
+    clock: pygame.time.Clock,
+    settings: Settings,
+) -> str:
+    """
+    Run a 60-second profile session, dump .pstats and text report, then return base path.
+    """
+    out_dir = Path(settings.config_path).parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    base = out_dir / f"profile-{stamp}"
+    pstats_path = base.with_suffix(".pstats")
+    text_path = base.with_suffix(".txt")
+
+    profiler = cProfile.Profile()
+    end_time = time.perf_counter() + 60.0
+    logger.info("Running 60-second profile session...")
+    profiler.enable()
+    while time.perf_counter() < end_time:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                end_time = 0.0
+                break
+        simulation.step()
+        renderer.draw(simulation)
+        pygame.display.flip()
+        clock.tick(max(1, settings.target_fps))
+    profiler.disable()
+
+    profiler.dump_stats(str(pstats_path))
+    with text_path.open("w", encoding="utf-8") as fp:
+        stats = pstats.Stats(profiler, stream=fp).sort_stats("cumulative")
+        stats.print_stats(120)
+    return str(base)
 
 
 def _run_config_dialog() -> None:

@@ -231,33 +231,40 @@ class CosmicRayAnimation(Animation):
     """
 
     TOTAL_FRAMES = 20
+    _FRAME_CACHE: list[tuple[pygame.Surface, int]] | None = None
 
     def __init__(self, x: float, y: float) -> None:
         self.x = x
         self.y = y
         self.frame = 0
 
+        if CosmicRayAnimation._FRAME_CACHE is None:
+            cache: list[tuple[pygame.Surface, int]] = []
+            for frame in range(self.TOTAL_FRAMES):
+                t = frame / self.TOTAL_FRAMES
+                radius = int(6 + t * 24)
+                alpha = int(50 * (1.0 - t))
+                size = (radius + 2) * 2
+                ring_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+                if alpha > 0 and radius > 0:
+                    pygame.draw.circle(
+                        ring_surf,
+                        (255, 255, 255, alpha),
+                        (size // 2, size // 2),
+                        radius,
+                        1,
+                    )
+                cache.append((ring_surf, size))
+            CosmicRayAnimation._FRAME_CACHE = cache
+
     def tick(self) -> bool:
         self.frame += 1
         return self.frame < self.TOTAL_FRAMES
 
     def draw(self, surface: pygame.Surface) -> None:
-        t = self.frame / self.TOTAL_FRAMES   # 0 → 1
-        radius = int(6 + t * 24)             # expands from 6 to 30 px
-        alpha = int(50 * (1.0 - t))          # fades out
-
-        if alpha <= 0 or radius <= 0:
+        if CosmicRayAnimation._FRAME_CACHE is None:
             return
-
-        size = (radius + 2) * 2
-        ring_surf = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.circle(
-            ring_surf,
-            (255, 255, 255, alpha),
-            (size // 2, size // 2),
-            radius,
-            1,  # 1px ring
-        )
+        ring_surf, size = CosmicRayAnimation._FRAME_CACHE[self.frame]
         surface.blit(ring_surf, (int(self.x) - size // 2, int(self.y) - size // 2))
 
 
@@ -265,6 +272,7 @@ class ParentPulse(Animation):
     """Brief brightening glow on a parent creature at moment of reproduction."""
 
     TOTAL_FRAMES = 15
+    _COLOR_CACHE: dict[tuple[int, int, int], list[tuple[pygame.Surface, int]]] = {}
 
     def __init__(self, x: float, y: float, color: tuple[int, int, int]) -> None:
         self.x = x
@@ -272,18 +280,25 @@ class ParentPulse(Animation):
         self.color = color
         self.frame = 0
 
+        if color not in self._COLOR_CACHE:
+            frames: list[tuple[pygame.Surface, int]] = []
+            for frame in range(self.TOTAL_FRAMES):
+                t = frame / self.TOTAL_FRAMES
+                alpha = int(120 * (1.0 - t))
+                radius = int(30 * (1.0 + t * 0.5))
+                surf = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
+                pygame.draw.circle(
+                    surf, (*color, alpha), (radius + 2, radius + 2), radius, 2
+                )
+                frames.append((surf, radius))
+            self._COLOR_CACHE[color] = frames
+
     def tick(self) -> bool:
         self.frame += 1
         return self.frame < self.TOTAL_FRAMES
 
     def draw(self, surface: pygame.Surface) -> None:
-        t = self.frame / self.TOTAL_FRAMES
-        alpha = int(120 * (1.0 - t))
-        radius = int(30 * (1.0 + t * 0.5))
-
-        pulse_surf = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
-        pygame.draw.circle(pulse_surf, (*self.color, alpha),
-                           (radius + 2, radius + 2), radius, 2)
+        pulse_surf, radius = self._COLOR_CACHE[self.color][self.frame]
         surface.blit(pulse_surf,
                      (int(self.x) - radius - 2, int(self.y) - radius - 2))
 

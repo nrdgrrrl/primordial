@@ -48,6 +48,7 @@ class SettingsOverlay:
             Field("Zone Strength", "zone_strength", "float", 0.0, 1.0, 0.05, section="Evolution"),
         ]
         self._panel = pygame.Surface((600, 500), pygame.SRCALPHA)
+        self._shade: pygame.Surface | None = None
         self._font = pygame.font.Font(None, 26)
         self._small = pygame.font.Font(None, 22)
 
@@ -120,9 +121,10 @@ class SettingsOverlay:
         if not self.visible and self.fade == 0:
             return
         alpha = int(170 * (self.fade / 20))
-        shade = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
-        shade.fill((0, 0, 0, alpha))
-        screen.blit(shade, (0, 0))
+        if self._shade is None or self._shade.get_size() != screen.get_size():
+            self._shade = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        self._shade.fill((0, 0, 0, alpha))
+        screen.blit(self._shade, (0, 0))
 
         self._panel.fill((10, 22, 40, int(235 * (self.fade / 20))))
         pygame.draw.rect(self._panel, (70, 130, 190), self._panel.get_rect(), 2, border_radius=8)

@@ -14,9 +14,11 @@ Usage (build):
     python build.py   →  dist/primordial or dist/primordial.exe + dist/primordial.scr
 """
 
+from primordial.utils.cli import parse_runtime_args
 from primordial.utils.screensaver import parse_screensaver_args
 
 scr_args = parse_screensaver_args()
+runtime_args = parse_runtime_args()
 
 # Preview mode: SDL_WINDOWID must be set before pygame.init() which happens
 # inside primordial.main.main(). Set it now, before the package is imported.
@@ -27,4 +29,4 @@ if scr_args.mode == "preview" and scr_args.preview_hwnd:
 from primordial.main import main
 
 if __name__ == "__main__":
-    main(scr_args)
+    main(scr_args, runtime_args)
