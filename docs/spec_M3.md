@@ -170,3 +170,17 @@ Pass B or Pass C must halt and report instead of improvising if:
 - benchmark verification appears to require flaky ecological outcome thresholds rather than bounded correctness and regression checks
 - `boids` would need comparable redesign to remain coherent
 
+## M3 Closeout
+Status: closed
+
+Reason:
+- bounded M3 implementation is complete
+- automated acceptance passes
+- manual review confirms zone-mediated behavior differences are present and good enough for this milestone
+- remaining work is tuning / future observability, not required for M3 completion
+
+Deferred:
+- further ecology tuning
+- richer HUD / observability
+- fullscreen toggle bug
+- boids performance investigation

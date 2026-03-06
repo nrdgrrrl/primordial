@@ -25,7 +25,7 @@ class Config:
     DEFAULT_MODE_PARAMS: dict[str, dict[str, Any]] = {
         "predator_prey": {
             "initial_population": 120,
-            "predator_fraction": 0.30,
+            "predator_fraction": 0.25,
             "food_spawn_rate": 0.5000,
             "mutation_rate": 0.0800,
             "energy_to_reproduce": 0.7000,
@@ -61,7 +61,7 @@ class Config:
 
         self.initial_population = 80
         self.max_population = 220
-        self.food_spawn_rate = 0.6
+        self.food_spawn_rate = 0.8
         self.food_max_particles = 300
         self.food_cycle_period = 1800
         self.food_cycle_enabled = True
@@ -322,11 +322,11 @@ class Config:
                 return f"{val:.6f}" if abs(val) < 0.01 else f"{val:.4f}"
             return str(val)
 
-        lines = ["""# Primordial configuration file
+        lines = [f"""# Primordial configuration file
 # Edit by hand or press S in-app to change settings.
 
 [simulation]
-mode = \"{self.sim_mode}\"           # energy | predator_prey | boids | drift
+mode = "{self.sim_mode}"           # energy | predator_prey | boids | drift
 initial_population = {self.initial_population}
 max_population = {self.max_population}
 food_spawn_rate = {self.food_spawn_rate:.4f}
@@ -344,7 +344,7 @@ zone_strength = {self.zone_strength:.4f}
 energy_to_reproduce = {self.energy_to_reproduce:.4f}
 
 [display]
-visual_theme = \"{self.visual_theme}\"    # ocean | petri | geometric | chaotic
+visual_theme = "{self.visual_theme}"    # ocean | petri | geometric | chaotic
 fullscreen = {str(self.fullscreen).lower()}
 target_fps = {self.target_fps}
 show_hud = {str(self.show_hud).lower()}
@@ -370,7 +370,7 @@ death_particle_count = {self.death_particle_count}
 
 # Per-mode parameter overrides — these override the base [simulation] values
 # when that mode is active. Edit to tune each mode independently.
-""".format(self=self)]
+"""]
 
         for mode_name in ("predator_prey", "boids", "drift"):
             lines.append(f"[modes.{mode_name}]")

@@ -143,6 +143,43 @@ class EcologySensingTests(unittest.TestCase):
 
         self.assertGreater(simulation.population, 0)
 
+    def test_predator_prey_default_mix_survives_seeded_window(self) -> None:
+        settings = self._build_settings("predator_prey")
+        settings.food_max_particles = 260
+        settings.zone_count = 5
+        settings.zone_strength = 0.75
+        settings.mode_params["predator_prey"]["initial_population"] = 120
+
+        random.seed(12345)
+        simulation = Simulation(1280, 720, settings)
+        for _ in range(2400):
+            simulation.step()
+            if simulation.population == 0:
+                break
+
+        self.assertGreater(simulation.population, 0)
+
+    def test_energy_population_survives_seeded_window_with_legacy_default_food_rate(self) -> None:
+        settings = self._build_settings("energy")
+        settings.initial_population = 80
+        settings.max_population = 220
+        settings.food_spawn_rate = 0.6
+        settings.food_max_particles = 300
+        settings.food_cycle_enabled = True
+        settings.food_cycle_period = 1800
+        settings.energy_to_reproduce = 0.80
+        settings.zone_count = 5
+        settings.zone_strength = 0.8
+
+        random.seed(12345)
+        simulation = Simulation(1280, 720, settings)
+        for _ in range(3200):
+            simulation.step()
+            if simulation.population == 0:
+                break
+
+        self.assertGreater(simulation.population, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

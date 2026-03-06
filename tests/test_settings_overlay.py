@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
+import pygame
+
+from primordial.rendering.settings_overlay import SettingsOverlay
+from primordial.settings import Settings
+
+
+class SettingsOverlayTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        pygame.init()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        pygame.quit()
+
+    def test_to_toml_serializes_without_format_keyerror(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            settings.sim_mode = "predator_prey"
+            settings.fullscreen = False
+            settings.show_hud = False
+            serialized = settings.to_toml()
+
+        self.assertIn('mode = "predator_prey"', serialized)
+        self.assertIn("fullscreen = false", serialized)
+        self.assertIn("show_hud = false", serialized)
+
+    def test_settings_overlay_apply_saves_mode_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            settings.fullscreen = False
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.pending["sim_mode"] = "boids"
+
+            action = overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN))
+
+            self.assertEqual(action, "apply")
+            self.assertEqual(settings.sim_mode, "boids")
+            self.assertTrue(config_path.exists())
+            saved = config_path.read_text(encoding="utf-8")
+            self.assertIn('mode = "boids"', saved)
+
+
+if __name__ == "__main__":
+    unittest.main()

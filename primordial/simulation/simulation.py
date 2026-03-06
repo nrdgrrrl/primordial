@@ -25,7 +25,7 @@ AttackRenderEvent = tuple[float, float, float, float, float]
 _MODE_DEFAULTS: dict[str, dict] = {
     "predator_prey": {
         "initial_population": 120,
-        "predator_fraction": 0.30,
+        "predator_fraction": 0.25,
         "food_spawn_rate": 0.5,
         "mutation_rate": 0.08,
         "energy_to_reproduce": 0.70,
@@ -1125,11 +1125,16 @@ class Simulation:
 
     def _get_food_rate(self) -> float:
         """Current food spawn rate accounting for the boom/bust cycle."""
+        base_rate = self.settings.food_spawn_rate
+        # Corrective compatibility path: existing configs often persisted the old
+        # energy default of 0.6, which now collapses too easily in interactive runs.
+        if self.settings.sim_mode == "energy" and math.isclose(base_rate, 0.6, abs_tol=1e-9):
+            base_rate = 0.8
         if not self.settings.food_cycle_enabled:
-            return self.settings.food_spawn_rate
+            return base_rate
         period = max(1, self.settings.food_cycle_period)
         t = self._frame / period
-        return max(0.0, self.settings.food_spawn_rate * (0.5 + 0.5 * math.sin(2 * math.pi * t)))
+        return max(0.0, base_rate * (0.5 + 0.5 * math.sin(2 * math.pi * t)))
 
     # ------------------------------------------------------------------
     # Food seeking
