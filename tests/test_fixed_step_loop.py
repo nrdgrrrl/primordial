@@ -15,6 +15,7 @@ from primordial.main import (
     _advance_fixed_step_frame,
     _create_fixed_step_loop_state,
     _run_profile_session,
+    _simulation_timing_is_suppressed,
 )
 
 
@@ -132,6 +133,13 @@ class FixedStepLoopTests(unittest.TestCase):
         self.assertEqual(clamp_frames, 1)
         self.assertAlmostEqual(dropped_seconds, overflow_seconds, places=9)
         self.assertAlmostEqual(runtime_loop.accumulator_seconds, 0.0, places=9)
+
+    def test_mode_transition_suppresses_simulation_for_entire_fade(self) -> None:
+        simulation = FakeSimulation()
+
+        self.assertTrue(_simulation_timing_is_suppressed(simulation, transition_dir=1, transition_alpha=4))
+        self.assertTrue(_simulation_timing_is_suppressed(simulation, transition_dir=-1, transition_alpha=120))
+        self.assertFalse(_simulation_timing_is_suppressed(simulation, transition_dir=0, transition_alpha=0))
 
     def test_profile_loop_keeps_render_once_per_frame_with_fixed_step_catch_up(self) -> None:
         runtime_loop = _create_fixed_step_loop_state()

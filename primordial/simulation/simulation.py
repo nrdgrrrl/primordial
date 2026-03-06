@@ -1395,8 +1395,8 @@ class Simulation:
         return excess * excess
 
     def _get_sensing_upkeep_cost(self, creature: Creature) -> float:
-        """Sense range maintenance cost used by the M3 tradeoff."""
-        return creature.genome.sense_radius * 0.00025
+        """M3 corrective pass: keep sensing range-limited and noisy, but not taxing."""
+        return 0.0
 
     def _get_effective_sensing_range(
         self,
@@ -1423,7 +1423,7 @@ class Simulation:
         sense_multiplier: float = 1.0,
         absolute_radius: float | None = None,
     ) -> tuple[float, float] | None:
-        """Return a noisy sensed target position, or None if the target is missed."""
+        """Return a noisy sensed target position when the target is in sensing range."""
         effective_radius = self._get_effective_sensing_range(
             creature,
             multiplier=sense_multiplier,
@@ -1434,16 +1434,8 @@ class Simulation:
             return None
 
         distance_ratio = distance / max(1.0, effective_radius)
-        reliability = max(0.15, 1.0 - 0.85 * distance_ratio)
-        if random.random() > reliability:
-            return None
-
         zone_modifier = self.zone_manager.get_sensing_modifier_at(creature.x, creature.y)
-        noise_scale = (
-            (6.0 + 0.12 * effective_radius)
-            * distance_ratio
-            * max(0.35, 2.0 - zone_modifier)
-        )
+        noise_scale = 2.0 * distance_ratio * max(0.5, 1.4 - zone_modifier)
         estimated_x = (target_x + random.gauss(0.0, noise_scale)) % self.width
         estimated_y = (target_y + random.gauss(0.0, noise_scale)) % self.height
         return estimated_x, estimated_y

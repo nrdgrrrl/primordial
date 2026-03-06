@@ -274,9 +274,7 @@ def _simulation_timing_is_suppressed(
     transition_alpha: int = 0,
 ) -> bool:
     """Return whether fixed-step debt should be frozen for the current frame."""
-    return simulation.paused or (
-        transition_dir == 1 and transition_alpha >= 200
-    )
+    return simulation.paused or transition_dir != 0
 
 
 def _run_planned_simulation_steps(

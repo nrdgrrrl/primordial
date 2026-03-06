@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import random
 import unittest
 from unittest.mock import patch
 
@@ -49,15 +50,13 @@ class EcologySensingTests(unittest.TestCase):
         self.assertLess(kelp_modifier, 1.0)
         self.assertGreater(open_water_modifier, kelp_modifier)
 
-    def test_sense_target_position_can_miss_distant_targets(self) -> None:
+    def test_sense_target_position_returns_none_when_target_is_out_of_range(self) -> None:
         simulation = self._build_simulation()
         simulation.zone_manager.zones = [
             Zone(x=50.0, y=50.0, radius=60.0, zone_type="kelp_forest", local_strength=1.0),
         ]
-        creature = Creature(x=50.0, y=50.0, genome=Genome(sense_radius=1.0), lineage_id=1)
-
-        with patch("random.random", return_value=0.95):
-            sensed = simulation._sense_target_position(creature, 120.0, 50.0)
+        creature = Creature(x=50.0, y=50.0, genome=Genome(sense_radius=0.0), lineage_id=1)
+        sensed = simulation._sense_target_position(creature, 100.0, 50.0)
 
         self.assertIsNone(sensed)
 
@@ -121,6 +120,28 @@ class EcologySensingTests(unittest.TestCase):
 
         self.assertTrue(simulation._should_branch_lineage(parent, child))
         self.assertFalse(simulation._should_branch_lineage(parent, near_child))
+
+    def test_predator_prey_population_survives_seeded_window(self) -> None:
+        settings = self._build_settings("predator_prey")
+        settings.food_max_particles = 260
+        settings.zone_count = 5
+        settings.zone_strength = 0.75
+        settings.mode_params["predator_prey"].update({
+            "initial_population": 110,
+            "predator_fraction": 0.28,
+            "food_spawn_rate": 0.55,
+            "mutation_rate": 0.06,
+            "energy_to_reproduce": 0.72,
+        })
+
+        random.seed(12345)
+        simulation = Simulation(1280, 720, settings)
+        for _ in range(2400):
+            simulation.step()
+            if simulation.population == 0:
+                break
+
+        self.assertGreater(simulation.population, 0)
 
 
 if __name__ == "__main__":

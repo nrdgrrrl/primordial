@@ -25,6 +25,14 @@ _ZONE_BG_COLORS: dict[str, tuple[int, int, int]] = {
     "deep_trench":    (15, 5, 80),
 }
 
+_ZONE_LABELS: dict[str, str] = {
+    "warm_vent": "Warm Vent",
+    "open_water": "Open Water",
+    "kelp_forest": "Kelp Forest",
+    "hunting_ground": "Hunting Ground",
+    "deep_trench": "Deep Trench",
+}
+
 if TYPE_CHECKING:
     from ..simulation.simulation import Simulation
     from ..settings import Settings
@@ -226,6 +234,8 @@ class Renderer:
         t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
             self._draw_zone_backgrounds(simulation)
+            if self.hud.visible:
+                self._draw_zone_labels(simulation)
         timings["zones_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Territory shimmer (beneath creatures) ---
@@ -352,6 +362,25 @@ class Renderer:
                     )
 
         self.screen.blit(self._zone_surf_cached, (0, 0))
+
+    def _draw_zone_labels(self, simulation: "Simulation") -> None:
+        """Draw subtle zone labels to support ecological review."""
+        for zone in simulation.zone_manager.zones:
+            label = _ZONE_LABELS.get(zone.zone_type)
+            if not label:
+                continue
+            text_surface = self._debug_font.render(label, True, (220, 235, 245))
+            panel = pygame.Surface(
+                (text_surface.get_width() + 10, text_surface.get_height() + 6),
+                pygame.SRCALPHA,
+            )
+            panel.fill((8, 16, 26, 120))
+            panel.blit(text_surface, (5, 3))
+            pos = (
+                int(zone.x - panel.get_width() / 2),
+                int(zone.y - panel.get_height() / 2),
+            )
+            self.screen.blit(panel, pos)
 
     # ------------------------------------------------------------------
     # Attack lines
