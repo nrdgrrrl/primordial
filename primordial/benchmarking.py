@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
 import os
@@ -25,22 +23,16 @@ from .main import (
     run_bounded_session,
 )
 from .rendering import Renderer
+from .scenarios import (
+    SCENARIOS,
+    ScenarioDefinition as BenchmarkScenario,
+    apply_scenario_settings,
+    get_scenario,
+    list_scenarios,
+)
 from .settings import Settings
 from .simulation import Simulation
 from .simulation.zones import ZONE_DEFINITIONS
-
-
-@dataclass(frozen=True)
-class BenchmarkScenario:
-    """Static benchmark scenario definition."""
-
-    id: str
-    mode: str
-    seed: int
-    width: int = 1280
-    height: int = 720
-    settings_overrides: dict[str, Any] = field(default_factory=dict)
-    mode_overrides: dict[str, Any] = field(default_factory=dict)
 
 
 OBSERVABILITY_CORE_SECTIONS = (
@@ -52,77 +44,6 @@ OBSERVABILITY_CORE_SECTIONS = (
 OBSERVABILITY_OPTIONAL_SECTIONS_BY_MODE: dict[str, tuple[str, ...]] = {
     "boids": ("flocks",),
     "predator_prey": ("species",),
-}
-
-
-SCENARIOS: dict[str, BenchmarkScenario] = {
-    "energy_medium": BenchmarkScenario(
-        id="energy_medium",
-        mode="energy",
-        seed=104729,
-        settings_overrides={
-            "visual_theme": "ocean",
-            "fullscreen": False,
-            "target_fps": 60,
-            "show_hud": False,
-            "initial_population": 100,
-            "max_population": 130,
-            "food_spawn_rate": 0.55,
-            "food_max_particles": 220,
-            "food_cycle_enabled": True,
-            "food_cycle_period": 1800,
-            "mutation_rate": 0.06,
-            "cosmic_ray_rate": 0.0003,
-            "energy_to_reproduce": 0.82,
-            "zone_count": 5,
-            "zone_strength": 0.8,
-            "death_particle_count": 5,
-        },
-    ),
-    "predator_prey_medium": BenchmarkScenario(
-        id="predator_prey_medium",
-        mode="predator_prey",
-        seed=161803,
-        settings_overrides={
-            "visual_theme": "ocean",
-            "fullscreen": False,
-            "target_fps": 60,
-            "show_hud": False,
-            "food_max_particles": 260,
-            "zone_count": 5,
-            "zone_strength": 0.75,
-            "death_particle_count": 5,
-        },
-        mode_overrides={
-            "initial_population": 110,
-            "predator_fraction": 0.28,
-            "food_spawn_rate": 0.55,
-            "mutation_rate": 0.06,
-            "energy_to_reproduce": 0.72,
-        },
-    ),
-    "boids_dense": BenchmarkScenario(
-        id="boids_dense",
-        mode="boids",
-        seed=130363,
-        settings_overrides={
-            "visual_theme": "ocean",
-            "fullscreen": False,
-            "target_fps": 60,
-            "show_hud": False,
-            "zone_count": 5,
-            "zone_strength": 0.5,
-            "death_particle_count": 5,
-        },
-        mode_overrides={
-            "initial_population": 100,
-            "max_population": 120,
-            "mutation_rate": 0.05,
-            "energy_to_reproduce": 0.80,
-            "food_cycle_enabled": False,
-            "zone_strength": 0.5,
-        },
-    ),
 }
 
 
@@ -160,11 +81,6 @@ class ObservabilityCollector:
         return summary
 
 
-def list_scenarios() -> list[str]:
-    """Return the supported benchmark scenario identifiers."""
-    return sorted(SCENARIOS)
-
-
 def run_benchmark(
     scenario_id: str,
     *,
@@ -172,11 +88,7 @@ def run_benchmark(
     output_path: str | Path,
 ) -> dict[str, Any]:
     """Run a bounded benchmark scenario and write a JSON summary."""
-    if scenario_id not in SCENARIOS:
-        valid = ", ".join(list_scenarios())
-        raise ValueError(f"Unknown scenario '{scenario_id}'. Valid scenarios: {valid}")
-
-    scenario = SCENARIOS[scenario_id]
+    scenario = get_scenario(scenario_id)
     output = Path(output_path)
 
     random.seed(scenario.seed)
@@ -188,7 +100,7 @@ def run_benchmark(
         pygame.display.set_caption(f"Primordial Benchmark: {scenario.id}")
 
         settings = Settings()
-        _apply_benchmark_settings(settings, scenario)
+        apply_scenario_settings(settings, scenario)
 
         simulation = Simulation(scenario.width, scenario.height, settings)
         renderer = Renderer(screen, settings, debug=False)
@@ -227,17 +139,6 @@ def run_benchmark(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return payload
-
-
-def _apply_benchmark_settings(settings: Settings, scenario: BenchmarkScenario) -> None:
-    settings.mode_params = deepcopy(settings.DEFAULT_MODE_PARAMS)
-    settings.sim_mode = scenario.mode
-    for key, value in scenario.settings_overrides.items():
-        setattr(settings, key, value)
-    if scenario.mode in settings.mode_params:
-        settings.mode_params[scenario.mode].update(scenario.mode_overrides)
-
-
 def _build_benchmark_payload(
     *,
     scenario: BenchmarkScenario,

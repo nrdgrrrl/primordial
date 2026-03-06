@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "milestone": {
+    "id": "M4",
+    "title": "Rich Observability and Analysis Tooling",
+    "spec": "docs/spec_M4.md"
+  },
+  "checks": [
+    {
+      "id": "m4_spec_exists",
+      "type": "file_exists",
+      "description": "M4 has an explicit bounded spec.",
+      "path": "docs/spec_M4.md"
+    },
+    {
+      "id": "analysis_tests_exist",
+      "type": "file_exists",
+      "description": "M4 adds focused history and comparison tests.",
+      "path": "tests/test_analysis_artifacts.py"
+    },
+    {
+      "id": "unit_regressions",
+      "type": "command",
+      "description": "All regression tests, including M4 analysis coverage, pass.",
+      "run": ".venv/bin/python -m unittest discover -s tests -p 'test_*.py'",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "energy_history_runs",
+      "type": "command",
+      "description": "Energy-mode history artifact generation succeeds.",
+      "run": ".venv/bin/python tools/analysis_history.py --scenario energy_medium --steps 180 --sample-every 30 --output build/milestones/M4/energy_history.json",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "energy_history_json",
+      "type": "json_assert",
+      "description": "Energy-mode history artifact exposes the stable shared core shape.",
+      "path": "build/milestones/M4/energy_history.json",
+      "assertions": [
+        {
+          "path": "schema_version",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "path": "artifact.kind",
+          "op": "eq",
+          "value": "primordial.history"
+        },
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "energy_medium"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "energy"
+        },
+        {
+          "path": "series.0.step",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "path": "series.0.population",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "series.0.lineages.active",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "series.0.zone_occupancy.open_water",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "summary.population.end",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "summary.lineage_history.active_end",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "summary.zone_history.dominant_zone_end",
+          "op": "exists"
+        }
+      ]
+    },
+    {
+      "id": "predator_prey_history_runs",
+      "type": "command",
+      "description": "Predator-prey history artifact generation succeeds.",
+      "run": ".venv/bin/python tools/analysis_history.py --scenario predator_prey_medium --steps 180 --sample-every 30 --output build/milestones/M4/predator_prey_history.json",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "predator_prey_history_json",
+      "type": "json_assert",
+      "description": "Predator-prey history artifact preserves the shared core and species section.",
+      "path": "build/milestones/M4/predator_prey_history.json",
+      "assertions": [
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "predator_prey"
+        },
+        {
+          "path": "series.0.species.predators",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "series.0.species.prey",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "summary.zone_history.dominant_zone_switches",
+          "op": "ge",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "boids_history_runs",
+      "type": "command",
+      "description": "Boids history artifact generation succeeds.",
+      "run": ".venv/bin/python tools/analysis_history.py --scenario boids_dense --steps 180 --sample-every 30 --output build/milestones/M4/boids_history.json",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "boids_history_json",
+      "type": "json_assert",
+      "description": "Boids history artifact preserves the shared core and flock section.",
+      "path": "build/milestones/M4/boids_history.json",
+      "assertions": [
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "boids"
+        },
+        {
+          "path": "series.0.flocks.count",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "series.0.flocks.largest",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "summary.lineage_history.dominant_switches",
+          "op": "ge",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "same_seed_compare_runs",
+      "type": "command",
+      "description": "Same-seed comparison report generation succeeds and exercises deterministic repeatability.",
+      "run": ".venv/bin/python tools/analysis_compare.py --scenario energy_medium --seed 424242 --steps 180 --sample-every 30 --output build/milestones/M4/energy_same_seed_compare.json",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "same_seed_compare_json",
+      "type": "json_assert",
+      "description": "Same-seed comparison proves bounded deterministic repeatability and emits comparable deltas.",
+      "path": "build/milestones/M4/energy_same_seed_compare.json",
+      "assertions": [
+        {
+          "path": "schema_version",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "path": "report.kind",
+          "op": "eq",
+          "value": "primordial.history_compare"
+        },
+        {
+          "path": "comparable.scenario_id_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "comparable.mode_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "comparable.sample_steps_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "determinism.same_seed",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "determinism.exact_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "delta.population_end",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "path": "delta.lineages_active_end",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "history_inspector_runs",
+      "type": "command",
+      "description": "The minimal artifact inspection command runs against a generated history artifact.",
+      "run": ".venv/bin/python tools/inspect_history.py --history build/milestones/M4/energy_history.json",
+      "timeout_seconds": 60,
+      "expect": {
+        "exit_code": 0,
+        "stdout_contains": [
+          "Scenario: energy_medium",
+          "Dominant zone"
+        ]
+      }
+    }
+  ],
+  "manual_review": [
+    "Confirm the implementation stayed artifact-first and did not broaden into renderer replay or renderer-state persistence.",
+    "Confirm the implementation did not repurpose the M3.5 save/load boundary into a high-frequency replay archive.",
+    "Confirm the minimal inspection surface is sufficient to inspect M4 artifacts without becoming a broad HUD/settings/dashboard rewrite."
+  ]
+}

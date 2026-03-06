@@ -339,6 +339,9 @@ primordial/
 └── .gitignore
 ```
 
+
+
+
 ## Extending Primordial
 
 ### Adding a New Simulation Mode
@@ -426,6 +429,47 @@ pyinstaller primordial.spec
 | Windows x86-64 | ❌ untested | Should work; `dist/primordial.exe` produced cross-platform build is untested |
 | macOS | ❌ untested | `--noconsole` becomes `--windowed`; may need code signing |
 
-## License
+## M4 analysis tools
 
-MIT License
+The project includes offline M4 analysis tools for recording sampled history artifacts, generating seeded comparison reports, and inspecting artifacts from the command line.
+
+Current tools:
+- `tools/analysis_history.py`
+- `tools/analysis_compare.py`
+- `tools/inspect_history.py`
+
+These are development and analysis tools, not an in-game dashboard or visual replay system.
+
+### Quick start
+
+Record a history artifact:
+
+```bash
+.venv/bin/python tools/analysis_history.py \
+  --scenario energy_medium \
+  --steps 180 \
+  --sample-every 30 \
+  --output build/milestones/M4/energy_history.json
+Inspect the artifact:
+
+.venv/bin/python tools/inspect_history.py \
+  --history build/milestones/M4/energy_history.json
+
+Generate a same-seed comparison report:
+
+.venv/bin/python tools/analysis_compare.py \
+  --scenario energy_medium \
+  --seed 424242 \
+  --steps 180 \
+  --sample-every 30 \
+  --output build/milestones/M4/energy_same_seed_compare.json
+
+Recommended representative scenarios:
+
+energy_medium
+
+predator_prey_medium
+
+boids_dense
+
+Use these tools when you want to understand long-run behavior, inspect lineage and zone trends, or verify whether behavior changes are real rather than random variance.
