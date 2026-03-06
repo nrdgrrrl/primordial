@@ -279,20 +279,51 @@ def _simulation_timing_is_suppressed(
     )
 
 
-def _run_single_simulation_step(
+def _run_planned_simulation_steps(
     simulation: Simulation,
     runtime_loop: FixedStepLoopState,
     *,
     allow_step: bool,
 ) -> tuple[float, int]:
-    """Run the existing one-step behavior through the shared loop scaffold."""
+    """Execute the currently budgeted fixed-step simulation work for one frame."""
     if not allow_step:
         return 0.0, 0
 
+    sim_steps = runtime_loop.planned_sim_steps()
+    if sim_steps <= 0:
+        return 0.0, 0
+
     sim_start = time.perf_counter()
-    simulation.step()
-    runtime_loop.buffer_simulation_attacks(simulation)
-    return (time.perf_counter() - sim_start) * 1000.0, 1
+    for _ in range(sim_steps):
+        simulation.step()
+        runtime_loop.buffer_simulation_attacks(simulation)
+    runtime_loop.accumulator_seconds = max(
+        0.0,
+        runtime_loop.accumulator_seconds
+        - (sim_steps * runtime_loop.config.fixed_timestep_seconds),
+    )
+    return (time.perf_counter() - sim_start) * 1000.0, sim_steps
+
+
+def _advance_fixed_step_frame(
+    simulation: Simulation,
+    runtime_loop: FixedStepLoopState,
+    *,
+    allow_simulation: bool,
+    now: float | None = None,
+) -> tuple[float, int, int, float]:
+    """Sample elapsed time, execute planned fixed steps, and report clamp deltas."""
+    dropped_frame_count_before = runtime_loop.dropped_frame_count
+    dropped_seconds_before = runtime_loop.dropped_seconds_total
+    runtime_loop.sample_elapsed(now=now, allow_accumulate=allow_simulation)
+    sim_ms, sim_steps = _run_planned_simulation_steps(
+        simulation,
+        runtime_loop,
+        allow_step=allow_simulation,
+    )
+    clamp_frames = runtime_loop.dropped_frame_count - dropped_frame_count_before
+    dropped_seconds = runtime_loop.dropped_seconds_total - dropped_seconds_before
+    return sim_ms, sim_steps, clamp_frames, dropped_seconds
 
 
 def _build_frame_metrics(
@@ -507,16 +538,11 @@ def main(
             _transition_dir,
             _transition_alpha,
         )
-        dropped_frame_count_before = runtime_loop.dropped_frame_count
-        dropped_seconds_before = runtime_loop.dropped_seconds_total
-        runtime_loop.sample_elapsed(allow_accumulate=not sim_suppressed)
-        sim_ms, sim_steps = _run_single_simulation_step(
+        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
             simulation,
             runtime_loop,
-            allow_step=not sim_suppressed,
+            allow_simulation=not sim_suppressed,
         )
-        clamp_frames = runtime_loop.dropped_frame_count - dropped_frame_count_before
-        dropped_seconds = runtime_loop.dropped_seconds_total - dropped_seconds_before
 
         debug_payload = timing_collector.latest_debug_payload()
         debug_payload.update({
@@ -669,16 +695,11 @@ def _run_profile_session(
                 end_time = 0.0
                 break
         event_ms = (time.perf_counter() - event_start) * 1000.0
-        dropped_frame_count_before = runtime_loop.dropped_frame_count
-        dropped_seconds_before = runtime_loop.dropped_seconds_total
-        runtime_loop.sample_elapsed()
-        sim_ms, sim_steps = _run_single_simulation_step(
+        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
             simulation,
             runtime_loop,
-            allow_step=True,
+            allow_simulation=True,
         )
-        clamp_frames = runtime_loop.dropped_frame_count - dropped_frame_count_before
-        dropped_seconds = runtime_loop.dropped_seconds_total - dropped_seconds_before
         debug_payload = timing_collector.latest_debug_payload()
         debug_payload.update({
             "event_ms": event_ms,
