@@ -9,6 +9,7 @@ from typing import Any
 
 from ..settings import Settings
 from .creature import Creature
+from .depth import DEPTH_MID, clamp_depth_band, depth_band_from_preference
 from .food import Food, FoodManager
 from .genome import Genome
 from .simulation import Simulation
@@ -202,6 +203,7 @@ def _serialize_creature(creature: Creature) -> dict[str, Any]:
         "age": creature.age,
         "lineage_id": creature.lineage_id,
         "species": creature.species,
+        "depth_band": creature.depth_band,
         "genome": _serialize_genome(creature.genome),
         "motion_state": {
             "swim_phase": creature._swim_phase,
@@ -224,6 +226,9 @@ def _deserialize_creature(payload: dict[str, Any]) -> Creature:
         age=int(payload["age"]),
         lineage_id=int(payload["lineage_id"]),
         species=str(payload.get("species", "none")),
+        depth_band=clamp_depth_band(
+            int(payload.get("depth_band", depth_band_from_preference(genome.depth_preference)))
+        ),
         _glyph_phase=genome.hue * 6.28,
         _swim_phase=float(motion_state["swim_phase"]),
         _dart_burst_remaining=int(motion_state["dart_burst_remaining"]),
@@ -252,6 +257,7 @@ def _serialize_genome(genome: Genome) -> dict[str, float]:
         "motion_style": genome.motion_style,
         "longevity": genome.longevity,
         "conformity": genome.conformity,
+        "depth_preference": genome.depth_preference,
     }
 
 
@@ -272,6 +278,7 @@ def _deserialize_genome(payload: dict[str, Any]) -> Genome:
         motion_style=float(payload["motion_style"]),
         longevity=float(payload["longevity"]),
         conformity=float(payload["conformity"]),
+        depth_preference=float(payload.get("depth_preference", 0.5)),
     )
 
 
@@ -284,6 +291,7 @@ def _serialize_food_manager(food_manager: FoodManager) -> dict[str, Any]:
                 "x": food.x,
                 "y": food.y,
                 "energy": food.energy,
+                "depth_band": food.depth_band,
             }
             for food in food_manager.particles
         ],
@@ -306,6 +314,7 @@ def _deserialize_food_manager(
             x=float(food["x"]),
             y=float(food["y"]),
             energy=float(food["energy"]),
+            depth_band=clamp_depth_band(int(food.get("depth_band", DEPTH_MID))),
             twinkle_phase=0.0,
         )
         for food in payload["particles"]

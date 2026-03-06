@@ -8,6 +8,16 @@ from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from .creature import Creature
+from .depth import (
+    DEPTH_BANDS,
+    DEPTH_DEEP,
+    DEPTH_MID,
+    DEPTH_SURFACE,
+    clamp_depth_band,
+    depth_band_name,
+    depth_band_separation,
+    step_depth_band_toward,
+)
 from .food import FoodManager
 from .genome import Genome
 from .zones import ZoneManager
@@ -16,6 +26,17 @@ if TYPE_CHECKING:
     from ..settings import Settings
 
 AttackRenderEvent = tuple[float, float, float, float, float]
+
+_DEPTH_SENSING_FACTORS = {
+    0: 1.0,
+    1: 0.6,
+    2: 0.25,
+}
+_PREDATOR_PREY_FOOD_DEPTH_WEIGHTS = (
+    (DEPTH_SURFACE, 0.45),
+    (DEPTH_MID, 0.35),
+    (DEPTH_DEEP, 0.20),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +225,7 @@ class Simulation:
                     motion_style=random.random(),
                     longevity=random.random(),
                     conformity=random.random(),
+                    depth_preference=random.uniform(0.4, 1.0),
                 )
                 creature = Creature.spawn(
                     self.width, self.height, genome=genome,
@@ -227,6 +249,7 @@ class Simulation:
                     motion_style=random.random(),
                     longevity=random.random(),
                     conformity=random.random(),
+                    depth_preference=random.uniform(0.0, 0.75),
                 )
                 creature = Creature.spawn(
                     self.width, self.height, genome=genome,
@@ -235,8 +258,11 @@ class Simulation:
 
             self.creatures.append(creature)
 
-        # Seed food for prey
-        self.food_manager.spawn_batch(200)
+        # Seed food for prey across the bounded depth bands.
+        for _ in range(200):
+            self.food_manager.spawn(
+                depth_band=self._choose_predator_prey_food_depth_band()
+            )
 
     def _spawn_initial_population_boids(self) -> None:
         """Spawn boids population with mid-range conformity/efficiency."""
@@ -259,6 +285,7 @@ class Simulation:
                 motion_style=random.random(),
                 longevity=random.random(),
                 conformity=random.uniform(0.3, 0.7),
+                depth_preference=random.random(),
             )
             creature = Creature.spawn(
                 self.width, self.height, genome=genome,
@@ -344,6 +371,7 @@ class Simulation:
             creature.glyph_surface = None
             creature.rotation_angle = 0.0
             creature._glyph_phase = creature.genome.hue * 6.28
+            creature.clamp_depth_band()
             if self.settings.sim_mode != "boids":
                 creature.flock_id = -1
 
@@ -485,6 +513,11 @@ class Simulation:
         for creature in self.creatures:
             if creature.species not in {"predator", "prey"}:
                 creature.species = "predator" if creature.genome.aggression >= 0.5 else "prey"
+            self._update_predator_prey_depth_band(
+                creature,
+                creature.get_preferred_depth_band(),
+                urgency=0.04,
+            )
 
             if creature.species == "predator":
                 self._predator_hunt_prey(creature, creature_bucket)
@@ -561,11 +594,18 @@ class Simulation:
             predator.wander(self.settings.creature_speed_base)
             return
 
+        self._update_predator_prey_depth_band(
+            predator,
+            best_prey.depth_band,
+            urgency=0.24,
+        )
+
         sensed_prey = self._sense_target_position(
             predator,
             best_prey.x,
             best_prey.y,
             sense_multiplier=2.0,
+            target_depth_band=best_prey.depth_band,
         )
         if sensed_prey is None:
             predator.wander(self.settings.creature_speed_base)
@@ -579,7 +619,11 @@ class Simulation:
 
         # Contact kill: distance < sum of radii
         contact_dist = predator.get_radius() + best_prey.get_radius()
-        if best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
+        if (
+            best_dist_sq < (contact_dist * contact_dist)
+            and best_prey.energy > 0.0
+            and predator.depth_band == best_prey.depth_band
+        ):
             # Transfer from prey to predator; prevents multiple predators
             # farming energy from an already-dead prey in the same frame.
             energy_gain = min(0.5, best_prey.energy)
@@ -611,11 +655,19 @@ class Simulation:
         if nearest_pred is None:
             return False
 
+        if prey.depth_band == nearest_pred.depth_band:
+            self._update_predator_prey_depth_band(
+                prey,
+                self._pick_depth_escape_band(prey, nearest_pred.depth_band),
+                urgency=0.35,
+            )
+
         sensed_predator = self._sense_target_position(
             prey,
             nearest_pred.x,
             nearest_pred.y,
             sense_multiplier=1.2,
+            target_depth_band=nearest_pred.depth_band,
         )
         if sensed_predator is None:
             return False
@@ -1151,7 +1203,23 @@ class Simulation:
         spawn_count = int(rate)
         if random.random() < (rate - spawn_count):
             spawn_count += 1
+        if self.settings.sim_mode == "predator_prey":
+            for _ in range(spawn_count):
+                self.food_manager.spawn(
+                    depth_band=self._choose_predator_prey_food_depth_band()
+                )
+            return
         self.food_manager.spawn_batch(spawn_count)
+
+    def _choose_predator_prey_food_depth_band(self) -> int:
+        """Sample a bounded food depth band for predator-prey ecology."""
+        roll = random.random()
+        total = 0.0
+        for band, weight in _PREDATOR_PREY_FOOD_DEPTH_WEIGHTS:
+            total += weight
+            if roll <= total:
+                return band
+        return DEPTH_DEEP
 
     def _get_food_rate(self) -> float:
         """Current food spawn rate accounting for the boom/bust cycle."""
@@ -1178,7 +1246,7 @@ class Simulation:
             creature,
             absolute_radius=sense_override,
         )
-        nearest_food = self.food_manager.find_nearest(creature.x, creature.y, sense_radius)
+        nearest_food = self._find_nearest_food_for_creature(creature, sense_radius)
 
         if nearest_food:
             sensed_food = self._sense_target_position(
@@ -1186,6 +1254,7 @@ class Simulation:
                 nearest_food.x,
                 nearest_food.y,
                 absolute_radius=sense_override,
+                target_depth_band=nearest_food.depth_band,
             )
             if sensed_food is None:
                 creature.wander(self.settings.creature_speed_base)
@@ -1207,6 +1276,102 @@ class Simulation:
                 self.food_manager.remove(nearest_food)
         else:
             creature.wander(self.settings.creature_speed_base)
+
+    def _find_nearest_food_for_creature(
+        self,
+        creature: Creature,
+        sense_radius: float,
+    ):
+        """Find food, keeping predator-prey access bounded by the creature's band."""
+        if not (
+            self.settings.sim_mode == "predator_prey"
+            and creature.species == "prey"
+        ):
+            return self.food_manager.find_nearest(creature.x, creature.y, sense_radius)
+
+        nearest_food = self.food_manager.find_nearest(
+            creature.x,
+            creature.y,
+            sense_radius,
+            depth_band=creature.depth_band,
+        )
+        if nearest_food is not None:
+            return nearest_food
+
+        preferred_band = creature.get_preferred_depth_band()
+        target_band: int | None = None
+        target_food = None
+        best_score = float("inf")
+        for band in DEPTH_BANDS:
+            if band == creature.depth_band:
+                continue
+            candidate = self.food_manager.find_nearest(
+                creature.x,
+                creature.y,
+                sense_radius,
+                depth_band=band,
+            )
+            if candidate is None:
+                continue
+            distance = creature.distance_to(candidate.x, candidate.y, self.width, self.height)
+            score = distance + depth_band_separation(creature.depth_band, band) * 30.0
+            if score < best_score:
+                best_score = score
+                target_band = band
+                target_food = candidate
+
+        if target_band is not None:
+            if target_band != preferred_band or creature.energy < 0.35:
+                self._update_predator_prey_depth_band(
+                    creature,
+                    target_band,
+                    urgency=0.22,
+                )
+            else:
+                self._update_predator_prey_depth_band(
+                    creature,
+                    preferred_band,
+                    urgency=0.12,
+                )
+            if creature.depth_band == target_band:
+                return target_food
+
+        self._update_predator_prey_depth_band(
+            creature,
+            preferred_band,
+            urgency=0.08,
+        )
+        return None
+
+    def _update_predator_prey_depth_band(
+        self,
+        creature: Creature,
+        target_band: int,
+        *,
+        urgency: float,
+    ) -> None:
+        """Move a predator-prey creature by at most one bounded band."""
+        if self.settings.sim_mode != "predator_prey":
+            return
+        target = clamp_depth_band(target_band)
+        creature.clamp_depth_band()
+        if creature.depth_band == target:
+            return
+        if random.random() < max(0.0, min(1.0, urgency)):
+            creature.depth_band = step_depth_band_toward(creature.depth_band, target)
+
+    def _pick_depth_escape_band(self, creature: Creature, threat_band: int) -> int:
+        """Choose a non-threat band closest to the creature preference."""
+        preferred_band = creature.get_preferred_depth_band()
+        candidates = [band for band in DEPTH_BANDS if band != clamp_depth_band(threat_band)]
+        return min(
+            candidates,
+            key=lambda band: (
+                depth_band_separation(band, preferred_band),
+                depth_band_separation(band, creature.depth_band),
+                band,
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Creature spatial bucket
@@ -1439,6 +1604,7 @@ class Simulation:
         *,
         multiplier: float = 1.0,
         absolute_radius: float | None = None,
+        target_depth_band: int | None = None,
     ) -> float:
         """Return the zone-adjusted sensing range for a creature."""
         base_radius = (
@@ -1447,7 +1613,14 @@ class Simulation:
             else creature.get_effective_sense_radius() * multiplier
         )
         zone_modifier = self.zone_manager.get_sensing_modifier_at(creature.x, creature.y)
-        return max(1.0, base_radius * zone_modifier)
+        depth_modifier = 1.0
+        if (
+            self.settings.sim_mode == "predator_prey"
+            and target_depth_band is not None
+        ):
+            separation = depth_band_separation(creature.depth_band, target_depth_band)
+            depth_modifier = _DEPTH_SENSING_FACTORS[separation]
+        return max(1.0, base_radius * zone_modifier * depth_modifier)
 
     def _sense_target_position(
         self,
@@ -1457,12 +1630,14 @@ class Simulation:
         *,
         sense_multiplier: float = 1.0,
         absolute_radius: float | None = None,
+        target_depth_band: int | None = None,
     ) -> tuple[float, float] | None:
         """Return a noisy sensed target position when the target is in sensing range."""
         effective_radius = self._get_effective_sensing_range(
             creature,
             multiplier=sense_multiplier,
             absolute_radius=absolute_radius,
+            target_depth_band=target_depth_band,
         )
         distance = creature.distance_to(target_x, target_y, self.width, self.height)
         if distance > effective_radius:
@@ -1506,6 +1681,7 @@ class Simulation:
             "aggression",
             "efficiency",
             "longevity",
+            "depth_preference",
         )
         bucket_changes = 0
         max_diff = 0.0
@@ -1584,6 +1760,13 @@ class Simulation:
         prey_speed = sum(c.genome.speed for c in preys) / max(1, len(preys))
         return pred_speed, prey_speed
 
+    def get_depth_band_counts(self) -> dict[str, int]:
+        """Count living creatures in each bounded depth band."""
+        counts = {depth_band_name(band): 0 for band in DEPTH_BANDS}
+        for creature in self.creatures:
+            counts[depth_band_name(creature.depth_band)] += 1
+        return counts
+
     def get_zone_occupancy_counts(self) -> dict[str, int]:
         """Count creatures by their dominant containing zone."""
         return self.zone_manager.get_zone_occupancy_counts(self.creatures)
@@ -1615,6 +1798,7 @@ class Simulation:
             "speed", "size", "sense_radius", "aggression", "efficiency",
             "complexity", "symmetry", "stroke_scale", "appendages",
             "rotation_speed", "motion_style", "longevity", "conformity",
+            "depth_preference",
         ]
         n = len(self.creatures)
         best_trait = "—"
@@ -1673,7 +1857,7 @@ class Simulation:
             "hue", "saturation", "efficiency",
             "complexity", "symmetry", "stroke_scale",
             "appendages", "rotation_speed", "motion_style", "longevity",
-            "conformity",
+            "conformity", "depth_preference",
         ]
         totals = {t: 0.0 for t in trait_names}
 
@@ -1701,9 +1885,18 @@ class Simulation:
 
         if self.settings.sim_mode == "predator_prey":
             predator_count, prey_count = self.get_species_counts()
+            depth_counts = self.get_depth_band_counts()
             snapshot["species"] = {
                 "predators": predator_count,
                 "prey": prey_count,
+            }
+            snapshot["depth"] = {
+                **depth_counts,
+                "occupied_bands": sum(1 for count in depth_counts.values() if count > 0),
+                "mean_preference": (
+                    sum(creature.genome.depth_preference for creature in self.creatures) / len(self.creatures)
+                    if self.creatures else 0.0
+                ),
             }
         elif self.settings.sim_mode == "boids":
             flock_count, avg_flock_size, largest_flock = self.get_flock_stats()

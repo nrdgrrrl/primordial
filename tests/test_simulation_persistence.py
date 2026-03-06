@@ -102,6 +102,14 @@ class SimulationPersistenceTests(unittest.TestCase):
             saved_payload = build_snapshot(simulation)
             loaded_payload = build_snapshot(loaded)
             self.assertEqual(saved_payload, loaded_payload)
+            if saved_payload["world"]["creatures"]:
+                self.assertIn("depth_band", saved_payload["world"]["creatures"][0])
+                self.assertIn(
+                    "depth_preference",
+                    saved_payload["world"]["creatures"][0]["genome"],
+                )
+            if saved_payload["world"]["food"]["particles"]:
+                self.assertIn("depth_band", saved_payload["world"]["food"]["particles"][0])
 
             reference_rng_state = random.getstate()
             random.setstate(reference_rng_state)

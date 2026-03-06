@@ -7,6 +7,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
+from .depth import DEPTH_MID, clamp_depth_band, depth_band_from_preference, depth_band_name
 from .genome import Genome
 
 
@@ -39,6 +40,9 @@ class Creature:
 
     # Species (predator_prey mode: "prey" | "predator"; "none" in other modes)
     species: str = field(default="none")
+
+    # Bounded ecological depth band. Kept orthogonal to x/y world position.
+    depth_band: int = field(default=DEPTH_MID)
 
     # Flock assignment (boids mode: >= 0 = flock id; -1 = loner / not in boids mode)
     flock_id: int = field(default=-1)
@@ -374,6 +378,18 @@ class Creature:
         size_factor = 0.5 + self.genome.size * 0.5
         return speed * size_factor * 0.001
 
+    def get_preferred_depth_band(self) -> int:
+        """Return the bounded preferred depth band implied by the genome."""
+        return depth_band_from_preference(self.genome.depth_preference)
+
+    def clamp_depth_band(self) -> None:
+        """Clamp the creature depth band into the supported range."""
+        self.depth_band = clamp_depth_band(self.depth_band)
+
+    def get_depth_band_name(self) -> str:
+        """Return the stable label for the current depth band."""
+        return depth_band_name(self.depth_band)
+
     @classmethod
     def spawn(
         cls,
@@ -383,6 +399,7 @@ class Creature:
         lineage_id: int = 0,
         energy: float = 0.5,
         species: str = "none",
+        depth_band: int | None = None,
     ) -> "Creature":
         """
         Spawn a new creature at a random position.
@@ -408,5 +425,10 @@ class Creature:
             energy=energy,
             lineage_id=lineage_id,
             species=species,
+            depth_band=(
+                depth_band_from_preference(g.depth_preference)
+                if depth_band is None
+                else clamp_depth_band(depth_band)
+            ),
             _glyph_phase=g.hue * 6.28,
         )

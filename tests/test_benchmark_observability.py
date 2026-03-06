@@ -44,6 +44,7 @@ class BenchmarkObservabilityTests(unittest.TestCase):
             self.assertIn(zone_type, snapshot["zone_occupancy"])
         self.assertIn("unzoned", snapshot["zone_occupancy"])
         self.assertNotIn("species", snapshot)
+        self.assertNotIn("depth", snapshot)
         self.assertNotIn("flocks", snapshot)
 
     def test_simulation_observability_snapshot_only_includes_mode_specific_sections_when_applicable(self) -> None:
@@ -59,9 +60,11 @@ class BenchmarkObservabilityTests(unittest.TestCase):
         ).build_observability_snapshot()
 
         self.assertIn("species", predator_prey_snapshot)
+        self.assertIn("depth", predator_prey_snapshot)
         self.assertNotIn("flocks", predator_prey_snapshot)
         self.assertIn("flocks", boids_snapshot)
         self.assertNotIn("species", boids_snapshot)
+        self.assertNotIn("depth", boids_snapshot)
 
     def test_benchmark_scenarios_cover_representative_modes(self) -> None:
         self.assertEqual(
@@ -77,7 +80,7 @@ class BenchmarkObservabilityTests(unittest.TestCase):
         expected_shared_keys = {"population", *OBSERVABILITY_CORE_SECTIONS}
         expected_optional_keys = {
             "energy_medium": set(),
-            "predator_prey_medium": {"species"},
+            "predator_prey_medium": {"species", "depth"},
             "boids_dense": {"flocks"},
         }
 
@@ -111,6 +114,7 @@ class BenchmarkObservabilityTests(unittest.TestCase):
                     if scenario_id == "predator_prey_medium":
                         self.assertGreaterEqual(payload["observability"]["species"]["predators"], 1)
                         self.assertGreaterEqual(payload["observability"]["species"]["prey"], 1)
+                        self.assertGreaterEqual(payload["observability"]["depth"]["occupied_bands"], 1)
 
 
 if __name__ == "__main__":

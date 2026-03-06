@@ -189,6 +189,12 @@ def format_history_summary(history: dict[str, Any]) -> str:
             f"predators={summary['species_history']['predators_end']} "
             f"prey={summary['species_history']['prey_end']}"
         )
+    if "depth_history" in summary:
+        lines.append(
+            "Depth end: "
+            f"{summary['depth_history']['dominant_band_end']} "
+            f"(occupied {summary['depth_history']['occupied_bands_end']})"
+        )
     if "flock_history" in summary:
         lines.append(
             "Flocks end: "
@@ -231,6 +237,8 @@ def _build_history_sample(simulation: Simulation, *, step: int) -> dict[str, Any
     }
     if "species" in snapshot:
         sample["species"] = dict(snapshot["species"])
+    if "depth" in snapshot:
+        sample["depth"] = dict(snapshot["depth"])
     if "flocks" in snapshot:
         sample["flocks"] = dict(snapshot["flocks"])
     return sample
@@ -288,6 +296,24 @@ def _build_history_summary(series: list[dict[str, Any]]) -> dict[str, Any]:
             "prey_end": prey[-1],
             "predators_mean": mean(predators),
             "prey_mean": mean(prey),
+        }
+    if "depth" in series[-1]:
+        dominant_bands = [
+            max(
+                ("surface", "mid", "deep"),
+                key=lambda band: (sample["depth"][band], band),
+            )
+            for sample in series
+        ]
+        summary["depth_history"] = {
+            "dominant_band_end": dominant_bands[-1],
+            "occupied_bands_end": series[-1]["depth"]["occupied_bands"],
+            "dominant_band_switches": _count_switches(dominant_bands),
+            "mean_counts": {
+                band: mean(sample["depth"][band] for sample in series)
+                for band in ("surface", "mid", "deep")
+            },
+            "mean_preference": mean(sample["depth"]["mean_preference"] for sample in series),
         }
     if "flocks" in series[-1]:
         flock_counts = [sample["flocks"]["count"] for sample in series]

@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
+from .depth import DEPTH_MID, clamp_depth_band
+
 
 @dataclass
 class Food:
@@ -17,6 +19,7 @@ class Food:
     x: float
     y: float
     energy: float = 0.1  # Energy provided when consumed
+    depth_band: int = DEPTH_MID
     twinkle_phase: float = field(default_factory=lambda: random.uniform(0, 6.28))
 
 
@@ -89,7 +92,13 @@ class FoodManager:
                 self.buckets[bucket] = []
             self.buckets[bucket].append(food)
 
-    def spawn(self, x: float | None = None, y: float | None = None) -> Food | None:
+    def spawn(
+        self,
+        x: float | None = None,
+        y: float | None = None,
+        *,
+        depth_band: int = DEPTH_MID,
+    ) -> Food | None:
         """
         Spawn a new food particle.
 
@@ -108,7 +117,7 @@ class FoodManager:
         if y is None:
             y = random.uniform(0, self.world_height)
 
-        food = Food(x=x, y=y)
+        food = Food(x=x, y=y, depth_band=clamp_depth_band(depth_band))
         self.particles.append(food)
 
         bucket = self._get_bucket(x, y)
@@ -149,7 +158,12 @@ class FoodManager:
                 self.buckets[bucket].remove(food)
 
     def find_nearest(
-        self, x: float, y: float, max_radius: float
+        self,
+        x: float,
+        y: float,
+        max_radius: float,
+        *,
+        depth_band: int | None = None,
     ) -> Food | None:
         """
         Find the nearest food particle within a radius.
@@ -175,6 +189,8 @@ class FoodManager:
                 continue
 
             for food in self.buckets[bucket]:
+                if depth_band is not None and food.depth_band != depth_band:
+                    continue
                 # Calculate toroidal distance squared
                 dx = abs(food.x - x)
                 dy = abs(food.y - y)

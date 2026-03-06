@@ -27,8 +27,8 @@ The first implementation of M5 should be intentionally narrow.
 ### Required scope
 
 - Add a bounded depth representation for relevant world entities.
-  - This may be a continuous bounded scalar or a small set of discrete bands.
-  - The implementation should choose the simpler option that fits the existing code architecture with the least disruption.
+  - For this repository, the first pass should use a small set of discrete depth bands rather than a free continuous z coordinate.
+  - Depth must stay orthogonal to the existing 2D toroidal x/y world so movement, wrapping, and spatial buckets do not need a broad rewrite.
 - Add depth-aware ecological interaction rules for at least:
   - resource access or availability
   - predator-prey detection and or attack success
@@ -43,11 +43,12 @@ The first implementation of M5 should be intentionally narrow.
 
 Unless the repository audit strongly contradicts this, the coding agent should prefer the smallest coherent version below:
 
-- creature depth as a bounded scalar or banded state
-- food or hazard distribution varying by depth
-- detection or attack success reduced by cross-depth separation
-- inherited or mutating preferred depth band or tolerance
-- minimal depth readout in existing observability artifacts
+- target `predator_prey` first rather than forcing depth into every mode
+- creature current depth as exactly three bounded bands
+- food particles assigned to depth bands so prey food access is layered by depth
+- predator-prey detection and or attack success reduced by cross-depth separation
+- one inheritable genome scalar for depth preference, mapped to the bounded bands at decision time
+- minimal depth readout added to existing observability artifacts rather than a new dashboard surface
 
 ## Non-goals
 
@@ -78,7 +79,7 @@ Because the roadmap language allows multiple forms of depth, this spec chooses b
 
 ### Decision 1, depth model
 
-Prefer discrete depth bands over continuous free-depth movement unless the repository already has a natural scalar state and using it is clearly lower risk.
+Use exactly three discrete depth bands in the first version unless later audit evidence overturns this.
 
 Reason:
 - easier persistence
@@ -86,24 +87,26 @@ Reason:
 - easier rendering legibility
 - lower interaction-surface risk
 - more bounded acceptance checks
+- avoids touching the existing x/y toroidal movement and spatial-bucket code as if M5 were a coordinate-system rewrite
 
 ### Decision 2, ecological pressure
 
-Require at least one of these and prefer exactly one or two in the first version:
-- resource layering by depth
-- hazard or comfort band by depth
-- predation or detection penalty across depth separation
+Require resource layering by depth and predation or detection penalty across depth separation in the first version.
+
+For this repository, prefer depth-layered food over retrofitting the zone system into a pseudo-3D habitat model unless a later audit proves zone reuse is materially cheaper.
 
 Reason:
 Depth should create ecological tension, not just another coordinate.
 
 ### Decision 3, inheritance
 
-If the current genome and mutation model can absorb one bounded depth preference or tolerance trait locally, do that. If not, use a lighter lineage-associated or agent-local preference for the first version and stop rather than redesigning the genome system.
+If the current genome and mutation model can absorb one bounded depth preference trait locally, do that and keep it as a single normalized scalar that mutates like existing traits. Map that scalar to the bounded depth bands during simulation logic.
+
+If even that local extension proves unsafe, use a lighter agent-local preference for the first version and stop rather than redesigning the genome system.
 
 ### Decision 4, rendering
 
-Use the smallest existing render seam that can make depth readable. Do not introduce speculative presentation systems.
+Use the smallest existing creature-render seam that can make depth readable, such as brightness, glow, or slight size bias in the current ocean-theme creature draw path. Do not introduce speculative presentation systems.
 
 ## Affected subsystems
 
@@ -136,6 +139,8 @@ If repository audit shows mode architectures differ materially, M5 should target
 
 Only generalize across multiple modes if the existing architecture already makes it cheap and low risk.
 
+For this repository, multi-mode coverage should not be part of first-pass M5 acceptance. A later pass may reuse the shared seams for `energy` if that proves structurally cheap after predator-prey is working.
+
 ## Acceptance shape
 
 M5 acceptance should prove four things:
@@ -145,6 +150,8 @@ M5 acceptance should prove four things:
 3. it persists through save/load where applicable
 4. it is observable enough to review for stratification or specialization
 
+The default acceptance target should be a seeded `predator_prey` run plus focused unit tests, not all modes.
+
 ## Testing and measurement plan
 
 Acceptance and tests should include:
@@ -153,7 +160,7 @@ Acceptance and tests should include:
 - unit tests for depth-aware detection or predation logic
 - unit tests for depth-layered resource or comfort logic
 - snapshot round-trip tests for new depth state
-- one bounded scenario run that emits a structured artifact proving depth summaries are present
+- one bounded `predator_prey` scenario run that emits a structured artifact proving depth summaries are present
 - one comparison or invariant test showing same-seed runs are deterministic or tightly bounded under the existing project standard
 
 ## Review questions
@@ -185,4 +192,3 @@ Pass B or C must halt and report instead of improvising if:
 - observability cannot show depth effects without reopening M4-level dashboard work
 - predator-prey logic and resource logic are too fragmented to modify without a broad architecture merge
 - mode coverage is genuinely contradictory and no single-mode bounded slice exists
-

@@ -44,12 +44,15 @@ class AnalysisArtifactTests(unittest.TestCase):
         self.assertEqual(energy["artifact"]["kind"], "primordial.history")
         self.assertEqual(set(energy["series"][0]), expected_shared_keys)
         self.assertIn("species", predator_prey["series"][0])
+        self.assertIn("depth", predator_prey["series"][0])
         self.assertNotIn("flocks", predator_prey["series"][0])
         self.assertIn("flocks", boids["series"][0])
         self.assertNotIn("species", boids["series"][0])
+        self.assertNotIn("depth", boids["series"][0])
         self.assertEqual(energy["summary"]["sample_steps"], [0, 10, 20, 30])
         self.assertGreaterEqual(energy["summary"]["lineage_history"]["active_end"], 1)
         self.assertIn("open_water", energy["summary"]["zone_history"]["mean_counts"])
+        self.assertIn("depth_history", predator_prey["summary"])
 
     def test_same_seed_history_is_exactly_repeatable(self) -> None:
         left = generate_history_artifact(
@@ -107,6 +110,7 @@ class AnalysisArtifactTests(unittest.TestCase):
         self.assertIn("Scenario: predator_prey_medium", text)
         self.assertIn("Dominant zone:", text)
         self.assertIn("Species end:", text)
+        self.assertIn("Depth end:", text)
 
 
 if __name__ == "__main__":

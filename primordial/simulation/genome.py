@@ -37,6 +37,9 @@ class Genome:
     # Flocking trait (used in boids mode; inert in other modes — drifts randomly)
     conformity: float = 0.5  # 0=individualist, 1=strong flock aligner
 
+    # Depth trait (used in predator_prey mode for bounded band preference)
+    depth_preference: float = 0.5  # 0=surface, 0.5=mid, 1=deep
+
     @classmethod
     def random(cls) -> "Genome":
         """Create a genome with random trait values between 0.0 and 1.0."""
@@ -56,6 +59,7 @@ class Genome:
             motion_style=random.random(),
             longevity=random.random(),
             conformity=random.random(),
+            depth_preference=random.random(),
         )
 
     def mutate(self, mutation_rate: float) -> "Genome":
@@ -93,6 +97,7 @@ class Genome:
             motion_style=mutate_trait(self.motion_style),
             longevity=mutate_trait(self.longevity),
             conformity=mutate_trait(self.conformity),
+            depth_preference=mutate_trait(self.depth_preference),
         )
 
     def mutate_one(self, std: float = 0.15) -> tuple["Genome", str]:
@@ -110,7 +115,7 @@ class Genome:
             "hue", "saturation", "efficiency",
             "complexity", "symmetry", "stroke_scale",
             "appendages", "rotation_speed", "motion_style", "longevity",
-            "conformity",
+            "conformity", "depth_preference",
         ]
         trait = random.choice(trait_names)
         new_val = max(0.0, min(1.0, getattr(self, trait) + random.gauss(0, std)))
@@ -138,4 +143,5 @@ class Genome:
             motion_style=self.motion_style,
             longevity=self.longevity,
             conformity=self.conformity,
+            depth_preference=self.depth_preference,
         )

@@ -223,6 +223,14 @@ class OceanTheme(Theme):
 
         return surface
 
+    def _get_depth_render_style(self, creature: Creature) -> tuple[float, float]:
+        """Return compact scale and brightness cues for bounded depth."""
+        if creature.depth_band <= 0:
+            return 1.08, 1.12
+        if creature.depth_band >= 2:
+            return 0.92, 0.82
+        return 1.0, 1.0
+
     def render_creature_trail(
         self,
         creature: Creature,
@@ -238,8 +246,10 @@ class OceanTheme(Theme):
             return
 
         color = self.get_creature_color(creature.genome.hue, creature.genome.saturation)
+        depth_scale, depth_brightness = self._get_depth_render_style(creature)
+        color = tuple(min(255, int(channel * depth_brightness)) for channel in color)
         pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature._glyph_phase)
-        radius = max(4, int(creature.get_radius() * pulse * scale))
+        radius = max(4, int(creature.get_radius() * pulse * scale * depth_scale))
 
         trail_len = len(creature.trail)
         for i, (tx, ty) in enumerate(creature.trail):
@@ -263,11 +273,13 @@ class OceanTheme(Theme):
         color = self.get_creature_color(
             creature.genome.hue, creature.genome.saturation
         )
+        depth_scale, depth_brightness = self._get_depth_render_style(creature)
+        color = tuple(min(255, int(channel * depth_brightness)) for channel in color)
 
         # Pulsing animation — uses _glyph_phase so boids flocks can phase-sync
         pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature._glyph_phase)
         base_radius = creature.get_radius()
-        radius = max(4, int(base_radius * pulse * scale))
+        radius = max(4, int(base_radius * pulse * scale * depth_scale))
 
         # Draw bloom glow halo (behind the glyph)
         glow = self._create_glow_surface(radius, color, 140)
@@ -276,7 +288,7 @@ class OceanTheme(Theme):
         surface.blit(glow, pos)
 
         # Draw glyph on top of glow
-        glyph_size = max(32, int(base_radius * 4 * scale))
+        glyph_size = max(32, int(base_radius * 4 * scale * depth_scale))
         # Invalidate glyph cache if size has changed significantly
         if (creature.glyph_surface is not None and
                 abs(creature.glyph_surface.get_width() - glyph_size) > 4):
@@ -318,6 +330,10 @@ class OceanTheme(Theme):
         twinkle = math.sin(time * 5 + food.twinkle_phase) * 0.3 + 0.7
         # twinkle ∈ [0.4, 1.0] → index ∈ [0, 15]
         idx = min(15, max(0, int((twinkle - 0.4) / 0.6 * 15)))
+        if food.depth_band == 0:
+            idx = min(15, idx + 1)
+        elif food.depth_band == 2:
+            idx = max(0, idx - 3)
         surface.blit(self._food_surfs[idx], (int(food.x) - 6, int(food.y) - 6))
 
     def render_ambient(

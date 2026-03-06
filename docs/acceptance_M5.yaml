@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "milestone": {
+    "id": "M5",
+    "title": "Constrained Depth-Layer Model",
+    "spec": "docs/spec_M5.md"
+  },
+  "checks": [
+    {
+      "id": "m5_spec_exists",
+      "type": "file_exists",
+      "description": "M5 has an explicit bounded spec.",
+      "path": "docs/spec_M5.md"
+    },
+    {
+      "id": "m5_acceptance_exists",
+      "type": "file_exists",
+      "description": "M5 has a machine-readable acceptance contract.",
+      "path": "docs/acceptance_M5.yaml"
+    },
+    {
+      "id": "depth_tests_exist",
+      "type": "file_exists",
+      "description": "M5 adds focused depth-layer regression coverage.",
+      "path": "tests/test_m5_depth.py"
+    },
+    {
+      "id": "unit_regressions",
+      "type": "command",
+      "description": "All regression tests, including M5 depth coverage, pass.",
+      "run": ".venv/bin/python -m unittest discover -s tests -p 'test_*.py'",
+      "timeout_seconds": 240,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "depth_module_tests",
+      "type": "command",
+      "description": "Focused M5 depth tests pass, including interaction and persistence checks.",
+      "run": ".venv/bin/python -m unittest tests.test_m5_depth",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "predator_prey_depth_history_runs",
+      "type": "command",
+      "description": "A bounded predator-prey history run emits a depth-aware artifact through the existing M4 history seam.",
+      "run": ".venv/bin/python tools/analysis_history.py --scenario predator_prey_medium --steps 240 --sample-every 40 --output build/milestones/M5/predator_prey_depth_history.json",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "predator_prey_depth_history_json",
+      "type": "json_assert",
+      "description": "The bounded history artifact exposes depth summaries without requiring new dashboard work.",
+      "path": "build/milestones/M5/predator_prey_depth_history.json",
+      "assertions": [
+        {
+          "path": "schema_version",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "path": "artifact.kind",
+          "op": "eq",
+          "value": "primordial.history"
+        },
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "predator_prey_medium"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "predator_prey"
+        },
+        {
+          "path": "series.0.species.predators",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "series.0.species.prey",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "series.0.depth.surface",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "series.0.depth.mid",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "series.0.depth.deep",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "series.0.depth.occupied_bands",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "summary.depth_history.dominant_band_end",
+          "op": "exists"
+        },
+        {
+          "path": "summary.depth_history.occupied_bands_end",
+          "op": "ge",
+          "value": 2
+        },
+        {
+          "path": "summary.depth_history.mean_counts.surface",
+          "op": "ge",
+          "value": 0.0
+        },
+        {
+          "path": "summary.depth_history.mean_counts.mid",
+          "op": "ge",
+          "value": 0.0
+        },
+        {
+          "path": "summary.depth_history.mean_counts.deep",
+          "op": "ge",
+          "value": 0.0
+        }
+      ]
+    },
+    {
+      "id": "predator_prey_depth_compare_runs",
+      "type": "command",
+      "description": "Same-seed comparison remains deterministic after depth is added.",
+      "run": ".venv/bin/python tools/analysis_compare.py --scenario predator_prey_medium --seed 161803 --steps 240 --sample-every 40 --output build/milestones/M5/predator_prey_depth_compare.json",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "predator_prey_depth_compare_json",
+      "type": "json_assert",
+      "description": "The depth-aware history comparison stays exactly repeatable for same-seed runs.",
+      "path": "build/milestones/M5/predator_prey_depth_compare.json",
+      "assertions": [
+        {
+          "path": "schema_version",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "path": "report.kind",
+          "op": "eq",
+          "value": "primordial.history_compare"
+        },
+        {
+          "path": "comparable.scenario_id_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "comparable.mode_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "comparable.sample_steps_match",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "determinism.same_seed",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "determinism.exact_match",
+          "op": "eq",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "manual_review": [
+    "Confirm M5 stayed predator-prey-first and did not force multi-mode depth support into the first pass.",
+    "Confirm the depth model stayed bounded and banded, without rewriting x/y movement, toroidal wrapping, or spatial bucketing into full 3D.",
+    "Confirm ecological consequences are real: depth changes food access and predator-prey sensing and or attack outcomes, rather than merely adding a stored field.",
+    "Confirm persistence reused the existing snapshot seam with local field additions only and did not require a broad save-format redesign.",
+    "Confirm observability reused the existing M4 artifact/reporting seam and did not reopen M4 as a dashboard or in-game UI milestone.",
+    "Confirm rendering support stayed minimal and explanatory, using a cheap creature-render cue rather than a renderer or camera overhaul."
+  ]
+}

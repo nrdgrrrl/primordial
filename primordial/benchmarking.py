@@ -43,7 +43,7 @@ OBSERVABILITY_CORE_SECTIONS = (
 
 OBSERVABILITY_OPTIONAL_SECTIONS_BY_MODE: dict[str, tuple[str, ...]] = {
     "boids": ("flocks",),
-    "predator_prey": ("species",),
+    "predator_prey": ("species", "depth"),
 }
 
 
@@ -198,4 +198,12 @@ def _build_empty_observability_summary(mode: str) -> dict[str, Any]:
             summary[section] = {"predators": 0, "prey": 0}
         elif section == "flocks":
             summary[section] = {"count": 0, "average_size": 0.0, "largest": 0, "loners": 0}
+        elif section == "depth":
+            summary[section] = {
+                "surface": 0,
+                "mid": 0,
+                "deep": 0,
+                "occupied_bands": 0,
+                "mean_preference": 0.0,
+            }
     return summary
