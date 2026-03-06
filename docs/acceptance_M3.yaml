@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "milestone": {
+    "id": "M3",
+    "title": "Ecology Deepening and Imperfect Sensing",
+    "spec": "docs/spec_M3.md"
+  },
+  "checks": [
+    {
+      "id": "m3_spec_exists",
+      "type": "file_exists",
+      "description": "M3 has an explicit bounded spec.",
+      "path": "docs/spec_M3.md"
+    },
+    {
+      "id": "ecology_sensing_tests_exist",
+      "type": "file_exists",
+      "description": "M3 adds focused ecology and sensing tests.",
+      "path": "tests/test_ecology_sensing.py"
+    },
+    {
+      "id": "unit_regressions",
+      "type": "command",
+      "description": "All regression and M3-focused tests pass.",
+      "run": ".venv/bin/python -m unittest discover -s tests -p 'test_*.py'",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "energy_medium_benchmark_runs",
+      "type": "command",
+      "description": "Energy benchmark still runs under M3.",
+      "run": ".venv/bin/python tools/benchmark.py --scenario energy_medium --seconds 5 --output build/milestones/M3/energy_medium.json",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "energy_medium_benchmark_json",
+      "type": "json_assert",
+      "description": "Energy benchmark preserves the shared observability core.",
+      "path": "build/milestones/M3/energy_medium.json",
+      "assertions": [
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "energy_medium"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "energy"
+        },
+        {
+          "path": "performance.frames_rendered",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.sim_steps_total",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.population.mean",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.lineages.active",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.strategies.hunters",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.zone_occupancy.open_water",
+          "op": "ge",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "predator_prey_medium_benchmark_runs",
+      "type": "command",
+      "description": "Predator-prey benchmark still runs under M3.",
+      "run": ".venv/bin/python tools/benchmark.py --scenario predator_prey_medium --seconds 5 --output build/milestones/M3/predator_prey_medium.json",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "predator_prey_medium_benchmark_json",
+      "type": "json_assert",
+      "description": "Predator-prey benchmark preserves the shared core and species summary.",
+      "path": "build/milestones/M3/predator_prey_medium.json",
+      "assertions": [
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "predator_prey_medium"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "predator_prey"
+        },
+        {
+          "path": "performance.frames_rendered",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.sim_steps_total",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.population.mean",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.lineages.active",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.strategies.hunters",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.zone_occupancy.open_water",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.species.predators",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.species.prey",
+          "op": "ge",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "boids_dense_benchmark_runs",
+      "type": "command",
+      "description": "Boids remains a bounded regression scenario under M3.",
+      "run": ".venv/bin/python tools/benchmark.py --scenario boids_dense --seconds 5 --output build/milestones/M3/boids_dense.json",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "boids_dense_benchmark_json",
+      "type": "json_assert",
+      "description": "Boids benchmark still emits the shared core plus boids-specific flock summary.",
+      "path": "build/milestones/M3/boids_dense.json",
+      "assertions": [
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "boids_dense"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "boids"
+        },
+        {
+          "path": "performance.frames_rendered",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.sim_steps_total",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.population.mean",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.lineages.active",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.strategies.hunters",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.zone_occupancy.open_water",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.flocks.count",
+          "op": "ge",
+          "value": 0
+        }
+      ]
+    }
+  ]
+}

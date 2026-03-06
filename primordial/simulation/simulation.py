@@ -391,6 +391,7 @@ class Simulation:
             energy_cost *= 1.0 + overcrowding_penalty
             energy_cost += aggression * 0.0012
             energy_cost += creature.genome.longevity * 0.0004
+            energy_cost += self._get_sensing_upkeep_cost(creature)
             zone_mult = self.zone_manager.get_energy_modifier(creature)
             energy_cost *= zone_mult
 
@@ -464,6 +465,7 @@ class Simulation:
                 if prey_scarce:
                     energy_cost *= 2.0
                 energy_cost += creature.genome.longevity * 0.0004
+                energy_cost += self._get_sensing_upkeep_cost(creature)
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
@@ -482,6 +484,7 @@ class Simulation:
 
                 energy_cost = creature.get_movement_cost()
                 energy_cost += creature.genome.longevity * 0.0004
+                energy_cost += self._get_sensing_upkeep_cost(creature)
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
@@ -512,7 +515,7 @@ class Simulation:
         self, predator: Creature, bucket: dict
     ) -> None:
         """Predator seeks nearest prey; kills on contact."""
-        sense = predator.get_effective_sense_radius() * 2.0
+        sense = self._get_effective_sensing_range(predator, multiplier=2.0)
         best_prey: Creature | None = None
         best_dist_sq = sense * sense
 
@@ -528,8 +531,18 @@ class Simulation:
             predator.wander(self.settings.creature_speed_base)
             return
 
+        sensed_prey = self._sense_target_position(
+            predator,
+            best_prey.x,
+            best_prey.y,
+            sense_multiplier=2.0,
+        )
+        if sensed_prey is None:
+            predator.wander(self.settings.creature_speed_base)
+            return
+
         predator.steer_toward(
-            best_prey.x, best_prey.y,
+            sensed_prey[0], sensed_prey[1],
             self.settings.creature_speed_base,
             self.width, self.height,
         )
@@ -553,7 +566,7 @@ class Simulation:
 
         Returns True if actively fleeing.
         """
-        flee_sense = prey.get_effective_sense_radius() * 1.2
+        flee_sense = self._get_effective_sensing_range(prey, multiplier=1.2)
         nearest_pred: Creature | None = None
         nearest_dist = flee_sense
 
@@ -568,8 +581,17 @@ class Simulation:
         if nearest_pred is None:
             return False
 
+        sensed_predator = self._sense_target_position(
+            prey,
+            nearest_pred.x,
+            nearest_pred.y,
+            sense_multiplier=1.2,
+        )
+        if sensed_predator is None:
+            return False
+
         # Steer away from predator
-        dx, dy = self._wrapped_delta(nearest_pred.x, nearest_pred.y, prey.x, prey.y)
+        dx, dy = self._wrapped_delta(sensed_predator[0], sensed_predator[1], prey.x, prey.y)
         dist = math.sqrt(dx * dx + dy * dy)
         if dist > 0:
             dx /= dist
@@ -584,12 +606,8 @@ class Simulation:
         """Cosmic ray in predator_prey mode — can flip species on aggression crossing 0.5."""
         new_genome, mutated_trait = creature.genome.mutate_one(std=0.15)
 
-        if mutated_trait == "hue":
-            hue_diff = abs(new_genome.hue - creature.genome.hue)
-            if hue_diff > 0.5:
-                hue_diff = 1.0 - hue_diff
-            if hue_diff > 0.2:
-                creature.lineage_id = self._alloc_lineage_id()
+        if self._should_branch_lineage(creature.genome, new_genome, hue_threshold=0.2):
+            creature.lineage_id = self._alloc_lineage_id()
 
         # Species flip if aggression crosses 0.5 boundary
         if mutated_trait == "aggression":
@@ -612,13 +630,10 @@ class Simulation:
 
         creature.energy /= 2
         offspring_genome = creature.genome.mutate(mutation_rate)
-
-        hue_diff = abs(offspring_genome.hue - creature.genome.hue)
-        if hue_diff > 0.5:
-            hue_diff = 1.0 - hue_diff
-
-        offspring_lineage = (
-            self._alloc_lineage_id() if hue_diff > 0.15 else creature.lineage_id
+        offspring_lineage = self._branch_lineage_id(
+            creature.lineage_id,
+            creature.genome,
+            offspring_genome,
         )
 
         offspring = Creature(
@@ -913,13 +928,10 @@ class Simulation:
 
         creature.energy /= 2
         offspring_genome = creature.genome.mutate(mutation_rate)
-
-        hue_diff = abs(offspring_genome.hue - creature.genome.hue)
-        if hue_diff > 0.5:
-            hue_diff = 1.0 - hue_diff
-
-        offspring_lineage = (
-            self._alloc_lineage_id() if hue_diff > 0.15 else creature.lineage_id
+        offspring_lineage = self._branch_lineage_id(
+            creature.lineage_id,
+            creature.genome,
+            offspring_genome,
         )
 
         offspring = Creature(
@@ -1074,13 +1086,10 @@ class Simulation:
 
         creature.energy /= 2
         offspring_genome = creature.genome.mutate(mutation_rate)
-
-        hue_diff = abs(offspring_genome.hue - creature.genome.hue)
-        if hue_diff > 0.5:
-            hue_diff = 1.0 - hue_diff
-
-        offspring_lineage = (
-            self._alloc_lineage_id() if hue_diff > 0.15 else creature.lineage_id
+        offspring_lineage = self._branch_lineage_id(
+            creature.lineage_id,
+            creature.genome,
+            offspring_genome,
         )
 
         # Offspring drifts away slowly from parent
@@ -1130,12 +1139,25 @@ class Simulation:
         self, creature: Creature, sense_override: float | None = None
     ) -> None:
         """Handle creature food-seeking behaviour."""
-        sense_radius = sense_override if sense_override is not None else creature.get_effective_sense_radius()
+        sense_radius = self._get_effective_sensing_range(
+            creature,
+            absolute_radius=sense_override,
+        )
         nearest_food = self.food_manager.find_nearest(creature.x, creature.y, sense_radius)
 
         if nearest_food:
+            sensed_food = self._sense_target_position(
+                creature,
+                nearest_food.x,
+                nearest_food.y,
+                absolute_radius=sense_override,
+            )
+            if sensed_food is None:
+                creature.wander(self.settings.creature_speed_base)
+                return
+
             creature.steer_toward(
-                nearest_food.x, nearest_food.y,
+                sensed_food[0], sensed_food[1],
                 self.settings.creature_speed_base,
                 self.width, self.height,
             )
@@ -1227,7 +1249,7 @@ class Simulation:
         self, creature: Creature, bucket: dict[tuple[int, int], list[Creature]]
     ) -> bool:
         """Hunter behaviour for energy mode."""
-        sense = creature.get_effective_sense_radius() * 1.5
+        sense = self._get_effective_sensing_range(creature, multiplier=1.5)
         my_radius = creature.get_radius()
         max_prey_radius = my_radius * 1.3
 
@@ -1249,8 +1271,17 @@ class Simulation:
         if best_prey is None:
             return False
 
+        sensed_prey = self._sense_target_position(
+            creature,
+            best_prey.x,
+            best_prey.y,
+            sense_multiplier=1.5,
+        )
+        if sensed_prey is None:
+            return False
+
         creature.steer_toward(
-            best_prey.x, best_prey.y,
+            sensed_prey[0], sensed_prey[1],
             self.settings.creature_speed_base,
             self.width, self.height,
         )
@@ -1306,14 +1337,10 @@ class Simulation:
 
     def _apply_cosmic_ray(self, creature: Creature) -> None:
         """Apply a spontaneous single-trait mutation to a living creature."""
-        new_genome, mutated_trait = creature.genome.mutate_one(std=0.15)
+        new_genome, _mutated_trait = creature.genome.mutate_one(std=0.15)
 
-        if mutated_trait == "hue":
-            hue_diff = abs(new_genome.hue - creature.genome.hue)
-            if hue_diff > 0.5:
-                hue_diff = 1.0 - hue_diff
-            if hue_diff > 0.2:
-                creature.lineage_id = self._alloc_lineage_id()
+        if self._should_branch_lineage(creature.genome, new_genome, hue_threshold=0.2):
+            creature.lineage_id = self._alloc_lineage_id()
 
         creature.genome = new_genome  # type: ignore[misc]
         creature.glyph_surface = None
@@ -1332,13 +1359,10 @@ class Simulation:
         creature.energy /= 2
 
         offspring_genome = creature.genome.mutate(self.settings.mutation_rate)
-
-        hue_diff = abs(offspring_genome.hue - creature.genome.hue)
-        if hue_diff > 0.5:
-            hue_diff = 1.0 - hue_diff
-
-        offspring_lineage = (
-            self._alloc_lineage_id() if hue_diff > 0.15 else creature.lineage_id
+        offspring_lineage = self._branch_lineage_id(
+            creature.lineage_id,
+            creature.genome,
+            offspring_genome,
         )
 
         offspring = Creature(
@@ -1369,6 +1393,104 @@ class Simulation:
             return 0.0
         excess = (population_ratio - 0.5) * 2
         return excess * excess
+
+    def _get_sensing_upkeep_cost(self, creature: Creature) -> float:
+        """Sense range maintenance cost used by the M3 tradeoff."""
+        return creature.genome.sense_radius * 0.00025
+
+    def _get_effective_sensing_range(
+        self,
+        creature: Creature,
+        *,
+        multiplier: float = 1.0,
+        absolute_radius: float | None = None,
+    ) -> float:
+        """Return the zone-adjusted sensing range for a creature."""
+        base_radius = (
+            absolute_radius
+            if absolute_radius is not None
+            else creature.get_effective_sense_radius() * multiplier
+        )
+        zone_modifier = self.zone_manager.get_sensing_modifier_at(creature.x, creature.y)
+        return max(1.0, base_radius * zone_modifier)
+
+    def _sense_target_position(
+        self,
+        creature: Creature,
+        target_x: float,
+        target_y: float,
+        *,
+        sense_multiplier: float = 1.0,
+        absolute_radius: float | None = None,
+    ) -> tuple[float, float] | None:
+        """Return a noisy sensed target position, or None if the target is missed."""
+        effective_radius = self._get_effective_sensing_range(
+            creature,
+            multiplier=sense_multiplier,
+            absolute_radius=absolute_radius,
+        )
+        distance = creature.distance_to(target_x, target_y, self.width, self.height)
+        if distance > effective_radius:
+            return None
+
+        distance_ratio = distance / max(1.0, effective_radius)
+        reliability = max(0.15, 1.0 - 0.85 * distance_ratio)
+        if random.random() > reliability:
+            return None
+
+        zone_modifier = self.zone_manager.get_sensing_modifier_at(creature.x, creature.y)
+        noise_scale = (
+            (6.0 + 0.12 * effective_radius)
+            * distance_ratio
+            * max(0.35, 2.0 - zone_modifier)
+        )
+        estimated_x = (target_x + random.gauss(0.0, noise_scale)) % self.width
+        estimated_y = (target_y + random.gauss(0.0, noise_scale)) % self.height
+        return estimated_x, estimated_y
+
+    def _branch_lineage_id(
+        self,
+        current_lineage_id: int,
+        parent_genome: Genome,
+        child_genome: Genome,
+    ) -> int:
+        """Allocate a new lineage when the child diverges materially from the parent."""
+        if self._should_branch_lineage(parent_genome, child_genome):
+            return self._alloc_lineage_id()
+        return current_lineage_id
+
+    def _should_branch_lineage(
+        self,
+        parent_genome: Genome,
+        child_genome: Genome,
+        *,
+        hue_threshold: float = 0.15,
+    ) -> bool:
+        """Return True when divergence is large enough to treat as a new lineage."""
+        hue_diff = abs(child_genome.hue - parent_genome.hue)
+        if hue_diff > 0.5:
+            hue_diff = 1.0 - hue_diff
+        if hue_diff > hue_threshold:
+            return True
+
+        ecological_traits = (
+            "speed",
+            "sense_radius",
+            "aggression",
+            "efficiency",
+            "longevity",
+        )
+        bucket_changes = 0
+        max_diff = 0.0
+        for trait_name in ecological_traits:
+            parent_value = getattr(parent_genome, trait_name)
+            child_value = getattr(child_genome, trait_name)
+            diff = abs(child_value - parent_value)
+            max_diff = max(max_diff, diff)
+            if int(parent_value * 4) != int(child_value * 4):
+                bucket_changes += 1
+
+        return bucket_changes >= 2 or max_diff >= 0.28
 
     # ------------------------------------------------------------------
     # Death processing

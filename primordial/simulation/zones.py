@@ -66,6 +66,15 @@ ZONE_DEFINITIONS: dict[str, dict] = {
 
 _ZONE_TYPE_ORDER = list(ZONE_DEFINITIONS.keys())
 
+# How clearly local creatures can sense targets in each zone.
+_ZONE_SENSING_MODIFIERS: dict[str, float] = {
+    "warm_vent": 0.95,
+    "open_water": 1.15,
+    "kelp_forest": 0.72,
+    "hunting_ground": 1.10,
+    "deep_trench": 0.68,
+}
+
 
 # ---------------------------------------------------------------------------
 # Zone dataclass (pure data, no pygame)
@@ -201,17 +210,7 @@ class ZoneManager:
         counts: dict[str, int] = {k: 0 for k in ZONE_DEFINITIONS}
         counts["unzoned"] = 0
         for creature in creatures:
-            best_zone: Zone | None = None
-            best_weight = 0.0
-            for zone in self.zones:
-                dx = creature.x - zone.x
-                dy = creature.y - zone.y
-                dist = math.sqrt(dx * dx + dy * dy)
-                if dist < zone.radius:
-                    weight = 1.0 - dist / zone.radius
-                    if weight > best_weight:
-                        best_weight = weight
-                        best_zone = zone
+            best_zone = self._strongest_zone_at(creature.x, creature.y)
             if best_zone is None:
                 counts["unzoned"] += 1
             else:
@@ -234,3 +233,26 @@ class ZoneManager:
         if counts[best] == 0:
             return "\u2014"
         return ZONE_DEFINITIONS[best]["label"]
+
+    def get_sensing_modifier_at(self, x: float, y: float) -> float:
+        """Return the sensing clarity modifier at a position."""
+        zone = self._strongest_zone_at(x, y)
+        if zone is None:
+            return 1.0
+        return _ZONE_SENSING_MODIFIERS.get(zone.zone_type, 1.0)
+
+    def _strongest_zone_at(self, x: float, y: float) -> Zone | None:
+        """Return the strongest containing zone at a position, if any."""
+        best_zone: Zone | None = None
+        best_weight = 0.0
+        for zone in self.zones:
+            dx = x - zone.x
+            dy = y - zone.y
+            dist = math.sqrt(dx * dx + dy * dy)
+            if dist >= zone.radius:
+                continue
+            weight = 1.0 - dist / zone.radius
+            if weight > best_weight:
+                best_weight = weight
+                best_zone = zone
+        return best_zone
