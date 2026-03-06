@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "milestone": {
+    "id": "M2",
+    "title": "Performance Headroom and Lightweight Observability",
+    "spec": "docs/spec_M2.md"
+  },
+  "checks": [
+    {
+      "id": "unit_regressions",
+      "type": "command",
+      "description": "Existing regression tests must still pass.",
+      "run": ".venv/bin/python -m unittest discover -s tests -p 'test_*.py'",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "benchmark_script_exists",
+      "type": "file_exists",
+      "description": "M2 adds a bounded benchmark entry point.",
+      "path": "tools/benchmark.py"
+    },
+    {
+      "id": "benchmark_observability_tests_exist",
+      "type": "file_exists",
+      "description": "M2 adds focused tests for benchmark and observability output.",
+      "path": "tests/test_benchmark_observability.py"
+    },
+    {
+      "id": "energy_medium_benchmark_runs",
+      "type": "command",
+      "description": "Energy-mode benchmark runs and writes a structured summary.",
+      "run": ".venv/bin/python tools/benchmark.py --scenario energy_medium --seconds 10 --output build/milestones/M2/energy_medium.json",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "energy_medium_benchmark_json",
+      "type": "json_assert",
+      "description": "Energy benchmark JSON contains timing, correctness, and observability fields.",
+      "path": "build/milestones/M2/energy_medium.json",
+      "assertions": [
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "energy_medium"
+        },
+        {
+          "path": "run.duration_seconds",
+          "op": "ge",
+          "value": 10.0
+        },
+        {
+          "path": "performance.frames_rendered",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.sim_steps_total",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.frame_ms.mean",
+          "op": "le",
+          "value": 18.0
+        },
+        {
+          "path": "performance.frame_ms.p95",
+          "op": "le",
+          "value": 30.0
+        },
+        {
+          "path": "performance.clamp_drop.frame_count",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "path": "observability.population.mean",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.lineages.active",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.strategies.hunters",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.strategies.grazers",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.zone_occupancy.open_water",
+          "op": "ge",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "boids_dense_benchmark_runs",
+      "type": "command",
+      "description": "Boids benchmark runs and writes a structured summary.",
+      "run": ".venv/bin/python tools/benchmark.py --scenario boids_dense --seconds 10 --output build/milestones/M2/boids_dense.json",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "boids_dense_benchmark_json",
+      "type": "json_assert",
+      "description": "Boids benchmark JSON proves both performance headroom and boids observability output.",
+      "path": "build/milestones/M2/boids_dense.json",
+      "assertions": [
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "boids_dense"
+        },
+        {
+          "path": "run.duration_seconds",
+          "op": "ge",
+          "value": 10.0
+        },
+        {
+          "path": "performance.frames_rendered",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.sim_steps_total",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.frame_ms.mean",
+          "op": "le",
+          "value": 24.0
+        },
+        {
+          "path": "performance.frame_ms.p95",
+          "op": "le",
+          "value": 36.0
+        },
+        {
+          "path": "performance.clamp_drop.frame_count",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "path": "observability.population.mean",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.lineages.active",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.flocks.count",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.flocks.largest",
+          "op": "ge",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

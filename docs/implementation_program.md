@@ -2,375 +2,212 @@
 
 ## Purpose
 
-This document translates the long-range roadmap into an execution structure that an AI coding agent can work from safely.
+This document defines the development process for the project.
 
-The roadmap is the strategic north star. It explains what matters, what order matters, and what the project should avoid doing too early.
+The roadmap explains long-term direction. This implementation program explains how work is planned, executed, and verified milestone by milestone.
 
-This implementation program is different. It exists to:
-- break the roadmap into bounded milestones
-- define what each milestone is trying to accomplish
-- define what each milestone must not accidentally turn into
-- create a repeatable path from strategy to spec to task files
-- reduce the risk of an AI agent making broad speculative changes
+The process is intentionally small:
+- minimal documents
+- explicit milestone state
+- automated verification
+- simple instructions that AI coding agents can follow without improvising a separate workflow
 
-This project combines performance engineering, architecture work, simulation design, and long-horizon ecological goals. That makes it especially important not to jump straight from vision to implementation tickets.
+## Core Workflow
 
-The intended workflow is:
+Every milestone uses exactly three core artifacts:
 
-**Roadmap -> Implementation Program -> Milestone Spec -> Task Files -> Code Changes**
+1. `spec.md`
+   Human-readable milestone definition.
+   It explains goals, scope, non-goals, invariants, and implementation boundaries.
 
-Do not skip the spec layer.
+2. `acceptance.yaml`
+   Machine-readable completion contract.
+   It defines the checks that must pass before the milestone is considered complete.
 
----
+3. `tools/run_milestone.py`
+   Milestone runner.
+   It executes the checks, reports pass/fail status, and identifies missing work.
+
+Milestone state is therefore not tracked in scattered notes or task files. A milestone is complete when:
+
+```bash
+python tools/run_milestone.py
+```
+
+reports that all checks pass.
 
 ## Development Principles
 
-Every milestone and every task should respect these principles.
-
 ### 1. Protect simulation integrity first
-Rendering load must not change the history of the simulation. The world must advance according to simulation rules, not according to frame pacing pressure.
 
-### 2. Prefer bounded change over ambitious rewrite
-This project already has meaningful structure and working behavior. Most milestones should be implemented as targeted, minimally invasive improvements.
+Rendering pressure must not silently rewrite simulation history.
 
-### 3. Separate architecture work from ecology work
-Do not mix major loop/control-flow changes with ecological design changes in the same task set unless there is a compelling reason.
+### 2. Prefer bounded change over broad rewrite
 
-### 4. Make success measurable
-Every milestone should define how it will be validated. “Runs successfully” is not enough.
+Milestones should stay small enough to review, test, and revert if needed.
 
-### 5. Keep future milestones flexible
-Only the next milestone should be fully decomposed into task files. Later milestones should remain at program/spec level until earlier work is complete.
+### 3. Make success machine-verifiable
 
-### 6. Avoid accidental side projects
-An AI agent should not be allowed to “helpfully” rewrite unrelated systems, rename broad surfaces, or perform cleanup that is not required by the current spec.
+If completion cannot be checked by the runner, the milestone is underspecified.
 
----
+### 4. Keep milestone scope narrow
 
-## Milestone Structure
+Do not mix architecture work, ecology redesign, rendering experiments, and observability expansion in one milestone unless the spec explicitly requires it.
 
-Each milestone should have its own detailed spec file before task files are generated.
+### 5. Prefer repository-local automation
 
-Recommended naming convention:
-- `SPEC_M1_FIXED_STEP_AND_INSTRUMENTATION.md`
-- `SPEC_M2_HEADROOM_AND_LIGHT_OBSERVABILITY.md`
-- `SPEC_M3_ECOLOGY_DEEPENING_AND_IMPERFECT_SENSING.md`
-- `SPEC_M3_5_SIMULATION_PERSISTENCE.md`
-- `SPEC_M4_RICH_OBSERVABILITY_AND_ANALYSIS.md`
-- `SPEC_M5_DEPTH_LAYER_MODEL.md`
+Acceptance checks should use commands and outputs that can run inside this repository without a large external framework.
 
-Each spec should define:
-- objective
+### 6. Make meaningful git commits as work progresses
+
+Agents should not accumulate the entire milestone into one unstructured working tree change.
+
+Use meaningful, reviewable commits for coherent chunks of progress, such as:
+- benchmark harness added
+- observability summary output added
+- hotspot optimization implemented
+- acceptance checks updated
+
+Commits should reflect real milestones within the work, not noise like formatting-only snapshots unless formatting is the actual change being made.
+
+## Milestone Artifact Structure
+
+Use these repository paths:
+
+- `docs/spec_M<N>.md`
+- `docs/acceptance_M<N>.yaml`
+- `tools/run_milestone.py`
+
+The acceptance files use a small JSON-compatible YAML subset so the runner can remain stdlib-only and easy to operate.
+
+Each spec should include:
+- purpose
+- goals
+- in-scope work
 - non-goals
-- invariants
-- affected subsystems
-- risks
-- implementation boundaries
-- acceptance criteria
-- testing and measurement plan
-- rollback or containment notes
-
----
-
-## Program Overview
-
-## Milestone 1: Fixed-Step Simulation and Core Instrumentation
-
-### Goal
-Decouple simulation cadence from render cadence and establish measurement of where time is actually being spent.
-
-### Why it comes first
-If rendering load changes the simulation’s effective history, then long-run ecological behavior cannot be trusted.
-
-### Expected outputs
-- fixed-step simulation loop
-- variable-rate rendering
-- clean sim/update/render timing instrumentation
-- initial frame pacing telemetry
-- hard caps or guardrails for worst visual spikes if needed for stability
-
-### Must not turn into
-- a renderer rewrite
-- ecology changes
-- speculative multithreading
-- broad UI cleanup
-
-### Success looks like
-- simulation progression no longer depends on render cadence
-- timing breakdown is available and trustworthy
-- benchmark runs can distinguish sim cost from render cost
-
----
+- acceptance shape
+- implementation guidance
+- exit criteria
 
-## Milestone 2: Headroom and Lightweight Observability
+Each acceptance file should include:
+- milestone metadata
+- check list
+- commands
+- required files
+- JSON assertions
+- thresholds and invariants where relevant
 
-### Goal
-Buy near-term performance headroom and introduce lightweight ecology telemetry before tradeoff-heavy ecology work begins.
+## Acceptance Check Model
 
-### Expected outputs
-- early render-cost governance
-- possibly GPU-assisted or more efficient render paths for high-cost visual systems
-- possibly one targeted compiled/native simulation hotspot if measurement supports it
-- Tier 1 ecological telemetry
+The current runner supports a deliberately small set of check types:
 
-### Tier 1 telemetry should include
-- lineage divergence summaries
-- phenotype cluster summaries
-- strategy ratio logging
-- simple zone occupancy summaries
-- comparable machine-readable logs per run
-
-### Must not turn into
-- full dashboard work
-- full replay tooling
-- open-ended optimization without measurement
+- `command`
+  Run a shell command and verify exit code and optional stdout content.
 
-### Success looks like
-- more headroom is available for future ecological work
-- ecological changes in later milestones can be measured rather than guessed
+- `file_exists`
+  Require that a path exists.
 
----
+- `json_assert`
+  Load a JSON file and assert required fields and thresholds.
 
-## Milestone 3: Ecology Deepening and Imperfect Sensing
+Keep acceptance definitions simple. If a milestone needs a new kind of verification, prefer expressing it through a repository-local command first. Extend the runner only when the new check type clearly improves reuse.
 
-### Goal
-Increase the system’s capacity for durable branching, niche differentiation, and strategy-level divergence.
+## Agent Execution Rules
 
-### Expected outputs
-- stronger ecological tradeoffs
-- sharper niche structure
-- temporal environmental variation where appropriate
-- improved species or lineage differentiation logic
-- imperfect sensing mechanisms
+When working a milestone, an agent should:
 
-### Imperfect sensing directions
-- distance-based uncertainty
-- directional blind spots
-- noisy target estimation
-- delayed information refresh
-- differentiated sensing quality for food, prey, and predators
-- heritable sensing reliability or acuity
+1. Read the current spec and acceptance file first.
+2. Treat the acceptance file as the completion contract.
+3. Implement the smallest coherent change that moves checks toward green.
+4. Add or update automated tests as part of the milestone, not afterward.
+5. Run `python tools/run_milestone.py` before declaring completion.
+6. Make meaningful git commits as coherent chunks of work land.
+7. Avoid unrelated cleanup and speculative refactors.
 
-### Must not turn into
-- a pile of extra knobs with no ecological rationale
-- a bundled depth-layer implementation
-- rich visualization work unrelated to ecology behavior
+The agent should not invent task files, pass structures, or prompt workflows unless the repository explicitly reintroduces them later.
 
-### Success looks like
-- more stable coexistence of multiple viable strategies
-- measurable branching and niche differentiation using Tier 1 telemetry
+## How to Create a New Milestone
 
----
+When starting a new milestone:
 
-## Milestone 3.5: Simulation Persistence, Save and Resume
+1. Choose the next milestone identifier.
+   Example: `M3`
 
-### Goal
-Allow the world to persist across sessions as simulation history accumulates.
+2. Create the spec.
+   Path: `docs/spec_M3.md`
 
-### Expected outputs
-- versioned save format
-- simulation-state serialization and loading
-- resume capability
-- deliberate omission of transient renderer-state persistence in the first version
+3. Create the acceptance file.
+   Path: `docs/acceptance_M3.yaml`
 
-### Must not turn into
-- full replay system
-- renderer-state snapshotting
-- aggressive schema complexity before first save format exists
+4. Define the milestone in terms of verifiable outcomes.
+   Good checks:
+   - unit or integration tests
+   - benchmark commands
+   - required artifact generation
+   - JSON field assertions
+   - numeric thresholds with explicit bounds
 
-### Success looks like
-- a world can be resumed without breaking ecological continuity
-- save format is explicit and versioned
+5. Prefer checks that can run unattended.
+   Avoid milestone definitions that depend on manual observation as the primary completion signal.
 
----
+6. Implement the code and tests until the runner passes.
 
-## Milestone 4: Rich Observability and Analysis Tooling
+7. Update this implementation program only if the workflow itself has changed.
 
-### Goal
-Add deeper tooling for interpretation, comparison, and long-run understanding of the ecosystem.
+## How to Choose Good Acceptance Checks
 
-### Expected outputs
-- replay tooling
-- seeded comparison harnesses and reports
-- richer dashboards and ecology visualizations
-- lineage history and zone occupancy analysis
+Good acceptance checks are:
+- fast enough to run regularly
+- specific enough to fail usefully
+- stable enough to avoid flaky milestone state
+- close to user-facing or milestone-facing outcomes
 
-### Must not turn into
-- premature analysis tooling before the ecosystem is interesting enough to study
+Avoid checks that are:
+- vague
+- purely stylistic
+- dependent on manual interpretation
+- too broad to diagnose when they fail
 
-### Success looks like
-- the system supports structured comparison and interpretation of ecological histories
+For performance milestones, prefer:
+- bounded benchmark scripts
+- structured JSON summaries
+- explicit thresholds such as mean frame time, p95 frame time, clamp counts, or event counts
 
----
+For correctness milestones, prefer:
+- focused unit/integration tests
+- invariant checks on structured output
+- deterministic or tightly bounded comparisons
 
-## Milestone 5: Constrained Depth Layer Model
+## Current Milestone Sequence
 
-### Goal
-Introduce a bounded ecological depth axis to create new forms of niche differentiation and predator/prey strategy without leaping to full 3D.
+### Milestone 1
 
-### Expected outputs
-- bounded depth state or trait
-- depth-dependent resources, hazards, or comfort ranges
-- depth-aware detection and predation interactions
-- lineage specialization by depth preference or tolerance
-- simple readable rendering support for depth
+Fixed-step simulation and core timing instrumentation.
 
-### Must not turn into
-- full 3D engine work
-- 2.5D visual polish as the primary goal
-- speculative camera or rendering overhauls before ecological value is proven
+### Milestone 2
 
-### Success looks like
-- depth creates real new ecological structure rather than just extra coordinates
+Performance headroom and lightweight observability.
 
----
+### Milestone 3
 
-## Standard AI Agent Workflow
+Ecology deepening and imperfect sensing.
 
-For each milestone, use a three-pass process.
+### Milestone 3.5
 
-### Pass A: Audit and Design
-The agent reads the relevant code and produces:
-- affected files
-- current control flow
-- hidden dependencies
-- risks and edge cases
-- recommended implementation shape
-- test and measurement plan
+Simulation persistence, save, and resume.
 
-No code changes in this pass.
+### Milestone 4
 
-### Pass B: Scaffolding
-The agent adds only the structural changes needed to support the milestone.
-Examples:
-- interfaces
-- config flags
-- instrumentation hooks
-- adapters
-- abstractions
-- test harness support
+Richer observability and analysis tooling.
 
-Still not the full feature.
+### Milestone 5
 
-### Pass C: Implementation
-The agent implements the actual behavior inside the approved scaffold.
+Constrained depth-layer ecological model.
 
-This keeps the agent from making large speculative changes before the structure is understood.
+This sequence is directional, not rigid. If completed work changes the right order, update the specs and acceptance files to reflect reality.
 
----
+## Final Rule
 
-## How to Ask ChatGPT for Later Steps
+The milestone runner is the source of truth for milestone status.
 
-When a future milestone is ready, do not ask for “the next tasks” in the abstract.
-
-Instead, use this sequence:
-
-1. Provide the current roadmap and implementation program.
-2. Provide the milestone spec that is now in focus.
-3. Ask ChatGPT to produce one of the following, explicitly:
-   - an audit/design brief
-   - a scaffolding plan
-   - task files for implementation
-4. Tell ChatGPT which pass you are on: A, B, or C.
-5. Tell ChatGPT to stay within the current milestone only.
-
-### Suggested prompt template for later milestones
-
-```text
-We are working from these project documents:
-- roadmap
-- IMPLEMENTATION_PROGRAM.md
-- [current milestone spec]
-
-We are currently on Pass [A/B/C] for [milestone name].
-
-Your job is to work only within that milestone.
-Do not redesign later milestones.
-Do not mix unrelated refactors into this work.
-Preserve existing behavior unless the spec explicitly allows change.
-Prefer minimal invasive changes.
-
-Deliver:
-1. A short summary of the milestone objective.
-2. A list of affected files/subsystems.
-3. Risks and hidden dependencies.
-4. A bounded plan for this pass only.
-5. Validation steps and measurements.
-
-If the work appears to require broader architectural change than the spec allows, stop and say so instead of improvising.
-```
-
----
-
-## How to Ask an AI Agent to Create Task Files
-
-Task files should be created from a milestone spec, not directly from the roadmap.
-
-### Rules for task file generation
-- generate task files only for the current milestone
-- tasks must be small and reviewable
-- each task must touch a narrow surface area
-- each task must have explicit validation steps
-- do not create mega-tasks like “implement phase 2”
-- separate scaffolding tasks from behavior tasks
-- include rollback or containment notes where appropriate
-
-### Suggested prompt for task-file generation
-
-```text
-Use the attached project documents and create implementation task files for the current milestone only.
-
-Inputs:
-- roadmap
-- IMPLEMENTATION_PROGRAM.md
-- [current milestone spec]
-
-Requirements:
-- Create small, bounded task files.
-- Each task file must have: title, purpose, scope, files/subsystems affected, implementation notes, validation steps, and out-of-scope notes.
-- Separate audit/scaffolding/implementation work where appropriate.
-- Do not include tasks for later milestones.
-- Do not collapse the milestone into one giant task.
-- Prefer tasks that can be implemented and reviewed independently.
-- If a task would require broad uncertain redesign, flag it instead of pretending it is straightforward.
-
-Output format:
-- First, provide a milestone decomposition summary.
-- Then provide a recommended task order.
-- Then produce one markdown task file per task.
-```
-
-### Recommended task file naming convention
-- `TASK_M1_01_LOOP_AUDIT.md`
-- `TASK_M1_02_FIXED_STEP_SCAFFOLD.md`
-- `TASK_M1_03_TIMING_INSTRUMENTATION.md`
-- `TASK_M1_04_MAIN_LOOP_INTEGRATION.md`
-- `TASK_M1_05_VALIDATION_AND_BENCHMARK.md`
-
-Adjust naming to match the actual milestone.
-
----
-
-## Review Gate Before Starting the Next Milestone
-
-Before moving to the next milestone, confirm:
-- acceptance criteria for the current milestone were actually met
-- validation results were captured
-- any temporary flags or experimental code were either removed or deliberately retained
-- the next milestone spec still matches reality after the changes made
-
-If the previous milestone changed assumptions materially, update the implementation program and milestone specs before creating more task files.
-
----
-
-## Final Guidance
-
-This project should be developed as a guided sequence of bounded architectural and ecological steps, not as a single open-ended optimization campaign.
-
-The implementation program exists to keep AI agents useful without letting them quietly take over the design.
-
-Use the roadmap for direction.
-Use the implementation program for sequencing.
-Use milestone specs for constraints.
-Use task files for execution.
-
+If the spec says something is important but `python tools/run_milestone.py` cannot detect whether it is done, the milestone definition is incomplete and should be tightened before more implementation work begins.
