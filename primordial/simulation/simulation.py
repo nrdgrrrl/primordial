@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import random
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .creature import Creature
 from .food import FoodManager
@@ -1435,6 +1435,10 @@ class Simulation:
         prey_speed = sum(c.genome.speed for c in preys) / max(1, len(preys))
         return pred_speed, prey_speed
 
+    def get_zone_occupancy_counts(self) -> dict[str, int]:
+        """Count creatures by their dominant containing zone."""
+        return self.zone_manager.get_zone_occupancy_counts(self.creatures)
+
     def get_flock_stats(self) -> tuple[int, float, int]:
         """Return (flock_count, avg_flock_size, largest_flock) for boids mode."""
         if not self._flock_sizes:
@@ -1529,3 +1533,36 @@ class Simulation:
                 totals[t] += getattr(creature.genome, t)
 
         return {k: v / n for k, v in totals.items()}
+
+    def build_observability_snapshot(self) -> dict[str, Any]:
+        """Build a low-cost structured snapshot for benchmark summaries."""
+        hunters, grazers, opportunists = self.get_hunter_grazer_counts()
+        snapshot: dict[str, Any] = {
+            "population": self.population,
+            "lineages": {
+                "active": self.get_lineage_count(),
+            },
+            "strategies": {
+                "hunters": hunters,
+                "grazers": grazers,
+                "opportunists": opportunists,
+            },
+            "zone_occupancy": self.get_zone_occupancy_counts(),
+        }
+
+        if self.settings.sim_mode == "predator_prey":
+            predator_count, prey_count = self.get_species_counts()
+            snapshot["species"] = {
+                "predators": predator_count,
+                "prey": prey_count,
+            }
+        elif self.settings.sim_mode == "boids":
+            flock_count, avg_flock_size, largest_flock = self.get_flock_stats()
+            snapshot["flocks"] = {
+                "count": flock_count,
+                "average_size": avg_flock_size,
+                "largest": largest_flock,
+                "loners": sum(1 for creature in self.creatures if creature.flock_id == -1),
+            }
+
+        return snapshot

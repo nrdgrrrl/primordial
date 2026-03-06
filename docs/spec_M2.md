@@ -10,7 +10,7 @@ This milestone should stay narrow. It is not a rendering rewrite, a benchmark fr
 
 - Improve one or two measured hotspots enough to create practical runtime headroom.
 - Add a lightweight benchmark/summary path that can be run non-interactively.
-- Emit a small structured observability payload that is comparable across runs.
+- Emit a small structured observability payload with a stable shared core across representative scenarios.
 - Preserve simulation correctness while making performance work measurable.
 
 ## In Scope
@@ -36,16 +36,26 @@ Add a small repository-local benchmark script, expected to live under `tools/`, 
 
 This does not need to replace `--profile`. It only needs to provide a fast, repeatable milestone check surface.
 
+Benchmark coverage must be representative across the project's major active simulation modes for this milestone:
+- one energy-mode scenario
+- one predator/prey scenario
+- one boids-dense scenario
+
+`boids_dense` is a valid benchmark scenario, but it must not become the definition of Milestone 2.
+
 ### 3. Tier 1 observability summary
 
 Add low-cost, run-level observability fields that help answer whether the simulation is healthy.
 
-Target fields should stay simple:
+All benchmark outputs must share this stable core:
+- population min/mean/max
 - active lineage count
 - basic strategy ratios or counts
 - basic zone occupancy summary
-- population min/mean/max
-- boids/flock summary when relevant
+
+Scenario-specific fields are allowed only where they are actually meaningful:
+- predator/prey species summary for `predator_prey`
+- boids/flock summary for `boids`
 
 The output should be summary-oriented, not per-frame logging.
 
@@ -82,9 +92,14 @@ Those checks should verify:
 - regression tests still pass
 - the benchmark script exists and runs
 - benchmark JSON is produced in a known location
-- benchmark JSON contains the required timing and observability fields
+- benchmark JSON contains the required timing fields and the shared observability core for every scenario
+- scenario-specific observability fields only appear where applicable
+- benchmark scenarios cover representative active sim modes rather than one hotspot-heavy path
 - performance thresholds for the selected scenarios are met
 - clamp/drop behavior remains healthy in the benchmark scenarios
+- `boids_dense` is a valid scenario, but not the definition of M2
+- success means headroom and observability improvements that are useful across the project's active simulation modes
+- if a scenario-specific optimization is implemented, the benchmark suite must still show no regressions in the other representative scenarios
 
 ## Implementation Guidance
 
@@ -99,6 +114,6 @@ Those checks should verify:
 
 Milestone 2 should leave the repository with:
 - one clear benchmark entry point
-- one clear JSON output shape for performance and observability summaries
+- one clear JSON output shape with a stable shared observability core and bounded mode-specific extensions
 - one or two measurable improvements backed by automated checks
 - confidence that simulation correctness is still intact

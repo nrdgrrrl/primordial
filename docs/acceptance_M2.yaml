@@ -25,13 +25,13 @@
     {
       "id": "benchmark_observability_tests_exist",
       "type": "file_exists",
-      "description": "M2 adds focused tests for benchmark and observability output.",
+      "description": "M2 adds focused tests for benchmark output and observability summaries.",
       "path": "tests/test_benchmark_observability.py"
     },
     {
       "id": "energy_medium_benchmark_runs",
       "type": "command",
-      "description": "Energy-mode benchmark runs and writes a structured summary.",
+      "description": "An energy benchmark scenario runs and writes a structured milestone summary.",
       "run": ".venv/bin/python tools/benchmark.py --scenario energy_medium --seconds 10 --output build/milestones/M2/energy_medium.json",
       "timeout_seconds": 180,
       "expect": {
@@ -41,13 +41,18 @@
     {
       "id": "energy_medium_benchmark_json",
       "type": "json_assert",
-      "description": "Energy benchmark JSON contains timing, correctness, and observability fields.",
+      "description": "Energy benchmark JSON includes the shared performance and observability core.",
       "path": "build/milestones/M2/energy_medium.json",
       "assertions": [
         {
           "path": "scenario.id",
           "op": "eq",
           "value": "energy_medium"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "energy"
         },
         {
           "path": "run.duration_seconds",
@@ -100,6 +105,11 @@
           "value": 0
         },
         {
+          "path": "observability.strategies.opportunists",
+          "op": "ge",
+          "value": 0
+        },
+        {
           "path": "observability.zone_occupancy.open_water",
           "op": "ge",
           "value": 0
@@ -107,9 +117,107 @@
       ]
     },
     {
+      "id": "predator_prey_medium_benchmark_runs",
+      "type": "command",
+      "description": "A predator-prey benchmark scenario runs and writes a structured milestone summary.",
+      "run": ".venv/bin/python tools/benchmark.py --scenario predator_prey_medium --seconds 10 --output build/milestones/M2/predator_prey_medium.json",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "predator_prey_medium_benchmark_json",
+      "type": "json_assert",
+      "description": "Predator-prey benchmark JSON includes the shared core plus species summary.",
+      "path": "build/milestones/M2/predator_prey_medium.json",
+      "assertions": [
+        {
+          "path": "scenario.id",
+          "op": "eq",
+          "value": "predator_prey_medium"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "predator_prey"
+        },
+        {
+          "path": "run.duration_seconds",
+          "op": "ge",
+          "value": 10.0
+        },
+        {
+          "path": "performance.frames_rendered",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.sim_steps_total",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "performance.frame_ms.mean",
+          "op": "le",
+          "value": 20.0
+        },
+        {
+          "path": "performance.frame_ms.p95",
+          "op": "le",
+          "value": 32.0
+        },
+        {
+          "path": "performance.clamp_drop.frame_count",
+          "op": "eq",
+          "value": 0
+        },
+        {
+          "path": "observability.population.mean",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.lineages.active",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.strategies.hunters",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.strategies.grazers",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.strategies.opportunists",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.zone_occupancy.open_water",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.species.predators",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "observability.species.prey",
+          "op": "ge",
+          "value": 1
+        }
+      ]
+    },
+    {
       "id": "boids_dense_benchmark_runs",
       "type": "command",
-      "description": "Boids benchmark runs and writes a structured summary.",
+      "description": "A boids-dense benchmark scenario runs and writes a structured milestone summary.",
       "run": ".venv/bin/python tools/benchmark.py --scenario boids_dense --seconds 10 --output build/milestones/M2/boids_dense.json",
       "timeout_seconds": 180,
       "expect": {
@@ -119,13 +227,18 @@
     {
       "id": "boids_dense_benchmark_json",
       "type": "json_assert",
-      "description": "Boids benchmark JSON proves both performance headroom and boids observability output.",
+      "description": "Boids benchmark JSON includes the shared core plus boids-specific flock summary.",
       "path": "build/milestones/M2/boids_dense.json",
       "assertions": [
         {
           "path": "scenario.id",
           "op": "eq",
           "value": "boids_dense"
+        },
+        {
+          "path": "scenario.mode",
+          "op": "eq",
+          "value": "boids"
         },
         {
           "path": "run.duration_seconds",
@@ -166,6 +279,26 @@
           "path": "observability.lineages.active",
           "op": "ge",
           "value": 1
+        },
+        {
+          "path": "observability.strategies.hunters",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.strategies.grazers",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.strategies.opportunists",
+          "op": "ge",
+          "value": 0
+        },
+        {
+          "path": "observability.zone_occupancy.open_water",
+          "op": "ge",
+          "value": 0
         },
         {
           "path": "observability.flocks.count",

@@ -196,17 +196,10 @@ class ZoneManager:
     # HUD helpers
     # ------------------------------------------------------------------
 
-    def get_dominant_zone(self, creatures: list[Creature]) -> str:
-        """
-        Return the label of the zone type containing the most creatures.
-
-        A creature belongs to the zone whose centre it is closest to
-        (provided it is within that zone's radius at all).
-
-        Returns:
-            Zone label string, or "—" if no creatures are in any zone.
-        """
+    def get_zone_occupancy_counts(self, creatures: list[Creature]) -> dict[str, int]:
+        """Count creatures by their strongest containing zone, plus unzoned."""
         counts: dict[str, int] = {k: 0 for k in ZONE_DEFINITIONS}
+        counts["unzoned"] = 0
         for creature in creatures:
             best_zone: Zone | None = None
             best_weight = 0.0
@@ -219,10 +212,25 @@ class ZoneManager:
                     if weight > best_weight:
                         best_weight = weight
                         best_zone = zone
-            if best_zone is not None:
+            if best_zone is None:
+                counts["unzoned"] += 1
+            else:
                 counts[best_zone.zone_type] += 1
+        return counts
 
-        best = max(counts, key=lambda k: counts[k])
+    def get_dominant_zone(self, creatures: list[Creature]) -> str:
+        """
+        Return the label of the zone type containing the most creatures.
+
+        A creature belongs to the zone whose centre it is closest to
+        (provided it is within that zone's radius at all).
+
+        Returns:
+            Zone label string, or "—" if no creatures are in any zone.
+        """
+        counts = self.get_zone_occupancy_counts(creatures)
+
+        best = max(ZONE_DEFINITIONS, key=lambda k: counts.get(k, 0))
         if counts[best] == 0:
             return "\u2014"
         return ZONE_DEFINITIONS[best]["label"]

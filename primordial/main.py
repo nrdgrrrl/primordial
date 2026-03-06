@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pygame
 
@@ -358,6 +358,80 @@ def _build_frame_metrics(
     )
 
 
+def run_bounded_session(
+    simulation: Simulation,
+    renderer: Renderer,
+    clock: pygame.time.Clock,
+    runtime_loop: FixedStepLoopState,
+    timing_collector: LoopTimingCollector,
+    *,
+    duration_seconds: float,
+    target_fps: int,
+    frame_observer: Callable[[Simulation], None] | None = None,
+    pump_events: bool = True,
+) -> float:
+    """Run a bounded render/sim session and return elapsed wall time."""
+    start_time = time.perf_counter()
+    end_time = start_time + duration_seconds
+
+    while time.perf_counter() < end_time:
+        frame_start = time.perf_counter()
+        event_start = time.perf_counter()
+        events = pygame.event.get() if pump_events else []
+        quit_requested = False
+        for event in events:
+            if event.type == pygame.QUIT:
+                quit_requested = True
+                break
+        event_ms = (time.perf_counter() - event_start) * 1000.0
+
+        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+            simulation,
+            runtime_loop,
+            allow_simulation=True,
+        )
+        debug_payload = timing_collector.latest_debug_payload()
+        debug_payload.update({
+            "event_ms": event_ms,
+            "sim_ms": sim_ms,
+            "sim_steps": float(sim_steps),
+            "clamp_frames": float(clamp_frames),
+            "dropped_ms": dropped_seconds * 1000.0,
+            "accumulator_ms": runtime_loop.accumulator_seconds * 1000.0,
+        })
+        renderer.set_external_debug_metrics(debug_payload)
+        runtime_loop.restore_buffered_attacks(simulation)
+        render_metrics = renderer.draw(simulation)
+        present_start = time.perf_counter()
+        pygame.display.flip()
+        present_ms = (time.perf_counter() - present_start) * 1000.0
+        pacing_start = time.perf_counter()
+        clock.tick(max(1, target_fps))
+        pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
+        frame_end = time.perf_counter()
+        timing_collector.record_frame(
+            _build_frame_metrics(
+                event_ms=event_ms,
+                sim_ms=sim_ms,
+                render_ms=render_metrics.get("draw_total_ms", 0.0),
+                present_ms=present_ms,
+                pacing_ms=pacing_ms,
+                frame_start=frame_start,
+                frame_end=frame_end,
+                sim_steps=sim_steps,
+                clamp_frames=clamp_frames,
+                dropped_seconds=dropped_seconds,
+                accumulator_seconds=runtime_loop.accumulator_seconds,
+            )
+        )
+        if frame_observer is not None:
+            frame_observer(simulation)
+        if quit_requested:
+            break
+
+    return max(0.0, time.perf_counter() - start_time)
+
+
 def main(
     scr_args: ScreensaverArgs | None = None,
     runtime_args: RuntimeArgs | None = None,
@@ -683,57 +757,17 @@ def _run_profile_session(
     base_name = f"profile-{stamp}"
 
     profiler = cProfile.Profile()
-    start_time = time.perf_counter()
-    end_time = start_time + 60.0
     logger.info("Running 60-second profile session...")
     profiler.enable()
-    while time.perf_counter() < end_time:
-        frame_start = time.perf_counter()
-        event_start = time.perf_counter()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                end_time = 0.0
-                break
-        event_ms = (time.perf_counter() - event_start) * 1000.0
-        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
-            simulation,
-            runtime_loop,
-            allow_simulation=True,
-        )
-        debug_payload = timing_collector.latest_debug_payload()
-        debug_payload.update({
-            "event_ms": event_ms,
-            "sim_ms": sim_ms,
-            "sim_steps": float(sim_steps),
-            "clamp_frames": float(clamp_frames),
-            "dropped_ms": dropped_seconds * 1000.0,
-            "accumulator_ms": runtime_loop.accumulator_seconds * 1000.0,
-        })
-        renderer.set_external_debug_metrics(debug_payload)
-        runtime_loop.restore_buffered_attacks(simulation)
-        render_metrics = renderer.draw(simulation)
-        present_start = time.perf_counter()
-        pygame.display.flip()
-        present_ms = (time.perf_counter() - present_start) * 1000.0
-        pacing_start = time.perf_counter()
-        clock.tick(max(1, settings.target_fps))
-        pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
-        frame_end = time.perf_counter()
-        timing_collector.record_frame(
-            _build_frame_metrics(
-                event_ms=event_ms,
-                sim_ms=sim_ms,
-                render_ms=render_metrics.get("draw_total_ms", 0.0),
-                present_ms=present_ms,
-                pacing_ms=pacing_ms,
-                frame_start=frame_start,
-                frame_end=frame_end,
-                sim_steps=sim_steps,
-                clamp_frames=clamp_frames,
-                dropped_seconds=dropped_seconds,
-                accumulator_seconds=runtime_loop.accumulator_seconds,
-            )
-        )
+    elapsed_wall_seconds = run_bounded_session(
+        simulation,
+        renderer,
+        clock,
+        runtime_loop,
+        timing_collector,
+        duration_seconds=60.0,
+        target_fps=settings.target_fps,
+    )
     profiler.disable()
 
     for candidate_dir in (out_dir, Path.cwd()):
@@ -747,7 +781,6 @@ def _run_profile_session(
             with text_path.open("w", encoding="utf-8") as fp:
                 stats = pstats.Stats(profiler, stream=fp).sort_stats("cumulative")
                 stats.print_stats(120)
-            elapsed_wall_seconds = max(0.0, time.perf_counter() - start_time)
             with timing_path.open("w", encoding="utf-8") as fp:
                 json.dump(
                     timing_collector.build_summary(

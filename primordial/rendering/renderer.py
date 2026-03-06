@@ -393,14 +393,13 @@ class Renderer:
         """
         Draw faint connection lines between creatures of the same lineage.
 
-        Uses lineage buckets to avoid O(n²) comparisons.
+        Uses lineage buckets plus a local spatial grid to avoid dense O(n²)
+        comparisons for widely spread groups.
         Only draws if lineage has 3+ members on screen.
         Alpha is inversely proportional to distance.
         """
         settings = self.settings
         max_dist = settings.kin_line_max_distance
-        min_group = settings.kin_line_min_group
-        max_dist_sq = max_dist * max_dist
 
         # Bucket creatures by lineage_id
         lineage_buckets: dict[int, list] = defaultdict(list)
@@ -411,7 +410,7 @@ class Renderer:
         self._line_surf.fill((0, 0, 0, 0))
 
         for lineage_id, members in lineage_buckets.items():
-            if len(members) < min_group:
+            if len(members) < settings.kin_line_min_group:
                 continue
 
             # Compute representative hue from first member
@@ -420,36 +419,13 @@ class Renderer:
                 base_color = self.theme.get_creature_color(hue, members[0].genome.saturation)
             else:
                 base_color = (200, 200, 200)
-
-            # Draw lines for all pairs within max_dist
-            n = len(members)
-            for i in range(n):
-                a = members[i]
-                for j in range(i + 1, n):
-                    b = members[j]
-                    dx = b.x - a.x
-                    dy = b.y - a.y
-                    # Toroidal shortest path
-                    if abs(dx) > self.width / 2:
-                        dx -= math.copysign(self.width, dx)
-                    if abs(dy) > self.height / 2:
-                        dy -= math.copysign(self.height, dy)
-                    dist_sq = dx * dx + dy * dy
-                    if dist_sq > max_dist_sq:
-                        continue
-
-                    dist = math.sqrt(dist_sq)
-                    # Alpha inversely proportional to distance (15-30)
-                    alpha = int(30 * (1.0 - dist / max_dist))
-                    alpha = max(15, min(30, alpha))
-
-                    pygame.draw.line(
-                        self._line_surf,
-                        (*base_color, alpha),
-                        (int(a.x), int(a.y)),
-                        (int(b.x), int(b.y)),
-                        1,
-                    )
+            self._draw_connection_group(
+                members,
+                base_color=base_color,
+                max_dist=max_dist,
+                alpha_min=15,
+                alpha_max=30,
+            )
 
         self.screen.blit(self._line_surf, (0, 0))
 
@@ -466,7 +442,6 @@ class Renderer:
         """
         settings = self.settings
         max_dist = settings.kin_line_max_distance * 1.5
-        max_dist_sq = max_dist * max_dist
 
         # Bucket by flock_id
         flock_buckets: dict[int, list] = defaultdict(list)
@@ -485,33 +460,105 @@ class Renderer:
                 base_color = self.theme.get_creature_color(hue, 0.6)
             else:
                 base_color = (200, 200, 200)
-
-            n = len(members)
-            for i in range(n):
-                a = members[i]
-                for j in range(i + 1, n):
-                    b = members[j]
-                    dx = b.x - a.x
-                    dy = b.y - a.y
-                    if abs(dx) > self.width / 2:
-                        dx -= math.copysign(self.width, dx)
-                    if abs(dy) > self.height / 2:
-                        dy -= math.copysign(self.height, dy)
-                    dist_sq = dx * dx + dy * dy
-                    if dist_sq > max_dist_sq:
-                        continue
-                    dist = math.sqrt(dist_sq)
-                    alpha = int(25 * (1.0 - dist / max_dist))
-                    alpha = max(10, min(25, alpha))
-                    pygame.draw.line(
-                        self._line_surf,
-                        (*base_color, alpha),
-                        (int(a.x), int(a.y)),
-                        (int(b.x), int(b.y)),
-                        1,
-                    )
+            self._draw_connection_group(
+                members,
+                base_color=base_color,
+                max_dist=max_dist,
+                alpha_min=10,
+                alpha_max=25,
+            )
 
         self.screen.blit(self._line_surf, (0, 0))
+
+    def _draw_connection_group(
+        self,
+        members: list,
+        *,
+        base_color: tuple[int, int, int],
+        max_dist: float,
+        alpha_min: int,
+        alpha_max: int,
+    ) -> None:
+        """Draw near-neighbour lines for one lineage/flock group."""
+        max_dist_sq = max_dist * max_dist
+        cell_size = max(1.0, max_dist)
+        grid_w = max(1, int(math.ceil(self.width / cell_size)))
+        grid_h = max(1, int(math.ceil(self.height / cell_size)))
+        cell_buckets: dict[tuple[int, int], list] = defaultdict(list)
+
+        for creature in members:
+            key = (
+                int(creature.x // cell_size) % grid_w,
+                int(creature.y // cell_size) % grid_h,
+            )
+            cell_buckets[key].append(creature)
+
+        for key, bucket_members in cell_buckets.items():
+            self._draw_connection_pairs(
+                bucket_members,
+                bucket_members,
+                same_bucket=True,
+                base_color=base_color,
+                max_dist=max_dist,
+                max_dist_sq=max_dist_sq,
+                alpha_min=alpha_min,
+                alpha_max=alpha_max,
+            )
+            seen_neighbors: set[tuple[int, int]] = set()
+            for off_x, off_y in ((1, -1), (1, 0), (1, 1), (0, 1)):
+                neighbor_key = ((key[0] + off_x) % grid_w, (key[1] + off_y) % grid_h)
+                if neighbor_key == key or neighbor_key in seen_neighbors:
+                    continue
+                seen_neighbors.add(neighbor_key)
+                neighbor_members = cell_buckets.get(neighbor_key)
+                if not neighbor_members:
+                    continue
+                self._draw_connection_pairs(
+                    bucket_members,
+                    neighbor_members,
+                    same_bucket=False,
+                    base_color=base_color,
+                    max_dist=max_dist,
+                    max_dist_sq=max_dist_sq,
+                    alpha_min=alpha_min,
+                    alpha_max=alpha_max,
+                )
+
+    def _draw_connection_pairs(
+        self,
+        left_members: list,
+        right_members: list,
+        *,
+        same_bucket: bool,
+        base_color: tuple[int, int, int],
+        max_dist: float,
+        max_dist_sq: float,
+        alpha_min: int,
+        alpha_max: int,
+    ) -> None:
+        """Draw qualifying line pairs between one or two cell buckets."""
+        for left_index, left in enumerate(left_members):
+            start_index = left_index + 1 if same_bucket else 0
+            for right in right_members[start_index:]:
+                dx = right.x - left.x
+                dy = right.y - left.y
+                if abs(dx) > self.width / 2:
+                    dx -= math.copysign(self.width, dx)
+                if abs(dy) > self.height / 2:
+                    dy -= math.copysign(self.height, dy)
+                dist_sq = dx * dx + dy * dy
+                if dist_sq > max_dist_sq:
+                    continue
+                dist = math.sqrt(dist_sq)
+                alpha = int(alpha_max * (1.0 - dist / max_dist))
+                alpha = max(alpha_min, min(alpha_max, alpha))
+                pygame.draw.line(
+                    self._line_surf,
+                    (*base_color, alpha),
+                    (int(left.x), int(left.y)),
+                    (int(right.x), int(right.y)),
+                    1,
+                )
 
     # ------------------------------------------------------------------
     # Territory shimmer

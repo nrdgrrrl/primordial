@@ -18,6 +18,9 @@ This implementation program exists to:
 
 This project combines performance engineering, architecture work, simulation design, rendering richness, and long-horizon ecological goals. That makes sequencing important. A milestone can be implemented correctly in local code terms and still be strategically wrong if it breaks the roadmap order or smuggles in later concerns too early.
 
+benchmark coverage for performance milestones should be representative across major active sim modes
+benchmark payloads should share a stable core summary shape across scenarios, with scenario-specific sections only where meaningful
+
 The intended workflow is:
 
 **Roadmap -> Implementation Program -> Milestone Spec -> Acceptance File -> Runner -> Code Changes**
@@ -336,6 +339,7 @@ If headroom is not created early, future ecology will be shaped by current bottl
 - possibly one targeted compiled or native simulation hotspot if measurement supports it
 - Tier 1 ecological telemetry
 - run-to-run comparable machine-readable output
+Benchmark coverage for this milestone must be representative across major active sim modes. A single dense or hotspot-heavy scenario is not sufficient unless the milestone spec explicitly justifies that limitation. Scenario-specific summary fields are allowed, but all benchmark outputs must share a stable core observability shape so runs remain comparable across modes.
 
 ### Priority order inside the milestone
 
