@@ -149,9 +149,7 @@ class Renderer:
         self._zone_surf_cached = None
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
-        """Attach frame metrics measured outside the renderer (event/sim timing)."""
-        if not self.debug_enabled:
-            return
+        """Attach outer-loop timing metrics for debug and summary consumers."""
         self._external_debug_metrics = metrics
 
     def resize(
@@ -176,7 +174,7 @@ class Renderer:
                 (self.width, self.height), pygame.SRCALPHA
             )
 
-    def draw(self, simulation: Simulation) -> None:
+    def draw(self, simulation: Simulation) -> dict[str, float]:
         """
         Render the current simulation state.
 
@@ -303,10 +301,11 @@ class Renderer:
             self.settings_overlay.draw(self.screen)
         timings["settings_ms"] = (time.perf_counter() - t0) * 1000.0
 
+        timings["draw_total_ms"] = (time.perf_counter() - frame_t0) * 1000.0
         if self.debug_enabled:
-            timings["draw_total_ms"] = (time.perf_counter() - frame_t0) * 1000.0
             self._debug_timing = timings
             self._draw_debug_graph_overlay(simulation)
+        return dict(timings)
 
     def toggle_hud(self) -> None:
         """Toggle HUD visibility."""
@@ -645,8 +644,30 @@ class Renderer:
         event_ms = self._external_debug_metrics.get("event_ms", 0.0)
         sim_ms = self._external_debug_metrics.get("sim_ms", 0.0)
         draw_ms = timings.get("draw_total_ms", self._debug_timing.get("draw_total_ms", 0.0))
+        present_ms = self._external_debug_metrics.get("present_ms", 0.0)
+        pacing_ms = self._external_debug_metrics.get("pacing_ms", 0.0)
+        frame_ms = self._external_debug_metrics.get("frame_ms", 0.0)
+        eff_fps = self._external_debug_metrics.get("effective_fps", 0.0)
+        sim_steps = int(self._external_debug_metrics.get("sim_steps", 0.0))
+        clamp_frames = int(self._external_debug_metrics.get("clamp_frames", 0.0))
+        dropped_ms = self._external_debug_metrics.get("dropped_ms", 0.0)
         return [
-            f"Dbg frame: evt {event_ms:.2f}ms  sim {sim_ms:.2f}ms  draw {draw_ms:.2f}ms",
+            "Dbg frame: evt {evt:.2f}ms  sim {sim:.2f}ms  draw {draw:.2f}ms  "
+            "flip {flip:.2f}ms".format(
+                evt=event_ms,
+                sim=sim_ms,
+                draw=draw_ms,
+                flip=present_ms,
+            ),
+            "Dbg loop: frame {frame:.2f}ms  pace {pace:.2f}ms  fps {fps:.1f}  "
+            "steps {steps}  drops {drops}".format(
+                frame=frame_ms,
+                pace=pacing_ms,
+                fps=eff_fps,
+                steps=sim_steps,
+                drops=clamp_frames,
+            ),
+            f"Dbg debt: dropped {dropped_ms:.2f}ms",
             "Dbg render: clear {clear:.2f}  amb {amb:.2f}  zones {zones:.2f}  "
             "terr {terr:.2f}  food {food:.2f}  links {links:.2f}".format(
                 clear=timings.get("clear_ms", 0.0),

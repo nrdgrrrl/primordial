@@ -15,6 +15,8 @@ from .zones import ZoneManager
 if TYPE_CHECKING:
     from ..settings import Settings
 
+AttackRenderEvent = tuple[float, float, float, float, float]
+
 
 # ---------------------------------------------------------------------------
 # Per-mode default parameter overrides
@@ -93,7 +95,7 @@ class Simulation:
         self.death_events: list[dict] = []
         self.birth_events: list[Creature] = []
         self.cosmic_ray_events: list[tuple[float, float]] = []
-        self.active_attacks: list[tuple[float, float, float, float, float]] = []
+        self.active_attacks: list[AttackRenderEvent] = []
 
         # Rolling average lifespan for old-age deaths (last 20)
         self._old_age_lifespans: deque[float] = deque(maxlen=20)
@@ -310,6 +312,18 @@ class Simulation:
         self.zone_manager = ZoneManager(
             width, height, self.settings.zone_count, self.settings.zone_strength
         )
+
+    def drain_active_attacks(self) -> list[AttackRenderEvent]:
+        """Return and clear current attack visuals for loop-level preservation."""
+        attacks = list(self.active_attacks)
+        self.active_attacks.clear()
+        return attacks
+
+    def restore_active_attacks(self, attacks: list[AttackRenderEvent]) -> None:
+        """Restore preserved attack visuals immediately before rendering."""
+        if not attacks:
+            return
+        self.active_attacks.extend(attacks)
 
     # ------------------------------------------------------------------
     # Main step dispatcher

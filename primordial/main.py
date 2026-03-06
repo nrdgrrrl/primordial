@@ -9,13 +9,16 @@ Supports Windows screensaver modes: /s (screensaver), /p HWND (preview), /c (con
 from __future__ import annotations
 
 import cProfile
+import json
 import logging
 import platform
 import pstats
 import sys
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pygame
 
@@ -35,6 +38,293 @@ from .settings import Settings
 from .simulation import Simulation
 from .utils.cli import RuntimeArgs
 from .utils.screensaver import ScreensaverArgs
+
+FIXED_SIM_TIMESTEP_SECONDS = 1.0 / 60.0
+MAX_SIM_STEPS_PER_OUTER_FRAME = 5
+MAX_ACCUMULATED_SIM_SECONDS = (
+    FIXED_SIM_TIMESTEP_SECONDS * MAX_SIM_STEPS_PER_OUTER_FRAME
+)
+
+
+@dataclass(frozen=True)
+class FixedStepLoopConfig:
+    """Internal fixed-step timing constants for the outer runtime loop."""
+
+    fixed_timestep_seconds: float = FIXED_SIM_TIMESTEP_SECONDS
+    max_sim_steps_per_outer_frame: int = MAX_SIM_STEPS_PER_OUTER_FRAME
+    max_accumulated_seconds: float = MAX_ACCUMULATED_SIM_SECONDS
+    drop_excess_accumulator: bool = True
+
+
+@dataclass
+class FixedStepLoopState:
+    """Shared runtime loop state for interactive and profile execution."""
+
+    config: FixedStepLoopConfig = field(default_factory=FixedStepLoopConfig)
+    accumulator_seconds: float = 0.0
+    last_tick_seconds: float | None = None
+    dropped_seconds_total: float = 0.0
+    dropped_frame_count: int = 0
+    buffered_active_attacks: list[tuple[float, float, float, float, float]] = field(
+        default_factory=list
+    )
+
+    def sample_elapsed(
+        self,
+        now: float | None = None,
+        *,
+        allow_accumulate: bool = True,
+    ) -> float:
+        """Advance the monotonic loop clock and optionally accumulate sim debt."""
+        if now is None:
+            now = time.perf_counter()
+        if self.last_tick_seconds is None:
+            self.last_tick_seconds = now
+            return 0.0
+
+        elapsed = max(0.0, now - self.last_tick_seconds)
+        self.last_tick_seconds = now
+
+        if not allow_accumulate:
+            self.accumulator_seconds = 0.0
+            return elapsed
+
+        self.accumulator_seconds += elapsed
+        self._clamp_accumulator()
+        return elapsed
+
+    def reset_timing_debt(self, now: float | None = None) -> None:
+        """Discard accumulated sim debt and resync the loop clock."""
+        self.accumulator_seconds = 0.0
+        self.last_tick_seconds = time.perf_counter() if now is None else now
+
+    def planned_sim_steps(self) -> int:
+        """Expose the future fixed-step budget without executing it yet."""
+        pending_steps = int(
+            self.accumulator_seconds / self.config.fixed_timestep_seconds
+        )
+        return min(pending_steps, self.config.max_sim_steps_per_outer_frame)
+
+    def buffer_simulation_attacks(self, simulation: Simulation) -> None:
+        """Preserve current-step attack visuals behind the loop scaffold seam."""
+        self.buffered_active_attacks.extend(simulation.drain_active_attacks())
+
+    def restore_buffered_attacks(self, simulation: Simulation) -> None:
+        """Restore preserved attack visuals immediately before rendering."""
+        if not self.buffered_active_attacks:
+            return
+        simulation.restore_active_attacks(self.buffered_active_attacks)
+        self.buffered_active_attacks.clear()
+
+    def _clamp_accumulator(self) -> None:
+        if not self.config.drop_excess_accumulator:
+            return
+        overflow = self.accumulator_seconds - self.config.max_accumulated_seconds
+        if overflow <= 0.0:
+            return
+        self.accumulator_seconds = self.config.max_accumulated_seconds
+        self.dropped_seconds_total += overflow
+        self.dropped_frame_count += 1
+
+
+def _create_fixed_step_loop_state() -> FixedStepLoopState:
+    """Build the shared loop scaffold used by runtime and profile paths."""
+    return FixedStepLoopState()
+
+
+@dataclass(frozen=True)
+class LoopFrameMetrics:
+    """Stable outer-loop timing payload for debug and summary consumers."""
+
+    event_ms: float
+    sim_ms: float
+    render_ms: float
+    present_ms: float
+    pacing_ms: float
+    frame_ms: float
+    effective_fps: float
+    sim_steps: int
+    clamp_frames: int
+    dropped_seconds: float
+    accumulator_seconds: float
+
+    def to_debug_payload(self) -> dict[str, float]:
+        """Convert the frame metrics into HUD-friendly scalar values."""
+        return {
+            "event_ms": self.event_ms,
+            "sim_ms": self.sim_ms,
+            "render_ms": self.render_ms,
+            "present_ms": self.present_ms,
+            "pacing_ms": self.pacing_ms,
+            "frame_ms": self.frame_ms,
+            "effective_fps": self.effective_fps,
+            "sim_steps": float(self.sim_steps),
+            "clamp_frames": float(self.clamp_frames),
+            "dropped_ms": self.dropped_seconds * 1000.0,
+            "accumulator_ms": self.accumulator_seconds * 1000.0,
+        }
+
+
+class LoopTimingCollector:
+    """Aggregate per-frame loop metrics for debug display and profile summaries."""
+
+    def __init__(self, *, retain_samples: bool) -> None:
+        self.retain_samples = retain_samples
+        self.frame_count = 0
+        self.total_sim_steps = 0
+        self.total_clamp_frames = 0
+        self.total_dropped_seconds = 0.0
+        self.latest_frame: LoopFrameMetrics | None = None
+        self._samples: dict[str, list[float]] = {
+            "event_ms": [],
+            "sim_ms": [],
+            "render_ms": [],
+            "present_ms": [],
+            "pacing_ms": [],
+            "frame_ms": [],
+            "effective_fps": [],
+            "sim_steps": [],
+        }
+
+    def record_frame(self, frame: LoopFrameMetrics) -> None:
+        """Record a completed outer-frame timing sample."""
+        self.latest_frame = frame
+        self.frame_count += 1
+        self.total_sim_steps += frame.sim_steps
+        self.total_clamp_frames += frame.clamp_frames
+        self.total_dropped_seconds += frame.dropped_seconds
+        if not self.retain_samples:
+            return
+        self._samples["event_ms"].append(frame.event_ms)
+        self._samples["sim_ms"].append(frame.sim_ms)
+        self._samples["render_ms"].append(frame.render_ms)
+        self._samples["present_ms"].append(frame.present_ms)
+        self._samples["pacing_ms"].append(frame.pacing_ms)
+        self._samples["frame_ms"].append(frame.frame_ms)
+        self._samples["effective_fps"].append(frame.effective_fps)
+        self._samples["sim_steps"].append(float(frame.sim_steps))
+
+    def latest_debug_payload(self) -> dict[str, float]:
+        """Return the most recent complete frame payload for debug display."""
+        if self.latest_frame is None:
+            return {}
+        return self.latest_frame.to_debug_payload()
+
+    def build_summary(
+        self,
+        *,
+        elapsed_wall_seconds: float,
+        runtime_loop: FixedStepLoopState,
+    ) -> dict[str, Any]:
+        """Build a machine-readable timing summary."""
+        return {
+            "elapsed_wall_seconds": elapsed_wall_seconds,
+            "frames_rendered": self.frame_count,
+            "effective_fps_overall": (
+                self.frame_count / elapsed_wall_seconds if elapsed_wall_seconds > 0 else 0.0
+            ),
+            "sim_steps_total": self.total_sim_steps,
+            "sim_steps_per_render_frame": self._summarize_samples("sim_steps"),
+            "timing_ms": {
+                "event": self._summarize_samples("event_ms"),
+                "sim": self._summarize_samples("sim_ms"),
+                "render": self._summarize_samples("render_ms"),
+                "present": self._summarize_samples("present_ms"),
+                "pacing": self._summarize_samples("pacing_ms"),
+                "frame": self._summarize_samples("frame_ms"),
+            },
+            "effective_fps": self._summarize_samples("effective_fps"),
+            "clamp_drop": {
+                "frame_count": self.total_clamp_frames,
+                "dropped_ms_total": self.total_dropped_seconds * 1000.0,
+                "final_accumulator_ms": runtime_loop.accumulator_seconds * 1000.0,
+            },
+            "runtime_loop": {
+                "fixed_timestep_ms": runtime_loop.config.fixed_timestep_seconds * 1000.0,
+                "max_sim_steps_per_outer_frame": runtime_loop.config.max_sim_steps_per_outer_frame,
+                "max_accumulated_ms": runtime_loop.config.max_accumulated_seconds * 1000.0,
+                "drop_excess_accumulator": runtime_loop.config.drop_excess_accumulator,
+            },
+        }
+
+    def _summarize_samples(self, name: str) -> dict[str, float | int]:
+        samples = self._samples[name]
+        if not samples:
+            return {
+                "count": 0,
+                "min": 0.0,
+                "mean": 0.0,
+                "p95": 0.0,
+                "max": 0.0,
+            }
+        ordered = sorted(samples)
+        index = min(len(ordered) - 1, int(0.95 * (len(ordered) - 1)))
+        return {
+            "count": len(ordered),
+            "min": ordered[0],
+            "mean": sum(ordered) / len(ordered),
+            "p95": ordered[index],
+            "max": ordered[-1],
+        }
+
+
+def _simulation_timing_is_suppressed(
+    simulation: Simulation,
+    transition_dir: int = 0,
+    transition_alpha: int = 0,
+) -> bool:
+    """Return whether fixed-step debt should be frozen for the current frame."""
+    return simulation.paused or (
+        transition_dir == 1 and transition_alpha >= 200
+    )
+
+
+def _run_single_simulation_step(
+    simulation: Simulation,
+    runtime_loop: FixedStepLoopState,
+    *,
+    allow_step: bool,
+) -> tuple[float, int]:
+    """Run the existing one-step behavior through the shared loop scaffold."""
+    if not allow_step:
+        return 0.0, 0
+
+    sim_start = time.perf_counter()
+    simulation.step()
+    runtime_loop.buffer_simulation_attacks(simulation)
+    return (time.perf_counter() - sim_start) * 1000.0, 1
+
+
+def _build_frame_metrics(
+    *,
+    event_ms: float,
+    sim_ms: float,
+    render_ms: float,
+    present_ms: float,
+    pacing_ms: float,
+    frame_start: float,
+    frame_end: float,
+    sim_steps: int,
+    clamp_frames: int,
+    dropped_seconds: float,
+    accumulator_seconds: float,
+) -> LoopFrameMetrics:
+    """Create the stable frame metrics payload for one outer-loop iteration."""
+    frame_ms = max(0.0, (frame_end - frame_start) * 1000.0)
+    effective_fps = 1000.0 / frame_ms if frame_ms > 0.0 else 0.0
+    return LoopFrameMetrics(
+        event_ms=event_ms,
+        sim_ms=sim_ms,
+        render_ms=render_ms,
+        present_ms=present_ms,
+        pacing_ms=pacing_ms,
+        frame_ms=frame_ms,
+        effective_fps=effective_fps,
+        sim_steps=sim_steps,
+        clamp_frames=clamp_frames,
+        dropped_seconds=dropped_seconds,
+        accumulator_seconds=accumulator_seconds,
+    )
 
 
 def main(
@@ -101,14 +391,23 @@ def main(
 
     # Clock for FPS limiting
     clock = pygame.time.Clock()
+    runtime_loop = _create_fixed_step_loop_state()
+    timing_collector = LoopTimingCollector(retain_samples=False)
 
     if runtime_args.profile:
         if scr_args.mode != "normal":
             logger.warning("--profile is only supported in normal mode; ignoring.")
         else:
-            profile_base = _run_profile_session(simulation, renderer, clock, settings)
+            profile_base = _run_profile_session(
+                simulation,
+                renderer,
+                clock,
+                settings,
+                runtime_loop,
+                timing_collector=LoopTimingCollector(retain_samples=True),
+            )
             pygame.quit()
-            logger.info("Profile run complete: %s.[pstats|txt]", profile_base)
+            logger.info("Profile run complete: %s.[pstats|txt|timing.json]", profile_base)
             sys.exit(0)
 
     # Grace period for screensaver mode: ignore all input for 2 seconds after
@@ -125,12 +424,14 @@ def main(
         nonlocal _transition_alpha, _transition_dir, _transition_surf
         _transition_alpha = 0
         _transition_dir = 1
+        runtime_loop.reset_timing_debt()
         _transition_surf = pygame.Surface(
             (renderer.width, renderer.height), pygame.SRCALPHA
         )
 
     running = True
     while running:
+        frame_start = time.perf_counter()
         event_start = time.perf_counter()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -166,15 +467,24 @@ def main(
                             _begin_mode_transition()
                         else:
                             simulation.paused = False
+                            runtime_loop.reset_timing_debt()
                     elif action == "discard" and renderer.settings_overlay.fade_dir < 0:
                         simulation.paused = False
+                        runtime_loop.reset_timing_debt()
                 else:
                     running = handle_keydown(
-                        event, simulation, renderer, settings, renderer.screen, scr_args.mode
+                        event,
+                        simulation,
+                        renderer,
+                        settings,
+                        renderer.screen,
+                        scr_args.mode,
+                        runtime_loop,
                     )
                     if renderer.settings_overlay.visible:
                         _prev_mode = settings.sim_mode
                         simulation.paused = True
+                        runtime_loop.reset_timing_debt()
         event_ms = (time.perf_counter() - event_start) * 1000.0
 
         # Mode transition: fade out → reset sim → fade in
@@ -185,23 +495,41 @@ def main(
                 if _transition_alpha >= 200:
                     simulation.reset()
                     simulation.paused = False
+                    runtime_loop.reset_timing_debt()
                     _transition_dir = -1
             else:
                 _transition_alpha = max(0, _transition_alpha - step)
                 if _transition_alpha <= 0:
                     _transition_dir = 0
 
-        sim_ms = 0.0
-        if _transition_dir != 1 or _transition_alpha < 200:
-            sim_start = time.perf_counter()
-            simulation.step()
-            sim_ms = (time.perf_counter() - sim_start) * 1000.0
+        sim_suppressed = _simulation_timing_is_suppressed(
+            simulation,
+            _transition_dir,
+            _transition_alpha,
+        )
+        dropped_frame_count_before = runtime_loop.dropped_frame_count
+        dropped_seconds_before = runtime_loop.dropped_seconds_total
+        runtime_loop.sample_elapsed(allow_accumulate=not sim_suppressed)
+        sim_ms, sim_steps = _run_single_simulation_step(
+            simulation,
+            runtime_loop,
+            allow_step=not sim_suppressed,
+        )
+        clamp_frames = runtime_loop.dropped_frame_count - dropped_frame_count_before
+        dropped_seconds = runtime_loop.dropped_seconds_total - dropped_seconds_before
 
-        renderer.set_external_debug_metrics({
+        debug_payload = timing_collector.latest_debug_payload()
+        debug_payload.update({
             "event_ms": event_ms,
             "sim_ms": sim_ms,
+            "sim_steps": float(sim_steps),
+            "clamp_frames": float(clamp_frames),
+            "dropped_ms": dropped_seconds * 1000.0,
+            "accumulator_ms": runtime_loop.accumulator_seconds * 1000.0,
         })
-        renderer.draw(simulation)
+        renderer.set_external_debug_metrics(debug_payload)
+        runtime_loop.restore_buffered_attacks(simulation)
+        render_metrics = renderer.draw(simulation)
 
         # Overlay the transition fade
         if _transition_dir != 0 and _transition_surf is not None and _transition_alpha > 0:
@@ -212,10 +540,31 @@ def main(
             _transition_surf.fill((0, 0, 0, _transition_alpha))
             renderer.screen.blit(_transition_surf, (0, 0))
 
+        present_start = time.perf_counter()
         pygame.display.flip()
+        present_ms = (time.perf_counter() - present_start) * 1000.0
 
         target_fps = settings.target_fps // 2 if scr_args.mode == "preview" else settings.target_fps
+        pacing_start = time.perf_counter()
         clock.tick(target_fps)
+        pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
+        frame_end = time.perf_counter()
+
+        timing_collector.record_frame(
+            _build_frame_metrics(
+                event_ms=event_ms,
+                sim_ms=sim_ms,
+                render_ms=render_metrics.get("draw_total_ms", 0.0),
+                present_ms=present_ms,
+                pacing_ms=pacing_ms,
+                frame_start=frame_start,
+                frame_end=frame_end,
+                sim_steps=sim_steps,
+                clamp_frames=clamp_frames,
+                dropped_seconds=dropped_seconds,
+                accumulator_seconds=runtime_loop.accumulator_seconds,
+            )
+        )
 
     pygame.quit()
     sys.exit(0)
@@ -297,6 +646,8 @@ def _run_profile_session(
     renderer: Renderer,
     clock: pygame.time.Clock,
     settings: Settings,
+    runtime_loop: FixedStepLoopState,
+    timing_collector: LoopTimingCollector,
 ) -> str:
     """
     Run a 60-second profile session, dump .pstats and text report, then return base path.
@@ -306,18 +657,62 @@ def _run_profile_session(
     base_name = f"profile-{stamp}"
 
     profiler = cProfile.Profile()
-    end_time = time.perf_counter() + 60.0
+    start_time = time.perf_counter()
+    end_time = start_time + 60.0
     logger.info("Running 60-second profile session...")
     profiler.enable()
     while time.perf_counter() < end_time:
+        frame_start = time.perf_counter()
+        event_start = time.perf_counter()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 end_time = 0.0
                 break
-        simulation.step()
-        renderer.draw(simulation)
+        event_ms = (time.perf_counter() - event_start) * 1000.0
+        dropped_frame_count_before = runtime_loop.dropped_frame_count
+        dropped_seconds_before = runtime_loop.dropped_seconds_total
+        runtime_loop.sample_elapsed()
+        sim_ms, sim_steps = _run_single_simulation_step(
+            simulation,
+            runtime_loop,
+            allow_step=True,
+        )
+        clamp_frames = runtime_loop.dropped_frame_count - dropped_frame_count_before
+        dropped_seconds = runtime_loop.dropped_seconds_total - dropped_seconds_before
+        debug_payload = timing_collector.latest_debug_payload()
+        debug_payload.update({
+            "event_ms": event_ms,
+            "sim_ms": sim_ms,
+            "sim_steps": float(sim_steps),
+            "clamp_frames": float(clamp_frames),
+            "dropped_ms": dropped_seconds * 1000.0,
+            "accumulator_ms": runtime_loop.accumulator_seconds * 1000.0,
+        })
+        renderer.set_external_debug_metrics(debug_payload)
+        runtime_loop.restore_buffered_attacks(simulation)
+        render_metrics = renderer.draw(simulation)
+        present_start = time.perf_counter()
         pygame.display.flip()
+        present_ms = (time.perf_counter() - present_start) * 1000.0
+        pacing_start = time.perf_counter()
         clock.tick(max(1, settings.target_fps))
+        pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
+        frame_end = time.perf_counter()
+        timing_collector.record_frame(
+            _build_frame_metrics(
+                event_ms=event_ms,
+                sim_ms=sim_ms,
+                render_ms=render_metrics.get("draw_total_ms", 0.0),
+                present_ms=present_ms,
+                pacing_ms=pacing_ms,
+                frame_start=frame_start,
+                frame_end=frame_end,
+                sim_steps=sim_steps,
+                clamp_frames=clamp_frames,
+                dropped_seconds=dropped_seconds,
+                accumulator_seconds=runtime_loop.accumulator_seconds,
+            )
+        )
     profiler.disable()
 
     for candidate_dir in (out_dir, Path.cwd()):
@@ -326,10 +721,22 @@ def _run_profile_session(
             base = candidate_dir / base_name
             pstats_path = base.with_suffix(".pstats")
             text_path = base.with_suffix(".txt")
+            timing_path = base.with_suffix(".timing.json")
             profiler.dump_stats(str(pstats_path))
             with text_path.open("w", encoding="utf-8") as fp:
                 stats = pstats.Stats(profiler, stream=fp).sort_stats("cumulative")
                 stats.print_stats(120)
+            elapsed_wall_seconds = max(0.0, time.perf_counter() - start_time)
+            with timing_path.open("w", encoding="utf-8") as fp:
+                json.dump(
+                    timing_collector.build_summary(
+                        elapsed_wall_seconds=elapsed_wall_seconds,
+                        runtime_loop=runtime_loop,
+                    ),
+                    fp,
+                    indent=2,
+                    sort_keys=True,
+                )
             if candidate_dir != out_dir:
                 logger.warning("Profile output fallback path in use: %s", candidate_dir)
             return str(base)
@@ -435,6 +842,7 @@ def handle_keydown(
     settings: Settings,
     screen: pygame.Surface,
     mode: str,
+    runtime_loop: FixedStepLoopState,
 ) -> bool:
     """
     Handle keyboard input.
@@ -452,10 +860,12 @@ def handle_keydown(
         renderer.toggle_settings_overlay()
     elif key == pygame.K_SPACE:
         simulation.paused = not simulation.paused
+        runtime_loop.reset_timing_debt()
     elif key == pygame.K_f:
         toggle_fullscreen(settings, simulation, renderer)
     elif key == pygame.K_r:
         simulation.reset()
+        runtime_loop.reset_timing_debt()
     elif key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
         settings.food_spawn_rate = min(2.0, settings.food_spawn_rate + 0.1)
     elif key in (pygame.K_MINUS, pygame.K_UNDERSCORE, pygame.K_KP_MINUS):
