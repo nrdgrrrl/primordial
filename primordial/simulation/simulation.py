@@ -67,7 +67,12 @@ class Simulation:
     """
 
     def __init__(
-        self, width: int, height: int, settings: "Settings"
+        self,
+        width: int,
+        height: int,
+        settings: "Settings",
+        *,
+        bootstrap_world: bool = True,
     ) -> None:
         self.width = width
         self.height = height
@@ -101,9 +106,10 @@ class Simulation:
         self._old_age_lifespans: deque[float] = deque(maxlen=20)
 
         # Zone manager
+        zone_count = settings.zone_count if bootstrap_world else 0
         self.zone_manager = ZoneManager(
             width, height,
-            settings.zone_count,
+            zone_count,
             settings.zone_strength,
         )
 
@@ -112,7 +118,8 @@ class Simulation:
         self._flock_count: int = 0
 
         # Initialize population
-        self._spawn_initial_population()
+        if bootstrap_world:
+            self._spawn_initial_population()
 
     # ------------------------------------------------------------------
     # Mode parameter helpers
@@ -324,6 +331,29 @@ class Simulation:
         if not attacks:
             return
         self.active_attacks.extend(attacks)
+
+    def rebuild_derived_state(self) -> None:
+        """Rebuild transient and cached state from authoritative world data."""
+        self.death_events.clear()
+        self.birth_events.clear()
+        self.cosmic_ray_events.clear()
+        self.active_attacks.clear()
+
+        for creature in self.creatures:
+            creature.trail = []
+            creature.glyph_surface = None
+            creature.rotation_angle = 0.0
+            creature._glyph_phase = creature.genome.hue * 6.28
+            if self.settings.sim_mode != "boids":
+                creature.flock_id = -1
+
+        if self.settings.sim_mode == "boids":
+            creature_bucket = self._build_creature_bucket()
+            boid_neighbors = self._build_boid_neighbor_cache(creature_bucket)
+            self._update_flock_assignments(boid_neighbors)
+        else:
+            self._flock_sizes = {}
+            self._flock_count = 0
 
     # ------------------------------------------------------------------
     # Main step dispatcher

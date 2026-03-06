@@ -35,7 +35,13 @@ except (AttributeError, OSError):
 
 from .rendering import Renderer
 from .settings import Settings
-from .simulation import Simulation
+from .simulation import (
+    Simulation,
+    SnapshotError,
+    inspect_snapshot_dimensions,
+    load_snapshot,
+    save_snapshot,
+)
 from .utils.cli import RuntimeArgs
 from .utils.screensaver import ScreensaverArgs
 
@@ -460,6 +466,7 @@ def main(
     # Load settings and apply runtime overrides.
     settings = Settings()
     _apply_runtime_overrides(settings, runtime_args)
+    loaded_world_size = _resolve_loaded_world_size(runtime_args)
 
     # Set up display based on mode
     if scr_args.mode == "screensaver":
@@ -481,16 +488,39 @@ def main(
             height = display_info.current_h
             screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
         else:
-            width = 1280
-            height = 720
+            if loaded_world_size is not None:
+                width, height = loaded_world_size
+            else:
+                width = 1280
+                height = 720
             screen = pygame.display.set_mode((width, height))
         pygame.mouse.set_visible(False)
 
     pygame.display.set_caption("Primordial")
 
+    if loaded_world_size is not None and loaded_world_size != (width, height):
+        pygame.quit()
+        raise SystemExit(
+            "Loaded snapshot world size "
+            f"{loaded_world_size[0]}x{loaded_world_size[1]} does not match the active "
+            f"display mode size {width}x{height}."
+        )
+
     # Initialize simulation and renderer
-    simulation = Simulation(width, height, settings)
+    try:
+        if runtime_args.load:
+            simulation = load_snapshot(runtime_args.load, settings=settings)
+        else:
+            simulation = Simulation(width, height, settings)
+    except SnapshotError as exc:
+        pygame.quit()
+        raise SystemExit(str(exc)) from exc
     renderer = Renderer(screen, settings, debug=runtime_args.debug)
+    active_snapshot_path = _resolve_snapshot_path(
+        settings,
+        runtime_args.load or runtime_args.save,
+    )
+    renderer.settings_overlay.set_snapshot_path(str(active_snapshot_path))
 
     # Clock for FPS limiting
     clock = pygame.time.Clock()
@@ -574,6 +604,81 @@ def main(
                     elif action == "discard" and renderer.settings_overlay.fade_dir < 0:
                         simulation.paused = False
                         runtime_loop.reset_timing_debt()
+                    elif action == "save_snapshot":
+                        try:
+                            active_snapshot_path = save_snapshot(
+                                simulation,
+                                active_snapshot_path,
+                            )
+                        except OSError as exc:
+                            renderer.settings_overlay.set_snapshot_status(
+                                f"Save failed: {exc}",
+                                is_error=True,
+                            )
+                            logger.warning(
+                                "Settings overlay save failed at %s: %s",
+                                active_snapshot_path,
+                                exc,
+                            )
+                        else:
+                            renderer.settings_overlay.set_snapshot_path(
+                                str(active_snapshot_path)
+                            )
+                            renderer.settings_overlay.set_snapshot_status(
+                                f"Saved snapshot to {active_snapshot_path.name}"
+                            )
+                            logger.info(
+                                "Saved simulation snapshot from settings overlay to %s",
+                                active_snapshot_path,
+                            )
+                    elif action == "load_snapshot":
+                        if not active_snapshot_path.exists():
+                            renderer.settings_overlay.set_snapshot_status(
+                                (
+                                    "No snapshot found yet. "
+                                    f"Press V to save one at {active_snapshot_path.name} first."
+                                ),
+                                is_error=True,
+                            )
+                            logger.warning(
+                                "Settings overlay load failed from %s: snapshot file missing",
+                                active_snapshot_path,
+                            )
+                        else:
+                            try:
+                                loaded_simulation = load_snapshot(
+                                    active_snapshot_path,
+                                    settings=settings,
+                                )
+                            except SnapshotError as exc:
+                                renderer.settings_overlay.set_snapshot_status(
+                                    str(exc),
+                                    is_error=True,
+                                )
+                                logger.warning(
+                                    "Settings overlay load failed from %s: %s",
+                                    active_snapshot_path,
+                                    exc,
+                                )
+                            else:
+                                simulation = _swap_loaded_simulation(
+                                    loaded_simulation,
+                                    settings,
+                                    renderer,
+                                )
+                                simulation.paused = True
+                                runtime_loop.reset_timing_debt()
+                                renderer.settings_overlay.sync_from_settings()
+                                renderer.settings_overlay.set_snapshot_path(
+                                    str(active_snapshot_path)
+                                )
+                                renderer.settings_overlay.set_snapshot_status(
+                                    f"Loaded snapshot from {active_snapshot_path.name}"
+                                )
+                                logger.info(
+                                    "Loaded simulation snapshot from settings overlay: %s",
+                                    active_snapshot_path,
+                                )
                 else:
                     running = handle_keydown(
                         event,
@@ -664,6 +769,10 @@ def main(
             )
         )
 
+    if runtime_args.save:
+        saved_path = save_snapshot(simulation, runtime_args.save)
+        logger.info("Saved simulation snapshot to %s", saved_path)
+
     pygame.quit()
     sys.exit(0)
 
@@ -737,6 +846,49 @@ def _apply_runtime_overrides(settings: Settings, runtime_args: RuntimeArgs) -> N
             )
     if runtime_args.debug:
         settings.show_hud = True
+
+
+def _resolve_loaded_world_size(
+    runtime_args: RuntimeArgs,
+) -> tuple[int, int] | None:
+    """Read snapshot dimensions early so bootstrap can pick new-vs-load world size."""
+    if not runtime_args.load:
+        return None
+    try:
+        return inspect_snapshot_dimensions(runtime_args.load)
+    except SnapshotError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def _default_snapshot_path(settings: Settings) -> Path:
+    """Return the bounded default snapshot path used by in-app save/load."""
+    return Path(settings.config_path).parent / "world_snapshot.json"
+
+
+def _resolve_snapshot_path(
+    settings: Settings,
+    active_snapshot_path: str | Path | None,
+) -> Path:
+    """Reuse the active session path when present, otherwise use the default path."""
+    if active_snapshot_path is None:
+        return _default_snapshot_path(settings)
+    return Path(active_snapshot_path)
+
+
+def _swap_loaded_simulation(
+    simulation: Simulation,
+    settings: Settings,
+    renderer: Renderer,
+) -> Simulation:
+    """Install a loaded simulation into the live runtime without special sim logic."""
+    if (simulation.width, simulation.height) != (renderer.width, renderer.height):
+        flags = pygame.FULLSCREEN | pygame.SCALED if settings.fullscreen else 0
+        screen = pygame.display.set_mode((simulation.width, simulation.height), flags)
+        pygame.mouse.set_visible(not settings.fullscreen)
+        renderer.resize(simulation.width, simulation.height, screen=screen)
+    renderer.set_mode(settings.sim_mode)
+    renderer.reset_runtime_state()
+    return simulation
 
 
 def _run_profile_session(

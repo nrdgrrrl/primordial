@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "milestone": {
+    "id": "M3_5",
+    "title": "Simulation Persistence, Save, and Resume",
+    "spec": "docs/spec_M3_5.md"
+  },
+  "checks": [
+    {
+      "id": "m3_5_spec_exists",
+      "type": "file_exists",
+      "description": "M3.5 has an explicit bounded spec.",
+      "path": "docs/spec_M3_5.md"
+    },
+    {
+      "id": "persistence_tests_exist",
+      "type": "file_exists",
+      "description": "M3.5 adds focused persistence tests.",
+      "path": "tests/test_simulation_persistence.py"
+    },
+    {
+      "id": "unit_regressions",
+      "type": "command",
+      "description": "Regression and persistence tests pass.",
+      "run": ".venv/bin/python -m unittest discover -s tests -p 'test_*.py'",
+      "timeout_seconds": 180,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "persistence_probe_runs",
+      "type": "command",
+      "description": "The repo-local save/load/resume probe succeeds.",
+      "run": ".venv/bin/python tools/persistence_check.py --output build/milestones/M3_5/persistence_check.json --save-path build/milestones/M3_5/world_snapshot.json",
+      "timeout_seconds": 120,
+      "expect": {
+        "exit_code": 0
+      }
+    },
+    {
+      "id": "snapshot_json_shape",
+      "type": "json_assert",
+      "description": "The saved snapshot has the expected authoritative shape.",
+      "path": "build/milestones/M3_5/world_snapshot.json",
+      "assertions": [
+        {
+          "path": "version",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "path": "metadata.kind",
+          "op": "eq",
+          "value": "primordial.world_snapshot"
+        },
+        {
+          "path": "world.width",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "world.height",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "world.settings.fields.sim_mode",
+          "op": "eq",
+          "value": "energy"
+        },
+        {
+          "path": "world.counters.frame",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "world.creatures.0.genome.speed",
+          "op": "ge",
+          "value": 0.0
+        },
+        {
+          "path": "world.food.particles.0.x",
+          "op": "ge",
+          "value": 0.0
+        },
+        {
+          "path": "world.zones.zones.0.zone_type",
+          "op": "contains",
+          "value": "_"
+        },
+        {
+          "path": "world.rng_state.0",
+          "op": "ge",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "resume_verification_summary",
+      "type": "json_assert",
+      "description": "The probe confirms round-trip fidelity, resumed stepping, and transient omission.",
+      "path": "build/milestones/M3_5/persistence_check.json",
+      "assertions": [
+        {
+          "path": "save_format_version",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "path": "roundtrip.version_matches",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "roundtrip.payload_matches_after_load",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "roundtrip.resume_matches_after_steps",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "save_boundary.world_has_authoritative_sections",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "save_boundary.omits_renderer_transients",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "path": "continuity.population",
+          "op": "ge",
+          "value": 1
+        },
+        {
+          "path": "continuity.lineages",
+          "op": "ge",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

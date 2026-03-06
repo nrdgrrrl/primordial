@@ -36,6 +36,9 @@ python main.py --debug
 
 # Run a 60-second cProfile capture and exit
 python main.py --profile
+
+# Resume a saved world, then save the updated snapshot on exit
+python main.py --load build/world.json --save build/world.json
 ```
 
 The screensaver will launch in fullscreen mode by default.
@@ -48,6 +51,8 @@ The screensaver will launch in fullscreen mode by default.
 | `--profile` | Runs for 60 seconds, writes `.pstats` + text profile report to config directory, then exits |
 | `--mode <name>` | Launch override: `energy`, `predator_prey`, `boids`, `drift` |
 | `--theme <name>` | Launch override: `ocean`, `petri`, `geometric`, `chaotic` |
+| `--load <path>` | Load a saved simulation world snapshot instead of creating a new world |
+| `--save <path>` | Save the current world snapshot to the given path on exit |
 
 ### Make Targets
 

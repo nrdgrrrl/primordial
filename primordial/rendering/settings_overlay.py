@@ -29,6 +29,9 @@ class SettingsOverlay:
         self.fade_dir = 0
         self.confirm_reset = False
         self.pending: dict[str, object] = {}
+        self.snapshot_path = ""
+        self.snapshot_status = ""
+        self.snapshot_status_is_error = False
 
         self.fields = [
             Field("Mode", "sim_mode", "enum", options=["energy", "predator_prey", "boids", "drift"], section="Simulation", requires_reset=True),
@@ -47,7 +50,7 @@ class SettingsOverlay:
             Field("Zone Count", "zone_count", "int", 0, 12, 1, section="Evolution"),
             Field("Zone Strength", "zone_strength", "float", 0.0, 1.0, 0.05, section="Evolution"),
         ]
-        self._panel = pygame.Surface((600, 500), pygame.SRCALPHA)
+        self._panel = pygame.Surface((600, 620), pygame.SRCALPHA)
         self._shade: pygame.Surface | None = None
         self._font = pygame.font.Font(None, 26)
         self._small = pygame.font.Font(None, 22)
@@ -55,12 +58,24 @@ class SettingsOverlay:
     def open(self) -> None:
         self.visible = True
         self.fade_dir = 1
-        self.pending = {f.attr: getattr(self.settings, f.attr) for f in self.fields}
-        self.confirm_reset = False
+        self.sync_from_settings()
 
     def close(self) -> None:
         self.fade_dir = -1
         self.confirm_reset = False
+        self.snapshot_status = ""
+        self.snapshot_status_is_error = False
+
+    def sync_from_settings(self) -> None:
+        self.pending = {f.attr: getattr(self.settings, f.attr) for f in self.fields}
+        self.confirm_reset = False
+
+    def set_snapshot_path(self, path: str) -> None:
+        self.snapshot_path = path
+
+    def set_snapshot_status(self, message: str, *, is_error: bool = False) -> None:
+        self.snapshot_status = message
+        self.snapshot_status_is_error = is_error
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
         if event.type != pygame.KEYDOWN:
@@ -68,6 +83,12 @@ class SettingsOverlay:
         if event.key in (pygame.K_ESCAPE, pygame.K_s):
             self.close()
             return "discard"
+        if event.key == pygame.K_v:
+            self.confirm_reset = False
+            return "save_snapshot"
+        if event.key == pygame.K_l:
+            self.confirm_reset = False
+            return "load_snapshot"
         if event.key == pygame.K_UP:
             self.selected = (self.selected - 1) % len(self.fields)
         elif event.key == pygame.K_DOWN:
@@ -147,10 +168,23 @@ class SettingsOverlay:
                 self._panel.blit(note, (440, y))
             y += 24
 
+        action_y = y + 8
+        action = self._small.render("V = Save Snapshot    L = Load Snapshot", True, (185, 225, 255))
+        self._panel.blit(action, (20, action_y))
+
+        path_text = self.snapshot_path or "(default path pending)"
+        path = self._small.render(f"Path: {path_text}", True, (120, 165, 220))
+        self._panel.blit(path, (20, action_y + 26))
+
+        if self.snapshot_status:
+            status_color = (240, 140, 140) if self.snapshot_status_is_error else (170, 225, 180)
+            status = self._small.render(self.snapshot_status, True, status_color)
+            self._panel.blit(status, (20, action_y + 52))
+
         hint = "Enter=Apply  Esc/S=Discard  R=Reset defaults"
         if self.confirm_reset:
             hint = "Press R again to confirm reset"
-        self._panel.blit(self._small.render(hint, True, (180, 205, 230)), (20, 470))
+        self._panel.blit(self._small.render(hint, True, (180, 205, 230)), (20, 590))
 
         x = screen.get_width() // 2 - self._panel.get_width() // 2
         y = screen.get_height() // 2 - self._panel.get_height() // 2

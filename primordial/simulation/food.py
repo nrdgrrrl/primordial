@@ -75,10 +75,15 @@ class FoodManager:
         self.grid_width = (world_width + self.bucket_size - 1) // self.bucket_size
         self.grid_height = (world_height + self.bucket_size - 1) // self.bucket_size
 
-        self.buckets.clear()
         for food in self.particles:
             food.x = food.x % world_width
             food.y = food.y % world_height
+        self.rebuild_buckets()
+
+    def rebuild_buckets(self) -> None:
+        """Rebuild the derived spatial hash from the authoritative particles list."""
+        self.buckets.clear()
+        for food in self.particles:
             bucket = self._get_bucket(food.x, food.y)
             if bucket not in self.buckets:
                 self.buckets[bucket] = []

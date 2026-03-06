@@ -182,6 +182,23 @@ class Renderer:
                 (self.width, self.height), pygame.SRCALPHA
             )
 
+    def reset_runtime_state(self) -> None:
+        """Clear renderer-only transient state after an in-process world swap."""
+        self.animation_manager = AnimationManager(
+            num_particles=self.settings.death_particle_count
+        )
+        self._shimmer_states.clear()
+        self._zone_surf_cached = None
+        self.frame_times.clear()
+        self.fps = 0.0
+        self._fps_history.clear()
+        self._population_history.clear()
+        self._external_debug_metrics = {}
+        if isinstance(self.theme, OceanTheme):
+            self.theme._trail_surf = pygame.Surface(
+                (self.width, self.height), pygame.SRCALPHA
+            )
+
     def draw(self, simulation: Simulation) -> dict[str, float]:
         """
         Render the current simulation state.

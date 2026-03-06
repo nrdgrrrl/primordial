@@ -14,6 +14,8 @@ from primordial.main import (
     LoopTimingCollector,
     _advance_fixed_step_frame,
     _create_fixed_step_loop_state,
+    _default_snapshot_path,
+    _resolve_snapshot_path,
     _run_profile_session,
     _simulation_timing_is_suppressed,
 )
@@ -203,6 +205,24 @@ class FixedStepLoopTests(unittest.TestCase):
             self.assertTrue(Path(profile_base).with_suffix(".pstats").exists())
             self.assertTrue(Path(profile_base).with_suffix(".txt").exists())
             self.assertTrue(Path(profile_base).with_suffix(".timing.json").exists())
+
+    def test_snapshot_path_resolution_reuses_active_path_or_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = SimpleNamespace(config_path=Path(temp_dir) / "config.toml")
+            active_path = Path(temp_dir) / "custom-save.json"
+
+            self.assertEqual(
+                _default_snapshot_path(settings),
+                Path(temp_dir) / "world_snapshot.json",
+            )
+            self.assertEqual(
+                _resolve_snapshot_path(settings, active_path),
+                active_path,
+            )
+            self.assertEqual(
+                _resolve_snapshot_path(settings, None),
+                Path(temp_dir) / "world_snapshot.json",
+            )
 
 
 if __name__ == "__main__":

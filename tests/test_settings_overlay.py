@@ -58,6 +58,25 @@ class SettingsOverlayTests(unittest.TestCase):
             saved = config_path.read_text(encoding="utf-8")
             self.assertIn('mode = "boids"', saved)
 
+    def test_settings_overlay_emits_save_and_load_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+
+            save_action = overlay.handle_event(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_v)
+            )
+            load_action = overlay.handle_event(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_l)
+            )
+
+            self.assertEqual(save_action, "save_snapshot")
+            self.assertEqual(load_action, "load_snapshot")
+
 
 if __name__ == "__main__":
     unittest.main()

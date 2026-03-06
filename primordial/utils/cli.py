@@ -15,6 +15,8 @@ class RuntimeArgs:
     profile: bool = False
     mode: str | None = None
     theme: str | None = None
+    load: str | None = None
+    save: str | None = None
 
 
 def parse_runtime_args(argv: Sequence[str] | None = None) -> RuntimeArgs:
@@ -29,10 +31,14 @@ def parse_runtime_args(argv: Sequence[str] | None = None) -> RuntimeArgs:
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--mode", type=str)
     parser.add_argument("--theme", type=str)
+    parser.add_argument("--load", type=str)
+    parser.add_argument("--save", type=str)
     ns, _unknown = parser.parse_known_args(list(argv) if argv is not None else None)
     return RuntimeArgs(
         debug=bool(ns.debug),
         profile=bool(ns.profile),
         mode=ns.mode.lower() if ns.mode else None,
         theme=ns.theme.lower() if ns.theme else None,
+        load=ns.load,
+        save=ns.save,
     )
