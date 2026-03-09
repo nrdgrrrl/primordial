@@ -512,7 +512,7 @@ class Renderer:
 
     def _draw_attack_lines(self, simulation: "Simulation") -> None:
         """
-        Draw subtle but readable lines between predator and prey during attacks.
+        Draw very faint thin lines between predator and prey during attacks.
         """
         if not simulation.active_attacks:
             return
@@ -527,10 +527,10 @@ class Renderer:
 
             pygame.draw.line(
                 self._attack_surf,
-                (*color, 78),
+                (*color, 40),
                 (int(ax), int(ay)),
                 (int(tx), int(ty)),
-                2,
+                1,
             )
 
         self.screen.blit(self._attack_surf, (0, 0))
