@@ -105,11 +105,16 @@ class DeathAnimation(Animation):
         glyph_surface: pygame.Surface | None,
         color: tuple[int, int, int],
         num_particles: int = 5,
+        *,
+        flash_color: tuple[int, int, int] | None = None,
+        flash_boost: float = 1.0,
     ) -> None:
         self.x = x
         self.y = y
         self.color = color
         self.frame = 0
+        self.flash_color = flash_color or (255, 255, 255)
+        self.flash_boost = flash_boost
 
         # Copy glyph surface so we own it independently
         if glyph_surface is not None:
@@ -158,6 +163,27 @@ class DeathAnimation(Animation):
 
     def draw(self, surface: pygame.Surface) -> None:
         t = self.frame / self.TOTAL_FRAMES  # 0→1
+
+        # A short flash makes predator kills visible without adding a debug overlay.
+        flash_t = max(0.0, 1.0 - (self.frame / 8.0))
+        if flash_t > 0.0:
+            flash_radius = int(self.glyph_size * (0.45 + 0.85 * self.flash_boost * flash_t))
+            flash_alpha = int(110 * self.flash_boost * flash_t)
+            if flash_radius > 0 and flash_alpha > 0:
+                flash_surf = pygame.Surface(
+                    (flash_radius * 2 + 4, flash_radius * 2 + 4),
+                    pygame.SRCALPHA,
+                )
+                pygame.draw.circle(
+                    flash_surf,
+                    (*self.flash_color, min(255, flash_alpha)),
+                    (flash_radius + 2, flash_radius + 2),
+                    flash_radius,
+                )
+                surface.blit(
+                    flash_surf,
+                    (int(self.x) - flash_radius - 2, int(self.y) - flash_radius - 2),
+                )
 
         # --- Fading, shrinking glyph ---
         alpha = int(255 * (1.0 - t))
@@ -335,10 +361,21 @@ class AnimationManager:
         y: float,
         glyph_surface: pygame.Surface | None,
         color: tuple[int, int, int],
+        *,
+        flash_color: tuple[int, int, int] | None = None,
+        flash_boost: float = 1.0,
     ) -> None:
         """Create a death animation at the given position."""
         self._animations.append(
-            DeathAnimation(x, y, glyph_surface, color, self._num_particles)
+            DeathAnimation(
+                x,
+                y,
+                glyph_surface,
+                color,
+                self._num_particles,
+                flash_color=flash_color,
+                flash_boost=flash_boost,
+            )
         )
 
     def add_birth(self, creature: Creature) -> None:
@@ -377,7 +414,17 @@ class AnimationManager:
         """
         for event in death_events:
             color = get_color(event["genome"])
-            self.add_death(event["x"], event["y"], event["glyph_surface"], color)
+            cause = event.get("cause", "energy")
+            flash_color = (255, 224, 150) if cause == "predation" else None
+            flash_boost = 1.65 if cause == "predation" else 1.0
+            self.add_death(
+                event["x"],
+                event["y"],
+                event["glyph_surface"],
+                color,
+                flash_color=flash_color,
+                flash_boost=flash_boost,
+            )
 
         for creature in birth_events:
             self.add_birth(creature)

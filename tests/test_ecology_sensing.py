@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 import random
 import unittest
 from unittest.mock import patch
@@ -158,6 +159,71 @@ class EcologySensingTests(unittest.TestCase):
                 break
 
         self.assertGreater(simulation.population, 0)
+
+    def test_prey_flee_caps_velocity_to_bounded_max_speed(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        prey = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=0.7, sense_radius=1.0, aggression=0.1),
+            vx=9.0,
+            vy=0.0,
+            lineage_id=1,
+            species="prey",
+        )
+        predator = Creature(
+            x=90.0,
+            y=100.0,
+            genome=Genome(speed=0.8, sense_radius=1.0, aggression=0.9),
+            lineage_id=2,
+            species="predator",
+        )
+        simulation.creatures = [prey, predator]
+        bucket = simulation._build_creature_bucket()
+
+        with patch("random.gauss", return_value=0.0), patch("random.random", return_value=0.0):
+            fled = simulation._prey_flee(prey, bucket)
+
+        self.assertTrue(fled)
+        flee_max = prey.genome.speed * simulation.settings.creature_speed_base * 1.5
+        self.assertLessEqual(math.hypot(prey.vx, prey.vy), flee_max + 1e-6)
+
+    def test_predation_events_report_kills_and_actual_speed_telemetry(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.cosmic_ray_rate = 0.0
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.6,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=102.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.6,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+
+        with (
+            patch.object(simulation, "_check_ecosystem_balance", return_value=None),
+            patch("random.gauss", return_value=0.0),
+            patch("random.random", return_value=0.0),
+        ):
+            simulation.step()
+
+        predator_count, prey_count = simulation.get_species_counts()
+        self.assertEqual(prey_count, 0)
+        self.assertEqual(simulation.predation_kill_count, 1)
+        self.assertEqual(simulation.death_events[0]["cause"], "predation")
+        self.assertEqual(simulation.get_recent_predation_stats()["recent_kills"], 1)
+        pred_actual_speed, prey_actual_speed = simulation.get_species_avg_actual_speeds()
+        self.assertGreaterEqual(pred_actual_speed, 0.0)
+        self.assertEqual(prey_actual_speed, 0.0)
 
     def test_energy_population_survives_seeded_window_with_legacy_default_food_rate(self) -> None:
         settings = self._build_settings("energy")

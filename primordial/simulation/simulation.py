@@ -37,6 +37,9 @@ _PREDATOR_PREY_FOOD_DEPTH_WEIGHTS = (
     (DEPTH_MID, 0.35),
     (DEPTH_DEEP, 0.20),
 )
+_PREDATION_RECENT_WINDOW_SECONDS = 3.0
+_PREDATOR_DEPTH_TRACK_URGENCY = 0.28
+_PREY_DEPTH_ESCAPE_URGENCY = 0.30
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +125,10 @@ class Simulation:
         self.birth_events: list[Creature] = []
         self.cosmic_ray_events: list[tuple[float, float]] = []
         self.active_attacks: list[AttackRenderEvent] = []
+        self.predation_kill_count = 0
+        self._recent_kill_frames: deque[int] = deque()
+        self._recent_cross_band_miss_frames: deque[int] = deque()
+        self._predation_victims_this_frame: set[int] = set()
 
         # Rolling average lifespan for old-age deaths (last 20)
         self._old_age_lifespans: deque[float] = deque(maxlen=20)
@@ -322,6 +329,10 @@ class Simulation:
         self.birth_events.clear()
         self.cosmic_ray_events.clear()
         self.active_attacks.clear()
+        self.predation_kill_count = 0
+        self._recent_kill_frames.clear()
+        self._recent_cross_band_miss_frames.clear()
+        self._predation_victims_this_frame.clear()
         self._old_age_lifespans.clear()
         self._flock_sizes = {}
         self._flock_count = 0
@@ -365,6 +376,9 @@ class Simulation:
         self.birth_events.clear()
         self.cosmic_ray_events.clear()
         self.active_attacks.clear()
+        self._recent_kill_frames.clear()
+        self._recent_cross_band_miss_frames.clear()
+        self._predation_victims_this_frame.clear()
 
         for creature in self.creatures:
             creature.trail = []
@@ -486,6 +500,7 @@ class Simulation:
         self._frame += 1
         self._spawn_food()
         self.active_attacks.clear()
+        self._predation_victims_this_frame.clear()
 
         new_creatures: list[Creature] = []
         dead_creatures: list[Creature] = []
@@ -562,7 +577,11 @@ class Simulation:
 
             if creature.energy <= 0:
                 dead_creatures.append(creature)
-                dead_causes[id(creature)] = "energy"
+                dead_causes[id(creature)] = (
+                    "predation"
+                    if id(creature) in self._predation_victims_this_frame
+                    else "energy"
+                )
             elif creature.age >= creature.get_max_lifespan():
                 dead_creatures.append(creature)
                 dead_causes[id(creature)] = "age"
@@ -597,7 +616,7 @@ class Simulation:
         self._update_predator_prey_depth_band(
             predator,
             best_prey.depth_band,
-            urgency=0.24,
+            urgency=_PREDATOR_DEPTH_TRACK_URGENCY,
         )
 
         sensed_prey = self._sense_target_position(
@@ -629,11 +648,16 @@ class Simulation:
             energy_gain = min(0.5, best_prey.energy)
             predator.energy = min(1.0, predator.energy + energy_gain)
             best_prey.energy = 0.0
+            self.predation_kill_count += 1
+            self._predation_victims_this_frame.add(id(best_prey))
+            self._recent_kill_frames.append(self._frame)
             self.active_attacks.append((
                 predator.x, predator.y,
                 best_prey.x, best_prey.y,
                 predator.genome.hue,
             ))
+        elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
+            self._recent_cross_band_miss_frames.append(self._frame)
 
     def _prey_flee(self, prey: Creature, bucket: dict) -> bool:
         """Prey flees from nearest predator within sense_radius * 1.2.
@@ -659,7 +683,7 @@ class Simulation:
             self._update_predator_prey_depth_band(
                 prey,
                 self._pick_depth_escape_band(prey, nearest_pred.depth_band),
-                urgency=0.35,
+                urgency=_PREY_DEPTH_ESCAPE_URGENCY,
             )
 
         sensed_predator = self._sense_target_position(
@@ -680,9 +704,22 @@ class Simulation:
             dy /= dist
 
         max_speed = prey.genome.speed * self.settings.creature_speed_base * 1.5
-        prey.vx += dx * max_speed * 0.3
-        prey.vy += dy * max_speed * 0.3
+        desired_vx = dx * max_speed
+        desired_vy = dy * max_speed
+        steer = 0.35
+        prey.vx += (desired_vx - prey.vx) * steer
+        prey.vy += (desired_vy - prey.vy) * steer
+        self._clamp_velocity(prey, max_speed)
         return True
+
+    def _clamp_velocity(self, creature: Creature, max_speed: float) -> None:
+        """Bound instantaneous velocity without changing direction."""
+        speed = math.hypot(creature.vx, creature.vy)
+        if speed <= max_speed or speed == 0.0:
+            return
+        scale = max_speed / speed
+        creature.vx *= scale
+        creature.vy *= scale
 
     def _apply_cosmic_ray_pp(self, creature: Creature) -> None:
         """Cosmic ray in predator_prey mode — can flip species on aggression crossing 0.5."""
@@ -1760,6 +1797,31 @@ class Simulation:
         prey_speed = sum(c.genome.speed for c in preys) / max(1, len(preys))
         return pred_speed, prey_speed
 
+    def get_species_avg_actual_speeds(self) -> tuple[float, float]:
+        """Return (avg_predator_speed, avg_prey_speed) from live velocities."""
+        preds = [c for c in self.creatures if c.species == "predator"]
+        preys = [c for c in self.creatures if c.species == "prey"]
+        pred_speed = sum(math.hypot(c.vx, c.vy) for c in preds) / max(1, len(preds))
+        prey_speed = sum(math.hypot(c.vx, c.vy) for c in preys) / max(1, len(preys))
+        return pred_speed, prey_speed
+
+    def get_recent_predation_stats(self) -> dict[str, int]:
+        """Return lightweight rolling predator/prey telemetry for the HUD."""
+        window_frames = max(30, int(self.settings.target_fps * _PREDATION_RECENT_WINDOW_SECONDS))
+        cutoff = self._frame - window_frames
+        while self._recent_kill_frames and self._recent_kill_frames[0] <= cutoff:
+            self._recent_kill_frames.popleft()
+        while (
+            self._recent_cross_band_miss_frames
+            and self._recent_cross_band_miss_frames[0] <= cutoff
+        ):
+            self._recent_cross_band_miss_frames.popleft()
+        return {
+            "recent_kills": len(self._recent_kill_frames),
+            "recent_cross_band_misses": len(self._recent_cross_band_miss_frames),
+            "total_kills": self.predation_kill_count,
+        }
+
     def get_depth_band_counts(self) -> dict[str, int]:
         """Count living creatures in each bounded depth band."""
         counts = {depth_band_name(band): 0 for band in DEPTH_BANDS}
@@ -1886,9 +1948,13 @@ class Simulation:
         if self.settings.sim_mode == "predator_prey":
             predator_count, prey_count = self.get_species_counts()
             depth_counts = self.get_depth_band_counts()
+            pred_actual_speed, prey_actual_speed = self.get_species_avg_actual_speeds()
+            predation_stats = self.get_recent_predation_stats()
             snapshot["species"] = {
                 "predators": predator_count,
                 "prey": prey_count,
+                "predator_actual_speed": pred_actual_speed,
+                "prey_actual_speed": prey_actual_speed,
             }
             snapshot["depth"] = {
                 **depth_counts,
@@ -1898,6 +1964,7 @@ class Simulation:
                     if self.creatures else 0.0
                 ),
             }
+            snapshot["predation"] = predation_stats
         elif self.settings.sim_mode == "boids":
             flock_count, avg_flock_size, largest_flock = self.get_flock_stats()
             snapshot["flocks"] = {

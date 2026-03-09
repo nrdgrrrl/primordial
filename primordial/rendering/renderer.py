@@ -512,10 +512,7 @@ class Renderer:
 
     def _draw_attack_lines(self, simulation: "Simulation") -> None:
         """
-        Draw very faint thin lines between hunter and target during attacks.
-
-        Alpha ~40, coloured by the attacker's hue.  Subtle — just enough to
-        feel like energy is flowing between them.
+        Draw subtle but readable lines between predator and prey during attacks.
         """
         if not simulation.active_attacks:
             return
@@ -530,10 +527,10 @@ class Renderer:
 
             pygame.draw.line(
                 self._attack_surf,
-                (*color, 40),
+                (*color, 78),
                 (int(ax), int(ay)),
                 (int(tx), int(ty)),
-                1,
+                2,
             )
 
         self.screen.blit(self._attack_surf, (0, 0))

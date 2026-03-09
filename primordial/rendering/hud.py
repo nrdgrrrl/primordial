@@ -89,12 +89,14 @@ class HUD:
 
     def _lines_predator_prey(self, simulation: "Simulation") -> list[str]:
         pred_count, prey_count = simulation.get_species_counts()
-        pred_speed, prey_speed = simulation.get_species_avg_speeds()
+        pred_speed, prey_speed = simulation.get_species_avg_actual_speeds()
+        predation = simulation.get_recent_predation_stats()
         dom_zone = simulation.zone_manager.get_dominant_zone(simulation.creatures)
 
         return [
             f"Predators: {pred_count}  /  Prey: {prey_count}",
-            f"Pred speed: {pred_speed:.2f}  Prey speed: {prey_speed:.2f}",
+            f"Actual speed P:{pred_speed:.2f}  Q:{prey_speed:.2f}",
+            f"Kills (3s): {predation['recent_kills']}  Cross-miss: {predation['recent_cross_band_misses']}",
             f"Generation: {simulation.generation}",
             f"Zone: {dom_zone}",
             f"Mode: predator_prey",
