@@ -88,6 +88,10 @@ Recent profile-driven optimization (2026-03-05) improved headless benchmark perf
 
 At 1920×1080 this keeps typical runs within the 60fps target envelope in normal mode, with heavy boids scenes still the most expensive.
 
+## Design & Behavior Documentation
+
+For a thorough human-readable guide to how the simulation works as a living system — especially predator_prey mode — see **[docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md)**. It covers world mechanics, predator/prey ecology, evolutionary features, observability gaps, and a design assessment.
+
 ## How It Works
 
 ### The Genome System
