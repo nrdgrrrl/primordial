@@ -33,7 +33,7 @@ The population changes. Trait distributions shift as selection pressure acts on 
 3. **Move**: creatures steer toward food/prey or away from predators, using one of three motion styles
 4. **Eat**: prey eat food particles; predators kill prey on contact
 5. **Pay costs**: movement costs energy proportional to speed × size; aging and longevity add metabolic drain
-6. **Reproduce**: at energy ≥ threshold (0.70 in predator_prey), the creature splits — parent and offspring each get half the energy; the offspring's genome is a mutated copy
+6. **Reproduce**: at energy ≥ threshold, the creature splits — parent and offspring each get half the energy; the offspring's genome is a mutated copy. In `predator_prey`, the canonical defaults are prey `0.80` and predator `0.72`, with fallback to shared `energy_to_reproduce` when species-specific keys are absent.
 7. **Die**: energy reaches zero, or the creature exceeds its maximum lifespan
 8. **Selection**: traits that lead to better energy acquisition and survival spread; traits that don't, fade
 

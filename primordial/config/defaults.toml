@@ -46,6 +46,8 @@ predator_fraction = 0.2500
 food_spawn_rate = 0.5000
 mutation_rate = 0.0800
 energy_to_reproduce = 0.7000
+prey_energy_to_reproduce = 0.8000
+predator_energy_to_reproduce = 0.7200
 
 [modes.boids]
 initial_population = 150

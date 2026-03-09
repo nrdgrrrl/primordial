@@ -610,3 +610,11 @@ When adding a new setting, update all of:
 Rule: any newly introduced user-meaningful config or tuning value must be added
 to `primordial/config/defaults.toml` in the same change. Do not hide new
 user-facing defaults as unexplained Python literals.
+
+Predator/prey reproduction thresholds are mode-scoped config authority:
+`[modes.predator_prey].prey_energy_to_reproduce` and
+`[modes.predator_prey].predator_energy_to_reproduce` override reproduction
+thresholds by species only in `predator_prey`; if absent, resolution falls back
+to the shared `energy_to_reproduce`.
+These live in TOML mode params today; the in-app overlay still edits only
+top-level settings fields unless mode-param support is added explicitly.

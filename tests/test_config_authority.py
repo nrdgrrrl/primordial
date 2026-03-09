@@ -61,6 +61,9 @@ glyph_size_base = 64
 [modes.drift]
 target_fps = 30
 mutation_rate = 0.1200
+
+[modes.predator_prey]
+predator_energy_to_reproduce = 0.7100
 """.strip()
                 + "\n",
                 encoding="utf-8",
@@ -73,6 +76,14 @@ mutation_rate = 0.1200
         self.assertEqual(settings.mode_params["drift"]["mutation_rate"], 0.12)
         self.assertEqual(settings.mode_params["drift"]["zone_strength"], 0.6)
         self.assertEqual(settings.mode_params["predator_prey"]["food_spawn_rate"], 0.5)
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["predator_energy_to_reproduce"],
+            0.71,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["prey_energy_to_reproduce"],
+            0.8,
+        )
 
 
 if __name__ == "__main__":

@@ -294,6 +294,15 @@ Configuration is TOML-backed and persistent across app updates.
 | display | show_hud | bool | HUD visibility |
 | rendering | glyph_size_base, kin/shimmer/animation fields | validated numeric ranges | Renderer tuning knobs (advanced) |
 
+Mode-specific tuning keys:
+
+| Section | Key | Type / Range | Description |
+|---|---|---|---|
+| modes.predator_prey | prey_energy_to_reproduce | float 0.05..1 | Prey-only reproduction threshold in `predator_prey`; falls back to shared `simulation.energy_to_reproduce` if absent |
+| modes.predator_prey | predator_energy_to_reproduce | float 0.05..1 | Predator-only reproduction threshold in `predator_prey`; falls back to shared `simulation.energy_to_reproduce` if absent |
+
+These mode-table tuning keys live in TOML config authority today; the in-app settings overlay still edits only the top-level settings fields.
+
 ### Tuning
 
 These are the levers most likely to change the feel of the simulation:

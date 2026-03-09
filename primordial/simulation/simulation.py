@@ -40,6 +40,8 @@ _PREDATOR_PREY_FOOD_DEPTH_WEIGHTS = (
 _PREDATION_RECENT_WINDOW_SECONDS = 3.0
 _PREDATOR_DEPTH_TRACK_URGENCY = 0.28
 _PREY_DEPTH_ESCAPE_URGENCY = 0.30
+_PREDATOR_DIAG_ACTIVE_HUNT_FRAMES = 10
+_PREDATOR_DIAG_FAILED_PURSUIT_FRAMES = 45
 
 
 class Simulation:
@@ -112,6 +114,18 @@ class Simulation:
         self._flock_sizes: dict[int, int] = {}
         self._flock_count: int = 0
 
+        # Focused predator reproduction diagnostics. Kept local to the
+        # predator-prey path so it can be removed or extended cleanly.
+        self._predator_diag_next_life_id = 1
+        self._predator_diag_active: dict[int, dict[str, Any]] = {}
+        self._predator_diag_completed: list[dict[str, Any]] = []
+        self._predator_diag_events: dict[str, list[dict[str, Any]]] = {
+            "births": [],
+            "rescues": [],
+            "cosmic_flips_to_predator": [],
+            "cosmic_flips_from_predator": [],
+        }
+
         # Initialize population
         if bootstrap_world:
             self._spawn_initial_population()
@@ -136,6 +150,26 @@ class Simulation:
         if hasattr(self.settings, key):
             return getattr(self.settings, key)
         return fallback
+
+    def _get_reproduction_threshold(self, creature: Creature) -> float:
+        """Resolve reproduction threshold with predator/prey role overrides."""
+        shared_threshold = float(
+            self._get_mode_param(
+                "energy_to_reproduce",
+                self.settings.energy_to_reproduce,
+            )
+        )
+        if self.settings.sim_mode != "predator_prey":
+            return shared_threshold
+        if creature.species == "prey":
+            return float(
+                self._get_mode_param("prey_energy_to_reproduce", shared_threshold)
+            )
+        if creature.species == "predator":
+            return float(
+                self._get_mode_param("predator_energy_to_reproduce", shared_threshold)
+            )
+        return shared_threshold
 
     # ------------------------------------------------------------------
     # Setup helpers
@@ -233,6 +267,8 @@ class Simulation:
                 )
 
             self.creatures.append(creature)
+            if creature.species == "predator":
+                self._register_predator_life(creature, origin="initial")
 
         # Seed food for prey across the bounded depth bands.
         for _ in range(200):
@@ -305,6 +341,7 @@ class Simulation:
         self._old_age_lifespans.clear()
         self._flock_sizes = {}
         self._flock_count = 0
+        self._reset_predator_diagnostics()
         self.zone_manager = ZoneManager(
             self.width, self.height,
             self.settings.zone_count,
@@ -348,6 +385,7 @@ class Simulation:
         self._recent_kill_frames.clear()
         self._recent_cross_band_miss_frames.clear()
         self._predation_victims_this_frame.clear()
+        self._reset_predator_diagnostics()
 
         for creature in self.creatures:
             creature.trail = []
@@ -357,6 +395,8 @@ class Simulation:
             creature.clamp_depth_band()
             if self.settings.sim_mode != "boids":
                 creature.flock_id = -1
+            if self.settings.sim_mode == "predator_prey" and creature.species == "predator":
+                self._register_predator_life(creature, origin="restored")
 
         if self.settings.sim_mode == "boids":
             creature_bucket = self._build_creature_bucket()
@@ -490,7 +530,6 @@ class Simulation:
         # If < 15% prey: predators lose energy 2x faster
         prey_scarce = prey_fraction < 0.15 and pred_count > 0
 
-        energy_to_reproduce = self._get_mode_param("energy_to_reproduce")
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
         cosmic_rate = self.settings.cosmic_ray_rate
 
@@ -504,7 +543,14 @@ class Simulation:
             )
 
             if creature.species == "predator":
-                self._predator_hunt_prey(creature, creature_bucket)
+                repro_threshold = self._get_reproduction_threshold(creature) * (
+                    1.0 - pred_repro_penalty
+                )
+                self._predator_hunt_prey(
+                    creature,
+                    creature_bucket,
+                    repro_threshold=repro_threshold,
+                )
                 creature.update_position(1.0, self.width, self.height)
 
                 # Predators pay 1.4× movement cost; prey scarcity doubles it
@@ -516,8 +562,11 @@ class Simulation:
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
-
-                repro_threshold = energy_to_reproduce * (1.0 - pred_repro_penalty)
+                self._record_predator_post_cost_state(
+                    creature,
+                    repro_threshold=repro_threshold,
+                    prey_scarce=prey_scarce,
+                )
                 if creature.energy >= repro_threshold:
                     offspring = self._reproduce_pp(creature, mutation_rate)
                     if offspring:
@@ -536,7 +585,7 @@ class Simulation:
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
 
-                if creature.energy >= energy_to_reproduce:
+                if creature.energy >= self._get_reproduction_threshold(creature):
                     offspring = self._reproduce_pp(creature, mutation_rate)
                     if offspring:
                         new_creatures.append(offspring)
@@ -563,7 +612,11 @@ class Simulation:
         self._check_ecosystem_balance()
 
     def _predator_hunt_prey(
-        self, predator: Creature, bucket: dict
+        self,
+        predator: Creature,
+        bucket: dict,
+        *,
+        repro_threshold: float,
     ) -> None:
         """Predator seeks nearest prey; kills on contact."""
         sense = self._get_effective_sensing_range(predator, multiplier=2.0)
@@ -581,6 +634,8 @@ class Simulation:
         if best_prey is None:
             predator.wander(self.settings.creature_speed_base)
             return
+
+        self._record_predator_prey_sighting(predator)
 
         self._update_predator_prey_depth_band(
             predator,
@@ -614,12 +669,19 @@ class Simulation:
         ):
             # Transfer from prey to predator; prevents multiple predators
             # farming energy from an already-dead prey in the same frame.
+            pre_kill_energy = predator.energy
             energy_gain = min(0.5, best_prey.energy)
             predator.energy = min(1.0, predator.energy + energy_gain)
             best_prey.energy = 0.0
             self.predation_kill_count += 1
             self._predation_victims_this_frame.add(id(best_prey))
             self._recent_kill_frames.append(self._frame)
+            self._record_predator_kill(
+                predator,
+                pre_kill_energy=pre_kill_energy,
+                post_kill_energy=predator.energy,
+                repro_threshold=repro_threshold,
+            )
             self.active_attacks.append((
                 predator.x, predator.y,
                 best_prey.x, best_prey.y,
@@ -627,6 +689,7 @@ class Simulation:
             ))
         elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
             self._recent_cross_band_miss_frames.append(self._frame)
+            self._record_predator_cross_band_miss(predator)
 
     def _prey_flee(self, prey: Creature, bucket: dict) -> bool:
         """Prey flees from nearest predator within sense_radius * 1.2.
@@ -702,8 +765,24 @@ class Simulation:
             was_predator = creature.genome.aggression >= 0.5
             is_predator = new_genome.aggression >= 0.5
             if was_predator != is_predator:
+                if was_predator:
+                    self._finalize_predator_life(
+                        creature,
+                        end_reason="species_flip_to_prey",
+                        death_cause="species_flip",
+                    )
+                    self._predator_diag_events["cosmic_flips_from_predator"].append({
+                        "frame": self._frame,
+                        "lineage_id": creature.lineage_id,
+                    })
                 creature.species = "predator" if is_predator else "prey"
                 creature.lineage_id = self._alloc_lineage_id()
+                if is_predator:
+                    self._predator_diag_events["cosmic_flips_to_predator"].append({
+                        "frame": self._frame,
+                        "lineage_id": creature.lineage_id,
+                    })
+                    self._register_predator_life(creature, origin="cosmic_flip")
 
         creature.genome = new_genome  # type: ignore[misc]
         creature.glyph_surface = None
@@ -738,6 +817,16 @@ class Simulation:
 
         self.generation += 1
         self.total_births += 1
+        if creature.species == "predator":
+            life = self._ensure_predator_life(creature)
+            life["births_produced"] += 1
+            self._predator_diag_events["births"].append({
+                "frame": self._frame,
+                "parent_life_id": life["life_id"],
+                "parent_lineage_id": creature.lineage_id,
+                "offspring_lineage_id": offspring.lineage_id,
+            })
+            self._register_predator_life(offspring, origin="birth")
         return offspring
 
     def _check_ecosystem_balance(self) -> None:
@@ -754,6 +843,11 @@ class Simulation:
             for c in candidates[:3]:
                 c.species = "predator"
                 c.lineage_id = self._alloc_lineage_id()
+                self._predator_diag_events["rescues"].append({
+                    "frame": self._frame,
+                    "lineage_id": c.lineage_id,
+                })
+                self._register_predator_life(c, origin="rescue")
 
         # Prey extinct: convert 10 lowest-aggression predators
         elif len(preys) == 0 and len(preds) > 0:
@@ -1716,6 +1810,13 @@ class Simulation:
             cause = dead_causes.get(id(creature), "energy")
             if cause == "age":
                 self._old_age_lifespans.append(creature.age)
+            if creature.species == "predator":
+                death_cause = "old_age" if cause == "age" else "starvation"
+                self._finalize_predator_life(
+                    creature,
+                    end_reason="death",
+                    death_cause=death_cause,
+                )
             self.death_events.append({
                 "x": creature.x,
                 "y": creature.y,
@@ -1789,6 +1890,31 @@ class Simulation:
             "recent_kills": len(self._recent_kill_frames),
             "recent_cross_band_misses": len(self._recent_cross_band_miss_frames),
             "total_kills": self.predation_kill_count,
+        }
+
+    def export_predator_diagnostics(self) -> dict[str, Any]:
+        """Return a structured predator-only diagnostic snapshot."""
+        base_threshold = float(
+            self._get_mode_param(
+                "predator_energy_to_reproduce",
+                self._get_mode_param(
+                    "energy_to_reproduce",
+                    self.settings.energy_to_reproduce,
+                ),
+            )
+        )
+        return {
+            "frame": self._frame,
+            "base_threshold": base_threshold,
+            "completed_lives": [self._copy_predator_life(life) for life in self._predator_diag_completed],
+            "active_lives": [
+                self._copy_predator_life(life)
+                for life in self._predator_diag_active.values()
+            ],
+            "events": {
+                name: [dict(event) for event in events]
+                for name, events in self._predator_diag_events.items()
+            },
         }
 
     def get_depth_band_counts(self) -> dict[str, int]:
@@ -1944,3 +2070,154 @@ class Simulation:
             }
 
         return snapshot
+
+    def _reset_predator_diagnostics(self) -> None:
+        self._predator_diag_next_life_id = 1
+        self._predator_diag_active.clear()
+        self._predator_diag_completed.clear()
+        for events in self._predator_diag_events.values():
+            events.clear()
+
+    def _register_predator_life(self, creature: Creature, *, origin: str) -> dict[str, Any]:
+        life = {
+            "life_id": self._predator_diag_next_life_id,
+            "origin": origin,
+            "lineage_id": creature.lineage_id,
+            "start_frame": self._frame,
+            "end_frame": None,
+            "start_energy": creature.energy,
+            "end_energy": None,
+            "kills": 0,
+            "kill_pre_energies": [],
+            "kill_post_energies": [],
+            "highest_energy": creature.energy,
+            "frames_observed": 0,
+            "frames_with_prey_sighted": 0,
+            "prey_scarce_frames": 0,
+            "cross_band_contact_misses": 0,
+            "births_produced": 0,
+            "threshold_min": None,
+            "threshold_max": None,
+            "closest_peak_gap": None,
+            "closest_repro_check_gap": None,
+            "peak_reached_threshold": False,
+            "repro_check_reached_threshold": False,
+            "last_saw_prey_frame": None,
+            "last_kill_frame": None,
+            "death_cause": None,
+            "death_context": None,
+            "end_reason": None,
+        }
+        self._predator_diag_next_life_id += 1
+        self._predator_diag_active[id(creature)] = life
+        return life
+
+    def _ensure_predator_life(self, creature: Creature) -> dict[str, Any]:
+        life = self._predator_diag_active.get(id(creature))
+        if life is None:
+            life = self._register_predator_life(creature, origin="observed")
+        return life
+
+    def _record_predator_prey_sighting(self, predator: Creature) -> None:
+        life = self._ensure_predator_life(predator)
+        life["frames_with_prey_sighted"] += 1
+        life["last_saw_prey_frame"] = self._frame
+
+    def _record_predator_cross_band_miss(self, predator: Creature) -> None:
+        life = self._ensure_predator_life(predator)
+        life["cross_band_contact_misses"] += 1
+
+    def _record_predator_kill(
+        self,
+        predator: Creature,
+        *,
+        pre_kill_energy: float,
+        post_kill_energy: float,
+        repro_threshold: float,
+    ) -> None:
+        life = self._ensure_predator_life(predator)
+        life["kills"] += 1
+        life["last_kill_frame"] = self._frame
+        life["highest_energy"] = max(life["highest_energy"], post_kill_energy)
+        life["kill_pre_energies"].append(pre_kill_energy)
+        life["kill_post_energies"].append(post_kill_energy)
+        self._record_predator_gap(
+            life,
+            key="closest_peak_gap",
+            gap=repro_threshold - post_kill_energy,
+        )
+        if post_kill_energy >= repro_threshold:
+            life["peak_reached_threshold"] = True
+
+    def _record_predator_post_cost_state(
+        self,
+        predator: Creature,
+        *,
+        repro_threshold: float,
+        prey_scarce: bool,
+    ) -> None:
+        life = self._ensure_predator_life(predator)
+        life["frames_observed"] += 1
+        if prey_scarce:
+            life["prey_scarce_frames"] += 1
+        life["highest_energy"] = max(life["highest_energy"], predator.energy)
+        if life["threshold_min"] is None or repro_threshold < life["threshold_min"]:
+            life["threshold_min"] = repro_threshold
+        if life["threshold_max"] is None or repro_threshold > life["threshold_max"]:
+            life["threshold_max"] = repro_threshold
+        self._record_predator_gap(
+            life,
+            key="closest_repro_check_gap",
+            gap=repro_threshold - predator.energy,
+        )
+        if predator.energy >= repro_threshold:
+            life["repro_check_reached_threshold"] = True
+
+    def _record_predator_gap(self, life: dict[str, Any], *, key: str, gap: float) -> None:
+        if gap <= 0.0:
+            life[key] = 0.0
+            return
+        current = life[key]
+        if current is None or gap < current:
+            life[key] = gap
+
+    def _finalize_predator_life(
+        self,
+        creature: Creature,
+        *,
+        end_reason: str,
+        death_cause: str,
+    ) -> None:
+        life = self._predator_diag_active.pop(id(creature), None)
+        if life is None:
+            return
+        life["end_frame"] = self._frame
+        life["end_energy"] = creature.energy
+        life["lineage_id"] = creature.lineage_id
+        life["death_cause"] = death_cause
+        life["death_context"] = self._classify_predator_death_context(life, death_cause)
+        life["end_reason"] = end_reason
+        self._predator_diag_completed.append(life)
+
+    def _classify_predator_death_context(
+        self,
+        life: dict[str, Any],
+        death_cause: str,
+    ) -> str:
+        if death_cause == "old_age":
+            return "old_age"
+        last_saw_prey_frame = life["last_saw_prey_frame"]
+        if last_saw_prey_frame is None:
+            return "long_scarcity"
+        frames_since_sighting = self._frame - last_saw_prey_frame
+        if frames_since_sighting <= _PREDATOR_DIAG_ACTIVE_HUNT_FRAMES:
+            return "active_hunting"
+        if frames_since_sighting <= _PREDATOR_DIAG_FAILED_PURSUIT_FRAMES:
+            return "after_failed_pursuit"
+        return "long_scarcity"
+
+    def _copy_predator_life(self, life: dict[str, Any]) -> dict[str, Any]:
+        clone = dict(life)
+        clone["kill_pre_energies"] = list(life["kill_pre_energies"])
+        clone["kill_post_energies"] = list(life["kill_post_energies"])
+        return clone

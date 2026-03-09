@@ -74,6 +74,8 @@ _CANONICAL_MODE_KEYS: dict[str, tuple[str, ...]] = {
         "food_spawn_rate",
         "mutation_rate",
         "energy_to_reproduce",
+        "prey_energy_to_reproduce",
+        "predator_energy_to_reproduce",
     ),
     "boids": (
         "initial_population",
@@ -102,6 +104,8 @@ _MODE_PARAM_RULES: dict[str, tuple[str, float | int | None, float | int | None]]
     "food_spawn_rate": ("float", 0.0, None),
     "mutation_rate": ("float", 0.0, 1.0),
     "energy_to_reproduce": ("float", 0.05, 1.0),
+    "prey_energy_to_reproduce": ("float", 0.05, 1.0),
+    "predator_energy_to_reproduce": ("float", 0.05, 1.0),
     "food_cycle_enabled": ("bool", None, None),
     "zone_strength": ("float", 0.0, 1.0),
     "target_fps": ("int", 1, None),
