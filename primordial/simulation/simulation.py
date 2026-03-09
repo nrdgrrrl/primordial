@@ -124,8 +124,8 @@ class Simulation:
         """Return mode-specific param from config, falling back to base settings.
 
         Resolution order:
-        1. settings.mode_params[current_mode][key]  (from Config.DEFAULT_MODE_PARAMS
-           merged with [modes.*] TOML overrides)
+        1. settings.mode_params[current_mode][key]  (canonical mode defaults
+           merged with [modes.*] user overrides)
         2. settings.<key>  (generic base default)
         3. fallback argument
         """

@@ -49,6 +49,12 @@ _assets = Path("primordial") / "assets"
 if _assets.exists():
     args.append(f"--add-data={_assets}{os.pathsep}primordial/assets")
 
+_canonical_defaults = Path("primordial") / "config" / "defaults.toml"
+if _canonical_defaults.exists():
+    args.append(
+        f"--add-data={_canonical_defaults}{os.pathsep}primordial/config"
+    )
+
 # Windows-specific build options
 if platform.system() == "Windows":
     # Icon (optional — only applied if the file exists)

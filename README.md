@@ -192,7 +192,7 @@ Over a 10–30 minute run, you can observe real selection pressure at work:
 
 ## Simulation Modes
 
-Primordial ships with four fully independent simulation modes selectable in the settings overlay (`S`) or via `config.toml`.
+Primordial ships with four fully independent simulation modes selectable in the settings overlay (`S`) or via the user `config.toml`.
 
 ### Energy Mode (default)
 
@@ -258,14 +258,17 @@ You can switch modes at any time with `S` → change Mode → Apply. The simulat
 
 ## Settings
 
-Configuration is now TOML-backed and persistent across app updates.
+Configuration is TOML-backed and persistent across app updates.
 
 - Press **`S`** in normal mode to open the in-app settings overlay.
-- Config is also editable by hand in `config.toml`.
-- File locations:
+- Canonical repo-tracked defaults live in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml).
+- The runtime user override file is editable by hand as `config.toml`.
+- User config locations:
   - **Windows:** `~/AppData/Roaming/Primordial/config.toml`
   - **macOS:** `~/Library/Application Support/Primordial/config.toml`
   - **Linux:** `~/.config/primordial/config.toml`
+- Load order is: committed canonical defaults first, then the platform user config file as overrides.
+- On first run, Primordial writes a user `config.toml` populated from the canonical defaults.
 - Runtime logs are written beside config as `primordial.log` (all modes, including screensaver).
 
 ### Settings Reference
@@ -283,8 +286,8 @@ Configuration is now TOML-backed and persistent across app updates.
 | simulation | cosmic_ray_rate | float 0..1 | Per-frame spontaneous mutation chance |
 | simulation | energy_to_reproduce | float 0.05..1 | Reproduction energy threshold |
 | simulation | creature_speed_base | float > 0 | Global movement scale |
-| simulation/evolution | zone_count | int >= 0 | Number of generated environmental zones |
-| simulation/evolution | zone_strength | float 0..1 | Zone effect intensity |
+| simulation | zone_count | int >= 0 | Number of generated environmental zones |
+| simulation | zone_strength | float 0..1 | Zone effect intensity |
 | display | visual_theme | enum: ocean/petri/geometric/chaotic | Rendering theme |
 | display | fullscreen | bool | Fullscreen/windowed mode |
 | display | target_fps | int >= 1 | Frame limit |
@@ -317,7 +320,7 @@ primordial/
 ├── primordial/
 │   ├── __init__.py
 │   ├── main.py              # Real entry point, game loop, controls, logging
-│   ├── config/              # TOML-backed Config class and path logic
+│   ├── config/              # Config loader plus committed canonical defaults TOML
 │   ├── settings.py          # Compatibility alias to Config
 │   ├── utils/
 │   │   ├── screensaver.py   # /s /p /c parsing
@@ -355,10 +358,10 @@ All modes live inside the single `Simulation` class in `primordial/simulation/si
 
 1. Add a `_spawn_initial_population_<name>()` method and dispatch it from `_spawn_initial_population()`.
 2. Add a `_step_<name>()` method and dispatch it from `step()`.
-3. Add mode-specific built-in defaults to `_MODE_DEFAULTS` dict.
-4. Add mode name to `Config.VALID_SIM_MODES` and the settings overlay option list.
-5. Add HUD lines in `hud.py` (`_lines_<name>()` + dispatch in `render()`).
-6. Optionally add a `[modes.<name>]` TOML section in `Config.to_toml()`.
+3. Add the mode name to `Config.VALID_SIM_MODES`.
+4. Add the canonical defaults in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml), including an explicit `[modes.<name>]` section for any mode-specific knobs.
+5. Update config parsing/serialization in [`primordial/config/config.py`](/home/victoria/projects/primordial/primordial/config/config.py).
+6. Add the settings overlay option list and HUD lines in `hud.py` (`_lines_<name>()` + dispatch in `render()`).
 
 See AGENT.md for the full Sim Mode Contract.
 

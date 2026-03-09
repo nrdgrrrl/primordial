@@ -1,0 +1,66 @@
+# Primordial canonical defaults
+# This committed file is the source of truth for user-meaningful config defaults.
+
+[simulation]
+mode = "energy"           # energy | predator_prey | boids | drift
+initial_population = 80
+max_population = 220
+food_spawn_rate = 0.8000
+food_max_particles = 300
+food_cycle_enabled = true
+food_cycle_period = 1800    # total cycle length in sim frames (1800 ~= 30s)
+mutation_rate = 0.0600
+cosmic_ray_rate = 0.000300
+energy_to_reproduce = 0.8000
+creature_speed_base = 1.5000
+zone_count = 5
+zone_strength = 0.8000
+
+[display]
+visual_theme = "ocean"    # ocean | petri | geometric | chaotic
+fullscreen = true
+target_fps = 60
+show_hud = true
+
+[rendering]
+glyph_size_base = 48
+kin_line_max_distance = 120.0
+kin_line_min_group = 3
+territory_top_n = 3
+territory_shimmer_lerp = 0.0500
+territory_fade_seconds = 2.00
+death_animation_frames = 40
+birth_animation_frames = 30
+death_particle_count = 5
+zone_background_intensity = 1.20
+predator_highlight_alpha = 220
+predator_highlight_radius_scale = 2.10
+predator_highlight_pulse_seconds = 1.10
+
+# Per-mode parameter overrides — these override the base [simulation] values
+# when that mode is active. Edit to tune each mode independently.
+
+[modes.predator_prey]
+initial_population = 120
+predator_fraction = 0.2500
+food_spawn_rate = 0.5000
+mutation_rate = 0.0800
+energy_to_reproduce = 0.7000
+
+[modes.boids]
+initial_population = 150
+max_population = 300
+mutation_rate = 0.0700
+energy_to_reproduce = 0.7200
+food_cycle_enabled = false
+zone_strength = 0.5000
+
+[modes.drift]
+initial_population = 60
+max_population = 200
+mutation_rate = 0.0400
+cosmic_ray_rate = 0.000600
+energy_to_reproduce = 0.9500
+food_cycle_enabled = false
+zone_strength = 0.6000
+target_fps = 60

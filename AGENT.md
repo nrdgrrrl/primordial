@@ -308,7 +308,11 @@ All four systems create converging selection pressure:
 
 ### Configuration (`config/config.py`)
 
-Single dataclass. Fields added in this pass:
+`Config` now loads committed canonical defaults from `primordial/config/defaults.toml`
+and layers the platform user `config.toml` on top. Python owns validation,
+coercion, clamping, typed access, and derived values only.
+
+Canonical user-meaningful defaults currently include:
 
 ```
 # Original glyph/animation fields:
@@ -341,8 +345,8 @@ All four modes are implemented as `_step_<mode>()` private methods on the single
 2. Add `_spawn_initial_population_<mode>(self) -> None` and register it in
    `_spawn_initial_population()`
 3. Add mode name to `Settings.VALID_SIM_MODES`
-4. Add per-mode defaults to `_MODE_DEFAULTS` dict in `simulation.py`
-5. Write `[modes.<name>]` section in `Config.to_toml()`
+4. Add canonical defaults in `primordial/config/defaults.toml`
+5. Update `Config` parsing/serialization for the new mode
 
 **What a mode may override:**
 - Food spawning (call or skip `_spawn_food()`)
@@ -582,11 +586,13 @@ A future enhancement will add LLM narration. `get_dominant_traits()` now returns
 
 ## Config file and settings overlay
 
-- `Config` loads/saves `config.toml` under the user profile path:
+- Canonical user-meaningful defaults live in committed `primordial/config/defaults.toml`.
+- `Config` loads/saves the platform user `config.toml` under the user profile path:
   - Windows: `~/AppData/Roaming/Primordial/config.toml`
   - macOS: `~/Library/Application Support/Primordial/config.toml`
   - Linux: `~/.config/primordial/config.toml`
-- On first run, defaults are written automatically.
+- Load order is canonical defaults first, then the user `config.toml` as overrides.
+- On first run, a user `config.toml` populated from canonical defaults is written automatically.
 - If parse fails, config is backed up to `config.toml.bak` and defaults are restored.
 - Unknown config keys are ignored with warning logs (not fatal).
 - Type mismatches are coerced safely; invalid values fall back to defaults and are clamped on save.
@@ -595,7 +601,12 @@ A future enhancement will add LLM narration. `get_dominant_traits()` now returns
 - Settings that require reset are marked in the overlay; simulation reset is only triggered by explicit `R`.
 
 When adding a new setting, update all of:
-1. Config class defaults (`primordial/config/config.py`)
-2. TOML template (`config.toml` and `Config.to_toml()`)
+1. Canonical defaults file (`primordial/config/defaults.toml`)
+2. Config parsing/validation/serialization (`primordial/config/config.py`)
 3. Settings overlay widget list (`primordial/rendering/settings_overlay.py`)
 4. AGENT.md settings reference table/notes
+5. README.md when user-facing config behavior or locations change
+
+Rule: any newly introduced user-meaningful config or tuning value must be added
+to `primordial/config/defaults.toml` in the same change. Do not hide new
+user-facing defaults as unexplained Python literals.
