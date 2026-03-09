@@ -48,6 +48,7 @@ mutation_rate = 0.0800
 energy_to_reproduce = 0.7000
 prey_energy_to_reproduce = 0.8000
 predator_energy_to_reproduce = 0.7200
+predator_kill_energy_gain_cap = 0.5000
 
 [modes.boids]
 initial_population = 150

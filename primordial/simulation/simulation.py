@@ -171,6 +171,10 @@ class Simulation:
             )
         return shared_threshold
 
+    def _get_predator_kill_energy_gain_cap(self) -> float:
+        """Resolve the per-kill predator energy gain cap."""
+        return float(self._get_mode_param("predator_kill_energy_gain_cap", 0.5))
+
     # ------------------------------------------------------------------
     # Setup helpers
     # ------------------------------------------------------------------
@@ -616,9 +620,11 @@ class Simulation:
         predator: Creature,
         bucket: dict,
         *,
-        repro_threshold: float,
+        repro_threshold: float | None = None,
     ) -> None:
         """Predator seeks nearest prey; kills on contact."""
+        if repro_threshold is None:
+            repro_threshold = self._get_reproduction_threshold(predator)
         sense = self._get_effective_sensing_range(predator, multiplier=2.0)
         best_prey: Creature | None = None
         best_dist_sq = sense * sense
@@ -670,7 +676,7 @@ class Simulation:
             # Transfer from prey to predator; prevents multiple predators
             # farming energy from an already-dead prey in the same frame.
             pre_kill_energy = predator.energy
-            energy_gain = min(0.5, best_prey.energy)
+            energy_gain = min(self._get_predator_kill_energy_gain_cap(), best_prey.energy)
             predator.energy = min(1.0, predator.energy + energy_gain)
             best_prey.energy = 0.0
             self.predation_kill_count += 1
@@ -1903,9 +1909,11 @@ class Simulation:
                 ),
             )
         )
+        kill_energy_gain_cap = self._get_predator_kill_energy_gain_cap()
         return {
             "frame": self._frame,
             "base_threshold": base_threshold,
+            "predator_kill_energy_gain_cap": kill_energy_gain_cap,
             "completed_lives": [self._copy_predator_life(life) for life in self._predator_diag_completed],
             "active_lives": [
                 self._copy_predator_life(life)

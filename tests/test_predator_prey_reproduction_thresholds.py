@@ -29,14 +29,70 @@ class PredatorPreyReproductionThresholdTests(unittest.TestCase):
         simulation.zone_manager.zones = []
         return simulation
 
-    def _build_creature(self, species: str) -> Creature:
+    def _build_creature(self, species: str, *, longevity: float = 0.5) -> Creature:
         return Creature(
             x=100.0,
             y=100.0,
-            genome=Genome(),
+            genome=Genome(longevity=longevity),
             lineage_id=1,
             species=species,
         )
+
+    def test_predator_prey_step_uses_role_specific_predator_threshold(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["energy_to_reproduce"] = 0.95
+        simulation.settings.mode_params["predator_prey"]["predator_energy_to_reproduce"] = 0.70
+        simulation.settings.mode_params["predator_prey"]["prey_energy_to_reproduce"] = 0.95
+
+        predator = self._build_creature("predator", longevity=0.0)
+        predator.energy = 0.72
+        predator.age = 0
+        predator.vx = 0.0
+        predator.vy = 0.0
+        predator.x = 20.0
+        predator.y = 20.0
+
+        prey = self._build_creature("prey", longevity=0.0)
+        prey.energy = 0.10
+        prey.age = 0
+        prey.vx = 0.0
+        prey.vy = 0.0
+        prey.x = 180.0
+        prey.y = 180.0
+
+        simulation.creatures = [predator, prey]
+        simulation.step()
+
+        predator_count, _prey_count = simulation.get_species_counts()
+        self.assertEqual(predator_count, 2)
+
+    def test_predator_prey_step_uses_role_specific_prey_threshold(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["energy_to_reproduce"] = 0.70
+        simulation.settings.mode_params["predator_prey"]["prey_energy_to_reproduce"] = 0.80
+        simulation.settings.mode_params["predator_prey"]["predator_energy_to_reproduce"] = 0.70
+
+        prey = self._build_creature("prey", longevity=0.0)
+        prey.energy = 0.75
+        prey.age = 0
+        prey.vx = 0.0
+        prey.vy = 0.0
+        prey.x = 20.0
+        prey.y = 20.0
+
+        predator = self._build_creature("predator", longevity=0.0)
+        predator.energy = 0.10
+        predator.age = 0
+        predator.vx = 0.0
+        predator.vy = 0.0
+        predator.x = 180.0
+        predator.y = 180.0
+
+        simulation.creatures = [prey, predator]
+        simulation.step()
+
+        _predator_count, prey_count = simulation.get_species_counts()
+        self.assertEqual(prey_count, 1)
 
     def test_prey_uses_role_specific_threshold_in_predator_prey_mode(self) -> None:
         simulation = self._build_simulation("predator_prey")

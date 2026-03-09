@@ -243,6 +243,9 @@ def _build_report(
                 default=None,
             ),
         },
+        "kill_reward": {
+            "predator_kill_energy_gain_cap": diagnostics["predator_kill_energy_gain_cap"],
+        },
         "deaths": {
             "causes": _count_by(post_window_completed_lives, "death_cause"),
             "contexts": _count_by(post_window_completed_lives, "death_context"),
@@ -287,11 +290,20 @@ def main() -> int:
         "--output",
         help="Optional path to write the JSON report.",
     )
+    parser.add_argument(
+        "--predator-kill-energy-gain-cap",
+        type=float,
+        help="Optional override for predator kill energy gain cap.",
+    )
     args = parser.parse_args()
 
     scenario, settings = build_settings_for_scenario(args.scenario)
     if settings.sim_mode != "predator_prey":
         raise ValueError("predator reproduction diagnostic requires predator_prey mode")
+    if args.predator_kill_energy_gain_cap is not None:
+        settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = (
+            args.predator_kill_energy_gain_cap
+        )
 
     resolved_seed = scenario.seed if args.seed is None else args.seed
     random.seed(resolved_seed)

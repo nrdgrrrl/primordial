@@ -64,6 +64,7 @@ mutation_rate = 0.1200
 
 [modes.predator_prey]
 predator_energy_to_reproduce = 0.7100
+predator_kill_energy_gain_cap = 0.6500
 """.strip()
                 + "\n",
                 encoding="utf-8",
@@ -79,6 +80,10 @@ predator_energy_to_reproduce = 0.7100
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_energy_to_reproduce"],
             0.71,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"],
+            0.65,
         )
         self.assertEqual(
             settings.mode_params["predator_prey"]["prey_energy_to_reproduce"],

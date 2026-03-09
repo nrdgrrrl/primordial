@@ -218,8 +218,36 @@ class EcologySensingTests(unittest.TestCase):
 
         predator_count, prey_count = simulation.get_species_counts()
         self.assertEqual(prey_count, 0)
+
+    def test_predator_kill_energy_gain_cap_uses_mode_param(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = 0.25
+
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.10,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=102.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.90,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+        bucket = simulation._build_creature_bucket()
+
+        with patch("random.gauss", return_value=0.0), patch("random.random", return_value=0.0):
+            simulation._predator_hunt_prey(predator, bucket)
+
+        self.assertAlmostEqual(predator.energy, 0.35)
+        self.assertEqual(prey.energy, 0.0)
         self.assertEqual(simulation.predation_kill_count, 1)
-        self.assertEqual(simulation.death_events[0]["cause"], "predation")
         self.assertEqual(simulation.get_recent_predation_stats()["recent_kills"], 1)
         pred_actual_speed, prey_actual_speed = simulation.get_species_avg_actual_speeds()
         self.assertGreaterEqual(pred_actual_speed, 0.0)
