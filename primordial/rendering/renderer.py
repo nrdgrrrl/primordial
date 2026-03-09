@@ -18,11 +18,11 @@ from .themes import AmbientParticle, OceanTheme, Theme, get_theme
 # Zone type → background RGB (same palette as zones.py, duplicated here
 # so renderer has no import from simulation/)
 _ZONE_BG_COLORS: dict[str, tuple[int, int, int]] = {
-    "warm_vent":      (180, 90, 10),
-    "open_water":     (60, 120, 200),
-    "kelp_forest":    (0, 80, 40),
-    "hunting_ground": (100, 0, 10),
-    "deep_trench":    (15, 5, 80),
+    "warm_vent":      (214, 116, 34),
+    "open_water":     (56, 156, 224),
+    "kelp_forest":    (36, 132, 92),
+    "hunting_ground": (172, 44, 52),
+    "deep_trench":    (64, 60, 156),
 }
 
 _ZONE_LABELS: dict[str, str] = {
@@ -131,9 +131,13 @@ class Renderer:
         self._line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._shimmer_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._predator_highlight_surf = pygame.Surface(
+            (self.width, self.height), pygame.SRCALPHA
+        )
 
         # Cached zone background (zones never move; render once)
         self._zone_surf_cached: pygame.Surface | None = None
+        self.show_predator_highlight = False
 
         self.settings_overlay = SettingsOverlay(settings)
 
@@ -172,6 +176,9 @@ class Renderer:
         self._line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._shimmer_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._predator_highlight_surf = pygame.Surface(
+            (self.width, self.height), pygame.SRCALPHA
+        )
         self._zone_surf_cached = None
         self._shimmer_states.clear()
         self.ambient_particles = self.theme.create_ambient_particles(
@@ -300,6 +307,11 @@ class Renderer:
             self.theme.render_creature(self.screen, creature, anim_time, scale=scale)
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
+        # --- Predator locator highlight (hold P) ---
+        t0 = time.perf_counter()
+        self._draw_predator_highlights(simulation, anim_time)
+        timings["predator_highlights_ms"] = (time.perf_counter() - t0) * 1000.0
+
         # --- Attack lines (drawn above creatures, very faint) ---
         t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme) and simulation.active_attacks:
@@ -346,6 +358,10 @@ class Renderer:
         else:
             self.settings_overlay.open()
 
+    def set_predator_highlight(self, active: bool) -> None:
+        """Toggle the temporary predator locator overlay."""
+        self.show_predator_highlight = active
+
     # ------------------------------------------------------------------
     # Zone backgrounds
     # ------------------------------------------------------------------
@@ -364,11 +380,12 @@ class Renderer:
                 cx = int(zone.x)
                 cy = int(zone.y)
 
-                layers = 6
+                layers = 8
+                intensity = self.settings.zone_background_intensity
                 for i in range(layers, 0, -1):
                     t = i / layers
                     layer_radius = int(radius * t)
-                    layer_alpha = int(20 * (t ** 2))
+                    layer_alpha = int(22 * intensity * (0.35 + 0.65 * (t ** 1.8)))
                     if layer_alpha <= 0 or layer_radius <= 0:
                         continue
                     pygame.draw.circle(
@@ -379,6 +396,96 @@ class Renderer:
                     )
 
         self.screen.blit(self._zone_surf_cached, (0, 0))
+
+    def _draw_predator_highlights(
+        self, simulation: "Simulation", anim_time: float
+    ) -> None:
+        """Draw a cheap hold-to-locate overlay around current predators."""
+        if (
+            not self.show_predator_highlight
+            or simulation.settings.sim_mode != "predator_prey"
+        ):
+            return
+
+        predators = [
+            creature for creature in simulation.creatures if creature.species == "predator"
+        ]
+        if not predators:
+            return
+
+        self._predator_highlight_surf.fill((0, 0, 0, 0))
+        pulse_seconds = self.settings.predator_highlight_pulse_seconds
+        alpha = self.settings.predator_highlight_alpha
+        radius_scale = self.settings.predator_highlight_radius_scale
+
+        for creature in predators:
+            if isinstance(self.theme, OceanTheme):
+                base_color = self.theme.get_creature_color(
+                    creature.genome.hue, creature.genome.saturation
+                )
+            else:
+                base_color = (255, 220, 180)
+            accent_color = tuple(
+                min(255, int(channel + (255 - channel) * 0.55)) for channel in base_color
+            )
+            pulse = 0.5 + 0.5 * math.sin(
+                (2 * math.pi * anim_time / pulse_seconds) + creature._glyph_phase
+            )
+            ring_radius = max(
+                10, int(creature.get_radius() * radius_scale + 6.0 * pulse)
+            )
+            outer_radius = ring_radius + max(3, int(4.0 * pulse))
+            ring_width = max(2, int(ring_radius * 0.18))
+            tick_length = max(6, int(ring_radius * 0.55))
+            center = (int(creature.x), int(creature.y))
+
+            pygame.draw.circle(
+                self._predator_highlight_surf,
+                (*accent_color, int(alpha * 0.35)),
+                center,
+                outer_radius,
+                ring_width + 1,
+            )
+            pygame.draw.circle(
+                self._predator_highlight_surf,
+                (*accent_color, alpha),
+                center,
+                ring_radius,
+                ring_width,
+            )
+
+            cx, cy = center
+            tick_gap = ring_radius + 2
+            pygame.draw.line(
+                self._predator_highlight_surf,
+                (*accent_color, int(alpha * 0.80)),
+                (cx, cy - tick_gap),
+                (cx, cy - tick_gap - tick_length),
+                2,
+            )
+            pygame.draw.line(
+                self._predator_highlight_surf,
+                (*accent_color, int(alpha * 0.80)),
+                (cx + tick_gap, cy),
+                (cx + tick_gap + tick_length, cy),
+                2,
+            )
+            pygame.draw.line(
+                self._predator_highlight_surf,
+                (*accent_color, int(alpha * 0.80)),
+                (cx, cy + tick_gap),
+                (cx, cy + tick_gap + tick_length),
+                2,
+            )
+            pygame.draw.line(
+                self._predator_highlight_surf,
+                (*accent_color, int(alpha * 0.80)),
+                (cx - tick_gap, cy),
+                (cx - tick_gap - tick_length, cy),
+                2,
+            )
+
+        self.screen.blit(self._predator_highlight_surf, (0, 0))
 
     def _draw_zone_labels(self, simulation: "Simulation") -> None:
         """Draw subtle zone labels to support ecological review."""

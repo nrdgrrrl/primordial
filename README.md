@@ -74,6 +74,7 @@ make clean     # remove build/dist and __pycache__ dirs
 | `F` | Toggle fullscreen/windowed mode |
 | `R` | Reset simulation (new population) |
 | `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
+| Hold `P` | Highlight predators while held in `predator_prey` mode |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
 

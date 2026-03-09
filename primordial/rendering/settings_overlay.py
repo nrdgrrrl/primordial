@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import pygame
 
+_SIMULATION_FRAMES_PER_SECOND = 60.0
+
 
 @dataclass
 class Field:
@@ -46,7 +48,7 @@ class SettingsOverlay:
             Field("Mutation Rate", "mutation_rate", "float", 0.0, 1.0, 0.01, section="Evolution"),
             Field("Cosmic Ray Rate", "cosmic_ray_rate", "float", 0.0, 0.01, 0.0001, section="Evolution"),
             Field("Food Cycle", "food_cycle_enabled", "bool", section="Evolution"),
-            Field("Food Cycle Period", "food_cycle_period", "int", 60, 5000, 30, section="Evolution"),
+            Field("Food Cycle Length", "food_cycle_period", "int", 60, 5000, 30, section="Evolution"),
             Field("Zone Count", "zone_count", "int", 0, 12, 1, section="Evolution"),
             Field("Zone Strength", "zone_strength", "float", 0.0, 1.0, 0.05, section="Evolution"),
         ]
@@ -196,6 +198,10 @@ class SettingsOverlay:
             return "[ ON ]" if value else "[ OFF ]"
         if field.kind == "enum":
             return f"< {value} >"
+        if field.attr == "food_cycle_period":
+            frames = int(value)
+            seconds = frames / _SIMULATION_FRAMES_PER_SECOND
+            return f"< {frames}f / {seconds:.1f}s >"
         if field.kind == "int":
             return f"< {int(value)} >"
         return f"{float(value):.3f}"

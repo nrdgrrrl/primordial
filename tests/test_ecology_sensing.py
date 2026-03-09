@@ -180,6 +180,25 @@ class EcologySensingTests(unittest.TestCase):
 
         self.assertGreater(simulation.population, 0)
 
+    def test_food_cycle_period_changes_runtime_cycle_timing(self) -> None:
+        simulation = self._build_simulation("energy")
+        simulation.settings.food_cycle_enabled = True
+        simulation.settings.food_spawn_rate = 1.0
+        simulation._frame = 150
+
+        simulation.settings.food_cycle_period = 600
+        short_phase = simulation.food_cycle_phase
+        short_rate = simulation._get_food_rate()
+
+        simulation.settings.food_cycle_period = 1200
+        long_phase = simulation.food_cycle_phase
+        long_rate = simulation._get_food_rate()
+
+        self.assertAlmostEqual(short_phase, 1.0)
+        self.assertLess(long_phase, short_phase)
+        self.assertAlmostEqual(short_rate, 1.0)
+        self.assertLess(long_rate, short_rate)
+
 
 if __name__ == "__main__":
     unittest.main()

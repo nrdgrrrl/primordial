@@ -588,6 +588,10 @@ def main(
                 # Preview pane: no input handling except QUIT (already handled above).
                 pass
 
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_p:
+                    renderer.set_predator_highlight(False)
+
             elif event.type == pygame.KEYDOWN:
                 if renderer.settings_overlay.visible:
                     action = renderer.settings_overlay.handle_event(event)
@@ -680,6 +684,8 @@ def main(
                                     active_snapshot_path,
                                 )
                 else:
+                    if event.key == pygame.K_p:
+                        renderer.set_predator_highlight(True)
                     running = handle_keydown(
                         event,
                         simulation,

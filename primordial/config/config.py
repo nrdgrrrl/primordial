@@ -89,6 +89,10 @@ class Config:
         self.death_animation_frames = 40
         self.birth_animation_frames = 30
         self.death_particle_count = 5
+        self.zone_background_intensity = 1.20
+        self.predator_highlight_alpha = 220
+        self.predator_highlight_radius_scale = 2.10
+        self.predator_highlight_pulse_seconds = 1.10
 
     def _load_or_create(self) -> None:
         if not self.config_path.exists():
@@ -173,6 +177,10 @@ class Config:
                 "death_animation_frames",
                 "birth_animation_frames",
                 "death_particle_count",
+                "zone_background_intensity",
+                "predator_highlight_alpha",
+                "predator_highlight_radius_scale",
+                "predator_highlight_pulse_seconds",
             },
         )
 
@@ -266,6 +274,26 @@ class Config:
         self.death_particle_count = self._coerce_int(
             rendering, "death_particle_count", self.death_particle_count
         )
+        self.zone_background_intensity = self._coerce_float(
+            rendering,
+            "zone_background_intensity",
+            self.zone_background_intensity,
+        )
+        self.predator_highlight_alpha = self._coerce_int(
+            rendering,
+            "predator_highlight_alpha",
+            self.predator_highlight_alpha,
+        )
+        self.predator_highlight_radius_scale = self._coerce_float(
+            rendering,
+            "predator_highlight_radius_scale",
+            self.predator_highlight_radius_scale,
+        )
+        self.predator_highlight_pulse_seconds = self._coerce_float(
+            rendering,
+            "predator_highlight_pulse_seconds",
+            self.predator_highlight_pulse_seconds,
+        )
 
         self._merge_mode_params(data.get("modes", {}))
 
@@ -298,6 +326,14 @@ class Config:
         self.death_animation_frames = max(1, self.death_animation_frames)
         self.birth_animation_frames = max(1, self.birth_animation_frames)
         self.death_particle_count = max(0, self.death_particle_count)
+        self.zone_background_intensity = max(0.1, self.zone_background_intensity)
+        self.predator_highlight_alpha = max(32, min(255, self.predator_highlight_alpha))
+        self.predator_highlight_radius_scale = max(
+            1.0, self.predator_highlight_radius_scale
+        )
+        self.predator_highlight_pulse_seconds = max(
+            0.1, self.predator_highlight_pulse_seconds
+        )
         self._validate_mode_params()
 
     def reset_to_defaults(self) -> None:
@@ -332,7 +368,7 @@ max_population = {self.max_population}
 food_spawn_rate = {self.food_spawn_rate:.4f}
 food_max_particles = {self.food_max_particles}
 food_cycle_enabled = {str(self.food_cycle_enabled).lower()}
-food_cycle_period = {self.food_cycle_period}
+food_cycle_period = {self.food_cycle_period}    # total cycle length in sim frames (1800 ~= 30s)
 mutation_rate = {self.mutation_rate:.4f}
 cosmic_ray_rate = {self.cosmic_ray_rate:.6f}
 energy_to_reproduce = {self.energy_to_reproduce:.4f}
@@ -353,7 +389,7 @@ show_hud = {str(self.show_hud).lower()}
 mutation_rate = {self.mutation_rate:.4f}
 cosmic_ray_rate = {self.cosmic_ray_rate:.6f}
 food_cycle_enabled = {str(self.food_cycle_enabled).lower()}
-food_cycle_period = {self.food_cycle_period}
+food_cycle_period = {self.food_cycle_period}    # total cycle length in sim frames (1800 ~= 30s)
 zone_count = {self.zone_count}
 zone_strength = {self.zone_strength:.4f}
 
@@ -367,6 +403,10 @@ territory_fade_seconds = {self.territory_fade_seconds:.2f}
 death_animation_frames = {self.death_animation_frames}
 birth_animation_frames = {self.birth_animation_frames}
 death_particle_count = {self.death_particle_count}
+zone_background_intensity = {self.zone_background_intensity:.2f}
+predator_highlight_alpha = {self.predator_highlight_alpha}
+predator_highlight_radius_scale = {self.predator_highlight_radius_scale:.2f}
+predator_highlight_pulse_seconds = {self.predator_highlight_pulse_seconds:.2f}
 
 # Per-mode parameter overrides — these override the base [simulation] values
 # when that mode is active. Edit to tune each mode independently.

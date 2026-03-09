@@ -35,31 +35,31 @@ ZONE_DEFINITIONS: dict[str, dict] = {
     "warm_vent": {
         "favors":    [("efficiency", True), ("size", True)],
         "penalizes": [("speed", True)],
-        "color": (180, 90, 10),   # deep amber
+        "color": (214, 116, 34),   # amber vent glow
         "label": "Warm Vent",
     },
     "open_water": {
         "favors":    [("speed", True), ("size", False)],  # low size favoured
         "penalizes": [("aggression", True)],
-        "color": (60, 120, 200),  # pale blue
+        "color": (56, 156, 224),  # airy blue
         "label": "Open Water",
     },
     "kelp_forest": {
         "favors":    [("sense_radius", True), ("aggression", False)],
         "penalizes": [("speed", True)],
-        "color": (0, 80, 40),     # deep green
+        "color": (36, 132, 92),     # lush green-teal
         "label": "Kelp Forest",
     },
     "hunting_ground": {
         "favors":    [("aggression", True), ("speed", True)],
         "penalizes": [("longevity", True)],
-        "color": (100, 0, 10),    # deep red
+        "color": (172, 44, 52),    # muted crimson
         "label": "Hunting Ground",
     },
     "deep_trench": {
         "favors":    [("longevity", True), ("size", False)],
         "penalizes": [("efficiency", True)],
-        "color": (15, 5, 80),     # deep indigo
+        "color": (64, 60, 156),     # indigo-violet
         "label": "Deep Trench",
     },
 }
