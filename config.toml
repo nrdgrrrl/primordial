@@ -12,9 +12,6 @@ creature_speed_base = 1.5
 zone_count = 5
 zone_strength = 0.8
 
-[creature]
-energy_to_reproduce = 0.8
-
 [display]
 visual_theme = "ocean"    # ocean | petri | geometric | chaotic
 fullscreen = true

@@ -42,39 +42,6 @@ _PREDATOR_DEPTH_TRACK_URGENCY = 0.28
 _PREY_DEPTH_ESCAPE_URGENCY = 0.30
 
 
-# ---------------------------------------------------------------------------
-# Per-mode default parameter overrides
-# ---------------------------------------------------------------------------
-
-_MODE_DEFAULTS: dict[str, dict] = {
-    "predator_prey": {
-        "initial_population": 120,
-        "predator_fraction": 0.25,
-        "food_spawn_rate": 0.5,
-        "mutation_rate": 0.08,
-        "energy_to_reproduce": 0.70,
-    },
-    "boids": {
-        "initial_population": 150,
-        "max_population": 300,
-        "mutation_rate": 0.07,
-        "energy_to_reproduce": 0.72,
-        "food_cycle_enabled": False,
-        "zone_strength": 0.5,
-    },
-    "drift": {
-        "initial_population": 60,
-        "max_population": 200,
-        "mutation_rate": 0.04,
-        "cosmic_ray_rate": 0.0006,
-        "energy_to_reproduce": 0.95,
-        "food_cycle_enabled": False,
-        "zone_strength": 0.6,
-        "target_fps": 60,
-    },
-}
-
-
 class Simulation:
     """
     Main simulation controller for the Primordial screensaver.
@@ -154,16 +121,18 @@ class Simulation:
     # ------------------------------------------------------------------
 
     def _get_mode_param(self, key: str, fallback=None):
-        """Return mode-specific param, checking user config overrides first."""
+        """Return mode-specific param from config, falling back to base settings.
+
+        Resolution order:
+        1. settings.mode_params[current_mode][key]  (from Config.DEFAULT_MODE_PARAMS
+           merged with [modes.*] TOML overrides)
+        2. settings.<key>  (generic base default)
+        3. fallback argument
+        """
         mode = self.settings.sim_mode
-        # Check user config overrides (loaded from [modes.*] TOML sections)
         mode_params = getattr(self.settings, "mode_params", {})
         if mode in mode_params and key in mode_params[mode]:
             return mode_params[mode][key]
-        # Built-in mode defaults
-        if mode in _MODE_DEFAULTS and key in _MODE_DEFAULTS[mode]:
-            return _MODE_DEFAULTS[mode][key]
-        # Fall back to settings attribute or provided fallback
         if hasattr(self.settings, key):
             return getattr(self.settings, key)
         return fallback
@@ -202,7 +171,7 @@ class Simulation:
 
     def _spawn_initial_population_predator_prey(self) -> None:
         """Spawn mixed predator/prey population."""
-        predator_fraction = float(self._get_mode_param("predator_fraction", 0.30))
+        predator_fraction = float(self._get_mode_param("predator_fraction", 0.25))
         predator_fraction = max(0.0, min(1.0, predator_fraction))
         initial_pop = max(
             0,
@@ -521,7 +490,7 @@ class Simulation:
         # If < 15% prey: predators lose energy 2x faster
         prey_scarce = prey_fraction < 0.15 and pred_count > 0
 
-        energy_to_reproduce = self._get_mode_param("energy_to_reproduce", 0.70)
+        energy_to_reproduce = self._get_mode_param("energy_to_reproduce")
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
         cosmic_rate = self.settings.cosmic_ray_rate
 
@@ -814,7 +783,7 @@ class Simulation:
         boid_neighbors = self._build_boid_neighbor_cache(creature_bucket)
         self._update_flock_assignments(boid_neighbors)
 
-        energy_to_reproduce = self._get_mode_param("energy_to_reproduce", 0.72)
+        energy_to_reproduce = self._get_mode_param("energy_to_reproduce")
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
         cosmic_rate = self.settings.cosmic_ray_rate
         speed_base = self.settings.creature_speed_base
@@ -1088,7 +1057,7 @@ class Simulation:
 
         # Cosmic ray rate doubled in drift
         cosmic_rate = self._get_mode_param("cosmic_ray_rate", self.settings.cosmic_ray_rate * 2)
-        energy_to_reproduce = self._get_mode_param("energy_to_reproduce", 0.95)
+        energy_to_reproduce = self._get_mode_param("energy_to_reproduce")
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
 
         for creature in self.creatures:

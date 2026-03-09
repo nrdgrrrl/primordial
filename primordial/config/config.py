@@ -146,7 +146,11 @@ class Config:
                 "zone_strength",
             },
         )
-        self._warn_unknown_keys("creature", creature, {"energy_to_reproduce"})
+        if creature:
+            logger.warning(
+                "Deprecated [creature] config section ignored; "
+                "use [simulation].energy_to_reproduce instead."
+            )
         self._warn_unknown_keys(
             "display",
             display,
@@ -218,10 +222,6 @@ class Config:
         )
         self.energy_to_reproduce = self._coerce_float(
             simulation, "energy_to_reproduce", self.energy_to_reproduce
-        )
-
-        self.energy_to_reproduce = self._coerce_float(
-            creature, "energy_to_reproduce", self.energy_to_reproduce
         )
 
         self.visual_theme = self._coerce_str(display, "visual_theme", self.visual_theme)
@@ -375,9 +375,6 @@ energy_to_reproduce = {self.energy_to_reproduce:.4f}
 creature_speed_base = {self.creature_speed_base:.4f}
 zone_count = {self.zone_count}
 zone_strength = {self.zone_strength:.4f}
-
-[creature]
-energy_to_reproduce = {self.energy_to_reproduce:.4f}
 
 [display]
 visual_theme = "{self.visual_theme}"    # ocean | petri | geometric | chaotic
