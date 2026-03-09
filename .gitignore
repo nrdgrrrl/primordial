@@ -30,3 +30,4 @@ build/
 # Coverage
 .coverage
 htmlcov/
+/config.toml
