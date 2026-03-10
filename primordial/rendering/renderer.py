@@ -767,7 +767,7 @@ class Renderer:
                 state.fading_out = False
                 state.alpha_mult = min(1.0, state.alpha_mult + 2.0 / fade_frames)
             else:
-                import random as _random
+                from .animations import _render_rng
                 self._shimmer_states[lid] = ShimmerState(
                     lineage_id=lid,
                     centroid_x=cx,
@@ -775,8 +775,8 @@ class Renderer:
                     spread_x=sx,
                     spread_y=sy,
                     hue=hue,
-                    phase_offset=_random.uniform(0, math.pi * 2),
-                    sine_period=_random.uniform(4.0, 6.0),
+                    phase_offset=_render_rng.uniform(0, math.pi * 2),
+                    sine_period=_render_rng.uniform(4.0, 6.0),
                     alpha_mult=0.0,
                 )
 

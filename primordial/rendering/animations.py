@@ -20,8 +20,12 @@ Parent pulse:
 from __future__ import annotations
 
 import math
-import random
+import random as _random_module
 from dataclasses import dataclass, field
+
+# Isolated RNG for rendering — prevents visual randomness from polluting
+# the simulation's global random.Random() state.
+_render_rng = _random_module.Random()
 from typing import TYPE_CHECKING
 
 import pygame
@@ -125,8 +129,8 @@ class DeathAnimation(Animation):
         # Scatter particles
         self.particles: list[ScatterParticle] = []
         for _ in range(num_particles):
-            angle = random.uniform(0, math.pi * 2)
-            speed = random.uniform(0.8, 2.2)
+            angle = _render_rng.uniform(0, math.pi * 2)
+            speed = _render_rng.uniform(0.8, 2.2)
             self.particles.append(ScatterParticle(
                 x=x,
                 y=y,

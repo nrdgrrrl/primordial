@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import math
-import random
+import random as _random_module
 from abc import ABC, abstractmethod
+
+# Isolated RNG for rendering — prevents visual randomness from polluting
+# the simulation's global random.Random() state.
+_render_rng = _random_module.Random()
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -359,20 +363,20 @@ class OceanTheme(Theme):
         """Create ambient background particles with pre-rendered surfaces."""
         particles = []
         for _ in range(count):
-            r = random.uniform(30, 80)
-            alpha = random.randint(8, 20)
+            r = _render_rng.uniform(30, 80)
+            alpha = _render_rng.randint(8, 20)
             ri = int(r)
             size = ri * 2
             surf = pygame.Surface((size, size), pygame.SRCALPHA)
             pygame.draw.circle(surf, (20, 40, 80, alpha), (ri, ri), ri)
             particles.append(
                 AmbientParticle(
-                    x=random.uniform(0, width),
-                    y=random.uniform(0, height),
+                    x=_render_rng.uniform(0, width),
+                    y=_render_rng.uniform(0, height),
                     radius=r,
                     alpha=alpha,
-                    phase=random.uniform(0, 6.28),
-                    speed=random.uniform(0.1, 0.3),
+                    phase=_render_rng.uniform(0, 6.28),
+                    speed=_render_rng.uniform(0.1, 0.3),
                     surface=surf,
                 )
             )
