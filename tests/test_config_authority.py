@@ -65,6 +65,9 @@ mutation_rate = 0.1200
 [modes.predator_prey]
 predator_energy_to_reproduce = 0.7100
 predator_kill_energy_gain_cap = 0.6500
+predator_hunt_sense_multiplier = 2.3000
+predator_hunt_speed_multiplier = 1.1500
+predator_contact_kill_distance_scale = 1.2000
 """.strip()
                 + "\n",
                 encoding="utf-8",
@@ -84,6 +87,18 @@ predator_kill_energy_gain_cap = 0.6500
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"],
             0.65,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["predator_hunt_sense_multiplier"],
+            2.3,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["predator_hunt_speed_multiplier"],
+            1.15,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["predator_contact_kill_distance_scale"],
+            1.2,
         )
         self.assertEqual(
             settings.mode_params["predator_prey"]["prey_energy_to_reproduce"],

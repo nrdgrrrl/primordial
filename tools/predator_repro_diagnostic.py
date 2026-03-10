@@ -151,6 +151,11 @@ def _build_report(
         for sample in predator_counts
         if int(sample["step"]) >= window_start
     ]
+    prey_counts_in_window = [
+        sample["prey"]
+        for sample in predator_counts
+        if int(sample["step"]) >= window_start
+    ]
 
     recovery_sources: list[str] = []
     if births:
@@ -180,6 +185,7 @@ def _build_report(
             "initial_predators": predator_counts[0]["predators"],
             "initial_prey": predator_counts[0]["prey"],
             "minimum_predators": min(sample["predators"] for sample in predator_counts),
+            "minimum_prey": min(sample["prey"] for sample in predator_counts),
             "predators_at_window_start": next(
                 sample["predators"]
                 for sample in predator_counts
@@ -188,6 +194,8 @@ def _build_report(
             "predators_end": predator_counts[-1]["predators"],
             "prey_end": predator_counts[-1]["prey"],
             "predator_mean_in_window": _mean_or_none(predator_counts_in_window),
+            "prey_mean_in_window": _mean_or_none(prey_counts_in_window),
+            "minimum_prey_in_window": min(prey_counts_in_window) if prey_counts_in_window else None,
         },
         "continuity": {
             "mode": continuity_mode,
@@ -246,6 +254,13 @@ def _build_report(
         "kill_reward": {
             "predator_kill_energy_gain_cap": diagnostics["predator_kill_energy_gain_cap"],
         },
+        "pursuit": {
+            "predator_hunt_sense_multiplier": diagnostics["predator_hunt_sense_multiplier"],
+            "predator_hunt_speed_multiplier": diagnostics["predator_hunt_speed_multiplier"],
+            "predator_contact_kill_distance_scale": (
+                diagnostics["predator_contact_kill_distance_scale"]
+            ),
+        },
         "deaths": {
             "causes": _count_by(post_window_completed_lives, "death_cause"),
             "contexts": _count_by(post_window_completed_lives, "death_context"),
@@ -295,6 +310,21 @@ def main() -> int:
         type=float,
         help="Optional override for predator kill energy gain cap.",
     )
+    parser.add_argument(
+        "--predator-hunt-sense-multiplier",
+        type=float,
+        help="Optional override for predator hunt sensing multiplier.",
+    )
+    parser.add_argument(
+        "--predator-hunt-speed-multiplier",
+        type=float,
+        help="Optional override for predator hunt steering speed multiplier.",
+    )
+    parser.add_argument(
+        "--predator-contact-kill-distance-scale",
+        type=float,
+        help="Optional override for predator contact-kill distance scale.",
+    )
     args = parser.parse_args()
 
     scenario, settings = build_settings_for_scenario(args.scenario)
@@ -303,6 +333,18 @@ def main() -> int:
     if args.predator_kill_energy_gain_cap is not None:
         settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = (
             args.predator_kill_energy_gain_cap
+        )
+    if args.predator_hunt_sense_multiplier is not None:
+        settings.mode_params["predator_prey"]["predator_hunt_sense_multiplier"] = (
+            args.predator_hunt_sense_multiplier
+        )
+    if args.predator_hunt_speed_multiplier is not None:
+        settings.mode_params["predator_prey"]["predator_hunt_speed_multiplier"] = (
+            args.predator_hunt_speed_multiplier
+        )
+    if args.predator_contact_kill_distance_scale is not None:
+        settings.mode_params["predator_prey"]["predator_contact_kill_distance_scale"] = (
+            args.predator_contact_kill_distance_scale
         )
 
     resolved_seed = scenario.seed if args.seed is None else args.seed

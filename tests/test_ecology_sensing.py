@@ -253,6 +253,122 @@ class EcologySensingTests(unittest.TestCase):
         self.assertGreaterEqual(pred_actual_speed, 0.0)
         self.assertEqual(prey_actual_speed, 0.0)
 
+    def test_predator_hunt_sense_multiplier_expands_live_detection_range(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=1.0, sense_radius=0.0, aggression=0.9, motion_style=0.5),
+            energy=0.4,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=185.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=0.5, aggression=0.1),
+            energy=0.6,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+        bucket = simulation._build_creature_bucket()
+
+        with patch.object(predator, "wander") as wander_default, patch(
+            "random.gauss", return_value=0.0
+        ):
+            simulation._predator_hunt_prey(predator, bucket)
+
+        self.assertAlmostEqual(predator.vx, 0.0)
+        self.assertAlmostEqual(predator.vy, 0.0)
+        wander_default.assert_called_once()
+
+        predator.vx = 0.0
+        predator.vy = 0.0
+        simulation.settings.mode_params["predator_prey"]["predator_hunt_sense_multiplier"] = 2.3
+
+        with patch.object(predator, "wander") as wander_boosted, patch(
+            "random.gauss", return_value=0.0
+        ):
+            simulation._predator_hunt_prey(predator, bucket)
+
+        wander_boosted.assert_not_called()
+        self.assertGreater(predator.vx, 0.0)
+
+    def test_predator_hunt_speed_multiplier_increases_live_chase_velocity(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=1.0, sense_radius=1.0, aggression=0.9, motion_style=0.5),
+            energy=0.4,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=130.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=0.5, aggression=0.1),
+            energy=0.6,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+        bucket = simulation._build_creature_bucket()
+
+        with patch("random.gauss", return_value=0.0):
+            simulation._predator_hunt_prey(predator, bucket)
+        baseline_speed = math.hypot(predator.vx, predator.vy)
+
+        predator.vx = 0.0
+        predator.vy = 0.0
+        simulation.settings.mode_params["predator_prey"]["predator_hunt_speed_multiplier"] = 1.15
+
+        with patch("random.gauss", return_value=0.0):
+            simulation._predator_hunt_prey(predator, bucket)
+        boosted_speed = math.hypot(predator.vx, predator.vy)
+
+        self.assertGreater(boosted_speed, baseline_speed)
+
+    def test_predator_contact_kill_distance_scale_expands_contact_window(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.2,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=117.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=0.5, aggression=0.1),
+            energy=0.5,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+        bucket = simulation._build_creature_bucket()
+
+        with patch("random.gauss", return_value=0.0):
+            simulation._predator_hunt_prey(predator, bucket)
+
+        self.assertGreater(prey.energy, 0.0)
+        self.assertEqual(simulation.predation_kill_count, 0)
+
+        predator.energy = 0.2
+        predator.vx = 0.0
+        predator.vy = 0.0
+        prey.energy = 0.5
+        simulation.settings.mode_params["predator_prey"]["predator_contact_kill_distance_scale"] = 1.2
+
+        with patch("random.gauss", return_value=0.0):
+            simulation._predator_hunt_prey(predator, bucket)
+
+        self.assertEqual(prey.energy, 0.0)
+        self.assertEqual(simulation.predation_kill_count, 1)
+
     def test_energy_population_survives_seeded_window_with_legacy_default_food_rate(self) -> None:
         settings = self._build_settings("energy")
         settings.initial_population = 80

@@ -175,6 +175,18 @@ class Simulation:
         """Resolve the per-kill predator energy gain cap."""
         return float(self._get_mode_param("predator_kill_energy_gain_cap", 0.5))
 
+    def _get_predator_hunt_sense_multiplier(self) -> float:
+        """Resolve predator hunt sensing range multiplier."""
+        return float(self._get_mode_param("predator_hunt_sense_multiplier", 2.0))
+
+    def _get_predator_hunt_speed_multiplier(self) -> float:
+        """Resolve predator hunt steering speed multiplier."""
+        return float(self._get_mode_param("predator_hunt_speed_multiplier", 1.0))
+
+    def _get_predator_contact_kill_distance_scale(self) -> float:
+        """Resolve predator contact-kill distance scale."""
+        return float(self._get_mode_param("predator_contact_kill_distance_scale", 1.0))
+
     # ------------------------------------------------------------------
     # Setup helpers
     # ------------------------------------------------------------------
@@ -625,7 +637,10 @@ class Simulation:
         """Predator seeks nearest prey; kills on contact."""
         if repro_threshold is None:
             repro_threshold = self._get_reproduction_threshold(predator)
-        sense = self._get_effective_sensing_range(predator, multiplier=2.0)
+        sense_multiplier = self._get_predator_hunt_sense_multiplier()
+        speed_multiplier = self._get_predator_hunt_speed_multiplier()
+        contact_scale = self._get_predator_contact_kill_distance_scale()
+        sense = self._get_effective_sensing_range(predator, multiplier=sense_multiplier)
         best_prey: Creature | None = None
         best_dist_sq = sense * sense
 
@@ -653,7 +668,7 @@ class Simulation:
             predator,
             best_prey.x,
             best_prey.y,
-            sense_multiplier=2.0,
+            sense_multiplier=sense_multiplier,
             target_depth_band=best_prey.depth_band,
         )
         if sensed_prey is None:
@@ -662,12 +677,14 @@ class Simulation:
 
         predator.steer_toward(
             sensed_prey[0], sensed_prey[1],
-            self.settings.creature_speed_base,
+            self.settings.creature_speed_base * speed_multiplier,
             self.width, self.height,
         )
 
         # Contact kill: distance < sum of radii
-        contact_dist = predator.get_radius() + best_prey.get_radius()
+        contact_dist = (
+            predator.get_radius() + best_prey.get_radius()
+        ) * contact_scale
         if (
             best_dist_sq < (contact_dist * contact_dist)
             and best_prey.energy > 0.0
@@ -1914,6 +1931,11 @@ class Simulation:
             "frame": self._frame,
             "base_threshold": base_threshold,
             "predator_kill_energy_gain_cap": kill_energy_gain_cap,
+            "predator_hunt_sense_multiplier": self._get_predator_hunt_sense_multiplier(),
+            "predator_hunt_speed_multiplier": self._get_predator_hunt_speed_multiplier(),
+            "predator_contact_kill_distance_scale": (
+                self._get_predator_contact_kill_distance_scale()
+            ),
             "completed_lives": [self._copy_predator_life(life) for life in self._predator_diag_completed],
             "active_lives": [
                 self._copy_predator_life(life)
