@@ -261,6 +261,7 @@ You can switch modes at any time with `S` → change Mode → Apply. The simulat
 Configuration is TOML-backed and persistent across app updates.
 
 - Press **`S`** in normal mode to open the in-app settings overlay.
+- Press **`H`** while the settings overlay is open to launch the local predator/prey guide in your browser; Primordial drops out of fullscreen first if needed.
 - Canonical repo-tracked defaults live in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml).
 - The runtime user override file is editable by hand as `config.toml`.
 - User config locations:

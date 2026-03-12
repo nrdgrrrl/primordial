@@ -91,6 +91,9 @@ class SettingsOverlay:
         if event.key == pygame.K_l:
             self.confirm_reset = False
             return "load_snapshot"
+        if event.key == pygame.K_h:
+            self.confirm_reset = False
+            return "help"
         if event.key == pygame.K_UP:
             self.selected = (self.selected - 1) % len(self.fields)
         elif event.key == pygame.K_DOWN:
@@ -171,7 +174,11 @@ class SettingsOverlay:
             y += 24
 
         action_y = y + 8
-        action = self._small.render("V = Save Snapshot    L = Load Snapshot", True, (185, 225, 255))
+        action = self._small.render(
+            "V = Save Snapshot    L = Load Snapshot    H = Help",
+            True,
+            (185, 225, 255),
+        )
         self._panel.blit(action, (20, action_y))
 
         path_text = self.snapshot_path or "(default path pending)"

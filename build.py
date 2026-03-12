@@ -55,6 +55,14 @@ if _canonical_defaults.exists():
         f"--add-data={_canonical_defaults}{os.pathsep}primordial/config"
     )
 
+_predator_prey_guide = Path("docs") / "predator_prey_system_guide.md"
+if _predator_prey_guide.exists():
+    args.append(f"--add-data={_predator_prey_guide}{os.pathsep}docs")
+
+_docs_assets = Path("docs") / "assets"
+if _docs_assets.exists():
+    args.append(f"--add-data={_docs_assets}{os.pathsep}docs/assets")
+
 # Windows-specific build options
 if platform.system() == "Windows":
     # Icon (optional — only applied if the file exists)

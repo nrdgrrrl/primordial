@@ -58,7 +58,7 @@ class SettingsOverlayTests(unittest.TestCase):
             saved = config_path.read_text(encoding="utf-8")
             self.assertIn('mode = "boids"', saved)
 
-    def test_settings_overlay_emits_save_and_load_actions(self) -> None:
+    def test_settings_overlay_emits_save_load_and_help_actions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"
             with patch("primordial.config.config.get_config_path", return_value=config_path):
@@ -73,9 +73,13 @@ class SettingsOverlayTests(unittest.TestCase):
             load_action = overlay.handle_event(
                 pygame.event.Event(pygame.KEYDOWN, key=pygame.K_l)
             )
+            help_action = overlay.handle_event(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_h)
+            )
 
             self.assertEqual(save_action, "save_snapshot")
             self.assertEqual(load_action, "load_snapshot")
+            self.assertEqual(help_action, "help")
 
     def test_food_cycle_length_field_uses_clear_label_and_seconds_display(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

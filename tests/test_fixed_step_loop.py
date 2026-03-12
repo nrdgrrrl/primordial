@@ -15,6 +15,7 @@ from primordial.main import (
     _advance_fixed_step_frame,
     _create_fixed_step_loop_state,
     _default_snapshot_path,
+    _open_predator_prey_help,
     _resolve_snapshot_path,
     _run_profile_session,
     _simulation_timing_is_suppressed,
@@ -223,6 +224,57 @@ class FixedStepLoopTests(unittest.TestCase):
                 _resolve_snapshot_path(settings, None),
                 Path(temp_dir) / "world_snapshot.json",
             )
+
+    def test_open_predator_prey_help_exits_fullscreen_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            docs_dir = Path(temp_dir) / "docs"
+            docs_dir.mkdir()
+            guide_path = docs_dir / "predator_prey_system_guide.md"
+            guide_path.write_text("# guide\n", encoding="utf-8")
+
+            settings = SimpleNamespace(fullscreen=True)
+            simulation = object()
+            renderer = object()
+
+            with patch(
+                "primordial.main.get_base_path",
+                return_value=Path(temp_dir),
+            ), patch(
+                "primordial.main.toggle_fullscreen",
+            ) as toggle_fullscreen_mock, patch(
+                "primordial.main.webbrowser.open_new_tab",
+                return_value=True,
+            ) as open_browser_mock:
+                opened, message = _open_predator_prey_help(
+                    settings,
+                    simulation,
+                    renderer,
+                )
+
+            self.assertTrue(opened)
+            self.assertEqual(message, "Opened predator_prey_system_guide.md in browser")
+            toggle_fullscreen_mock.assert_called_once_with(settings, simulation, renderer)
+            open_browser_mock.assert_called_once_with(guide_path.resolve().as_uri())
+
+    def test_open_predator_prey_help_reports_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = SimpleNamespace(fullscreen=False)
+
+            with patch(
+                "primordial.main.get_base_path",
+                return_value=Path(temp_dir),
+            ), patch(
+                "primordial.main.webbrowser.open_new_tab",
+            ) as open_browser_mock:
+                opened, message = _open_predator_prey_help(
+                    settings,
+                    object(),
+                    object(),
+                )
+
+            self.assertFalse(opened)
+            self.assertEqual(message, "Help file missing: predator_prey_system_guide.md")
+            open_browser_mock.assert_not_called()
 
 
 if __name__ == "__main__":

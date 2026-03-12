@@ -15,6 +15,7 @@ import platform
 import pstats
 import sys
 import time
+import webbrowser
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -43,6 +44,7 @@ from .simulation import (
     save_snapshot,
 )
 from .utils.cli import RuntimeArgs
+from .utils.paths import get_base_path
 from .utils.screensaver import ScreensaverArgs
 
 FIXED_SIM_TIMESTEP_SECONDS = 1.0 / 60.0
@@ -683,6 +685,18 @@ def main(
                                     "Loaded simulation snapshot from settings overlay: %s",
                                     active_snapshot_path,
                                 )
+                    elif action == "help":
+                        opened, status_message = _open_predator_prey_help(
+                            settings,
+                            simulation,
+                            renderer,
+                        )
+                        renderer.settings_overlay.pending["fullscreen"] = settings.fullscreen
+                        renderer.settings_overlay.set_snapshot_status(
+                            status_message,
+                            is_error=not opened,
+                        )
+                        runtime_loop.reset_timing_debt()
                 else:
                     if event.key == pygame.K_p:
                         renderer.set_predator_highlight(True)
@@ -879,6 +893,38 @@ def _resolve_snapshot_path(
     if active_snapshot_path is None:
         return _default_snapshot_path(settings)
     return Path(active_snapshot_path)
+
+
+def _predator_prey_help_path() -> Path:
+    """Resolve the bundled predator/prey system guide path."""
+    return get_base_path() / "docs" / "predator_prey_system_guide.md"
+
+
+def _open_predator_prey_help(
+    settings: Settings,
+    simulation: Simulation,
+    renderer: Renderer,
+) -> tuple[bool, str]:
+    """Open the predator/prey guide in the user's browser, exiting fullscreen first."""
+    help_path = _predator_prey_help_path()
+    if not help_path.exists():
+        return False, f"Help file missing: {help_path.name}"
+
+    if settings.fullscreen:
+        toggle_fullscreen(settings, simulation, renderer)
+
+    try:
+        opened = webbrowser.open_new_tab(help_path.resolve().as_uri())
+    except (OSError, webbrowser.Error) as exc:
+        logger.warning("Help launch failed for %s: %s", help_path, exc)
+        return False, f"Help launch failed: {exc}"
+
+    if not opened:
+        logger.warning("Browser reported failure opening help file: %s", help_path)
+        return False, f"Help launch failed for {help_path.name}"
+
+    logger.info("Opened predator/prey guide in browser: %s", help_path)
+    return True, f"Opened {help_path.name} in browser"
 
 
 def _swap_loaded_simulation(
