@@ -87,8 +87,12 @@ class Renderer:
         self.screen = screen
         self.settings = settings
         self.debug_enabled = debug
-        self.width = screen.get_width()
-        self.height = screen.get_height()
+        self.display_width = screen.get_width()
+        self.display_height = screen.get_height()
+        self.width = self.display_width
+        self.height = self.display_height
+        self._frame_surf = pygame.Surface((self.width, self.height))
+        self._target_surface = self._frame_surf
 
         # Initialize theme
         self.theme: Theme = get_theme(settings.visual_theme)
@@ -167,11 +171,14 @@ class Renderer:
     def resize(
         self, width: int, height: int, screen: pygame.Surface | None = None
     ) -> None:
-        """Resize renderer surfaces and invalidate size-dependent caches."""
+        """Resize logical world-space surfaces and refresh display presentation."""
         self.width = width
         self.height = height
         if screen is not None:
             self.screen = screen
+        self.display_width, self.display_height = self.screen.get_size()
+        self._frame_surf = pygame.Surface((self.width, self.height))
+        self._target_surface = self._frame_surf
 
         self._line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -206,6 +213,21 @@ class Renderer:
                 (self.width, self.height), pygame.SRCALPHA
             )
 
+    def blit_presentation_overlay(self, overlay: pygame.Surface) -> None:
+        """Composite a logical-space overlay onto the active display surface."""
+        if overlay.get_size() != (self.width, self.height):
+            raise ValueError(
+                "Presentation overlay must match renderer logical size "
+                f"{self.width}x{self.height}, got {overlay.get_width()}x{overlay.get_height()}."
+            )
+        if (self.display_width, self.display_height) == (self.width, self.height):
+            self.screen.blit(overlay, (0, 0))
+            return
+        scaled = pygame.transform.scale(
+            overlay, (self.display_width, self.display_height)
+        )
+        self.screen.blit(scaled, (0, 0))
+
     def draw(self, simulation: Simulation) -> dict[str, float]:
         """
         Render the current simulation state.
@@ -215,6 +237,8 @@ class Renderer:
         """
         frame_t0 = time.perf_counter()
         timings: dict[str, float] = {}
+        target = self._frame_surf
+        self._target_surface = target
 
         current_time = time.time()
         anim_time = current_time - self.start_time
@@ -246,12 +270,12 @@ class Renderer:
 
         # --- Clear screen ---
         t0 = time.perf_counter()
-        self.screen.fill(self.theme.background_color)
+        target.fill(self.theme.background_color)
         timings["clear_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Ambient particles ---
         t0 = time.perf_counter()
-        self.theme.render_ambient(self.screen, self.ambient_particles, anim_time)
+        self.theme.render_ambient(target, self.ambient_particles, anim_time)
         timings["ambient_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Zone backgrounds (very faint atmospheric gradient circles) ---
@@ -271,7 +295,7 @@ class Renderer:
         # --- Food particles ---
         t0 = time.perf_counter()
         for food in simulation.food_manager:
-            self.theme.render_food(self.screen, food, anim_time)
+            self.theme.render_food(target, food, anim_time)
         timings["food_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Kin/flock connection lines (beneath creatures) ---
@@ -296,7 +320,7 @@ class Renderer:
                 birth_scale = self.animation_manager.get_birth_scale(creature)
                 scale = birth_scale if birth_scale is not None else 1.0
                 self.theme.render_creature_trail(creature, anim_time, scale=scale)
-            self.screen.blit(self.theme._trail_surf, (0, 0))
+            target.blit(self.theme._trail_surf, (0, 0))
         timings["trails_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Creatures ---
@@ -304,7 +328,7 @@ class Renderer:
         for creature in simulation.creatures:
             birth_scale = self.animation_manager.get_birth_scale(creature)
             scale = birth_scale if birth_scale is not None else 1.0
-            self.theme.render_creature(self.screen, creature, anim_time, scale=scale)
+            self.theme.render_creature(target, creature, anim_time, scale=scale)
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Predator locator highlight (hold P) ---
@@ -320,7 +344,7 @@ class Renderer:
 
         # --- Animation effects (death bursts etc.) ---
         t0 = time.perf_counter()
-        self.animation_manager.tick_and_draw(self.screen)
+        self.animation_manager.tick_and_draw(target)
         timings["anim_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Stub overlay ---
@@ -331,19 +355,27 @@ class Renderer:
         # --- HUD ---
         t0 = time.perf_counter()
         debug_lines = self._build_debug_lines(timings) if self.debug_enabled else None
-        self.hud.render(self.screen, simulation, self.fps, debug_lines=debug_lines)
+        self.hud.render(target, simulation, self.fps, debug_lines=debug_lines)
         timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
             self.settings_overlay.update()
-            self.settings_overlay.draw(self.screen)
+            self.settings_overlay.draw(target)
         timings["settings_ms"] = (time.perf_counter() - t0) * 1000.0
 
         timings["draw_total_ms"] = (time.perf_counter() - frame_t0) * 1000.0
         if self.debug_enabled:
             self._debug_timing = timings
             self._draw_debug_graph_overlay(simulation)
+        if (self.display_width, self.display_height) == (self.width, self.height):
+            self.screen.blit(target, (0, 0))
+        else:
+            pygame.transform.scale(
+                target,
+                (self.display_width, self.display_height),
+                self.screen,
+            )
         return dict(timings)
 
     def toggle_hud(self) -> None:
@@ -395,7 +427,7 @@ class Renderer:
                         layer_radius,
                     )
 
-        self.screen.blit(self._zone_surf_cached, (0, 0))
+        self._target_surface.blit(self._zone_surf_cached, (0, 0))
 
     def _draw_predator_highlights(
         self, simulation: "Simulation", anim_time: float
@@ -485,7 +517,7 @@ class Renderer:
                 2,
             )
 
-        self.screen.blit(self._predator_highlight_surf, (0, 0))
+        self._target_surface.blit(self._predator_highlight_surf, (0, 0))
 
     def _draw_zone_labels(self, simulation: "Simulation") -> None:
         """Draw subtle zone labels to support ecological review."""
@@ -504,7 +536,7 @@ class Renderer:
                 int(zone.x - panel.get_width() / 2),
                 int(zone.y - panel.get_height() / 2),
             )
-            self.screen.blit(panel, pos)
+            self._target_surface.blit(panel, pos)
 
     # ------------------------------------------------------------------
     # Attack lines
@@ -533,7 +565,7 @@ class Renderer:
                 1,
             )
 
-        self.screen.blit(self._attack_surf, (0, 0))
+        self._target_surface.blit(self._attack_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # Kin connection lines
@@ -577,7 +609,7 @@ class Renderer:
                 alpha_max=30,
             )
 
-        self.screen.blit(self._line_surf, (0, 0))
+        self._target_surface.blit(self._line_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # Flock connection lines (boids mode)
@@ -618,7 +650,7 @@ class Renderer:
                 alpha_max=25,
             )
 
-        self.screen.blit(self._line_surf, (0, 0))
+        self._target_surface.blit(self._line_surf, (0, 0))
 
     def _draw_connection_group(
         self,
@@ -830,7 +862,7 @@ class Renderer:
                                    layer_rx * 2, layer_ry * 2)
                 pygame.draw.ellipse(self._shimmer_surf, (*color, layer_alpha), rect)
 
-        self.screen.blit(self._shimmer_surf, (0, 0))
+        self._target_surface.blit(self._shimmer_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # FPS and stub overlay helpers
@@ -848,6 +880,10 @@ class Renderer:
         sim_steps = int(self._external_debug_metrics.get("sim_steps", 0.0))
         clamp_frames = int(self._external_debug_metrics.get("clamp_frames", 0.0))
         dropped_ms = self._external_debug_metrics.get("dropped_ms", 0.0)
+        display_width = int(self._external_debug_metrics.get("display_width", 0.0))
+        display_height = int(self._external_debug_metrics.get("display_height", 0.0))
+        world_width = int(self._external_debug_metrics.get("world_width", 0.0))
+        world_height = int(self._external_debug_metrics.get("world_height", 0.0))
         return [
             "Dbg frame: evt {evt:.2f}ms  sim {sim:.2f}ms  draw {draw:.2f}ms  "
             "flip {flip:.2f}ms".format(
@@ -865,6 +901,12 @@ class Renderer:
                 drops=clamp_frames,
             ),
             f"Dbg debt: dropped {dropped_ms:.2f}ms",
+            "Dbg sizes: display {dw}x{dh}  world {ww}x{wh}".format(
+                dw=display_width,
+                dh=display_height,
+                ww=world_width,
+                wh=world_height,
+            ),
             "Dbg render: clear {clear:.2f}  amb {amb:.2f}  zones {zones:.2f}  "
             "terr {terr:.2f}  food {food:.2f}  links {links:.2f}".format(
                 clear=timings.get("clear_ms", 0.0),
@@ -936,7 +978,7 @@ class Renderer:
         )
         panel.blit(fps_text, (14, 28))
         panel.blit(pop_text, (14, 100))
-        self.screen.blit(panel, (10, 10))
+        self._target_surface.blit(panel, (10, 10))
 
     def _update_fps(self, current_time: float) -> float:
         """Update FPS calculation. Returns dt in seconds."""
@@ -969,6 +1011,6 @@ class Renderer:
             text = font.render(message, True, (200, 200, 200))
 
             x = self.width // 2 - text.get_width() // 2
-            self.screen.blit(shadow, (x + 2, y + 2))
-            self.screen.blit(text, (x, y))
+            self._target_surface.blit(shadow, (x + 2, y + 2))
+            self._target_surface.blit(text, (x, y))
             y += 40

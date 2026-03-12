@@ -52,6 +52,7 @@ MAX_SIM_STEPS_PER_OUTER_FRAME = 5
 MAX_ACCUMULATED_SIM_SECONDS = (
     FIXED_SIM_TIMESTEP_SECONDS * MAX_SIM_STEPS_PER_OUTER_FRAME
 )
+DEFAULT_WINDOWED_SIZE = (1280, 720)
 
 
 @dataclass(frozen=True)
@@ -138,6 +139,21 @@ class FixedStepLoopState:
 def _create_fixed_step_loop_state() -> FixedStepLoopState:
     """Build the shared loop scaffold used by runtime and profile paths."""
     return FixedStepLoopState()
+
+
+def _get_fullscreen_resolution() -> tuple[int, int]:
+    """Resolve the desktop/native resolution used for fullscreen mode."""
+    get_desktop_sizes = getattr(pygame.display, "get_desktop_sizes", None)
+    if callable(get_desktop_sizes):
+        try:
+            desktop_sizes = get_desktop_sizes()
+        except pygame.error:
+            desktop_sizes = []
+        if desktop_sizes:
+            return desktop_sizes[0]
+
+    display_info = pygame.display.Info()
+    return display_info.current_w, display_info.current_h
 
 
 @dataclass(frozen=True)
@@ -404,6 +420,10 @@ def run_bounded_session(
             "clamp_frames": float(clamp_frames),
             "dropped_ms": dropped_seconds * 1000.0,
             "accumulator_ms": runtime_loop.accumulator_seconds * 1000.0,
+            "display_width": float(renderer.display_width),
+            "display_height": float(renderer.display_height),
+            "world_width": float(simulation.width),
+            "world_height": float(simulation.height),
         })
         renderer.set_external_debug_metrics(debug_payload)
         runtime_loop.restore_buffered_attacks(simulation)
@@ -472,9 +492,7 @@ def main(
 
     # Set up display based on mode
     if scr_args.mode == "screensaver":
-        display_info = pygame.display.Info()
-        width = display_info.current_w
-        height = display_info.current_h
+        width, height = _get_fullscreen_resolution()
         screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
         pygame.mouse.set_visible(False)
     elif scr_args.mode == "preview":
@@ -485,9 +503,7 @@ def main(
         pygame.mouse.set_visible(False)
     else:
         if settings.fullscreen:
-            display_info = pygame.display.Info()
-            width = display_info.current_w
-            height = display_info.current_h
+            width, height = _get_fullscreen_resolution()
             screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
         else:
             if loaded_world_size is not None:
@@ -599,7 +615,7 @@ def main(
                     action = renderer.settings_overlay.handle_event(event)
                     if action == "apply":
                         if settings.fullscreen != bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
-                            toggle_fullscreen(settings, simulation, renderer)
+                            _apply_display_mode(settings, simulation, renderer)
                         renderer.set_theme(settings.visual_theme)
                         renderer.set_mode(settings.sim_mode)
                         if settings.sim_mode != _prev_mode:
@@ -749,6 +765,10 @@ def main(
             "clamp_frames": float(clamp_frames),
             "dropped_ms": dropped_seconds * 1000.0,
             "accumulator_ms": runtime_loop.accumulator_seconds * 1000.0,
+            "display_width": float(renderer.display_width),
+            "display_height": float(renderer.display_height),
+            "world_width": float(simulation.width),
+            "world_height": float(simulation.height),
         })
         renderer.set_external_debug_metrics(debug_payload)
         runtime_loop.restore_buffered_attacks(simulation)
@@ -761,7 +781,7 @@ def main(
                     (renderer.width, renderer.height), pygame.SRCALPHA
                 )
             _transition_surf.fill((0, 0, 0, _transition_alpha))
-            renderer.screen.blit(_transition_surf, (0, 0))
+            renderer.blit_presentation_overlay(_transition_surf)
 
         present_start = time.perf_counter()
         pygame.display.flip()
@@ -910,8 +930,8 @@ def _open_predator_prey_help(
     if not help_path.exists():
         return False, f"Help file missing: {help_path.name}"
 
-    if settings.fullscreen:
-        toggle_fullscreen(settings, simulation, renderer)
+    if settings.fullscreen or bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
+        _force_windowed_mode(settings, simulation, renderer)
 
     try:
         opened = webbrowser.open_new_tab(help_path.resolve().as_uri())
@@ -1137,28 +1157,37 @@ def toggle_fullscreen(
 ) -> None:
     """Toggle between fullscreen and windowed mode."""
     settings.fullscreen = not settings.fullscreen
+    _apply_display_mode(settings, simulation, renderer)
 
-    try:
-        pygame.display.toggle_fullscreen()
-        screen = pygame.display.get_surface()
-        if screen is None:
-            raise pygame.error("No display surface")
-        width = screen.get_width()
-        height = screen.get_height()
-    except pygame.error:
-        if settings.fullscreen:
-            display_info = pygame.display.Info()
-            width = display_info.current_w
-            height = display_info.current_h
-            screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
-        else:
-            width = 1280
-            height = 720
-            screen = pygame.display.set_mode((width, height))
 
+def _force_windowed_mode(
+    settings: Settings,
+    simulation: Simulation,
+    renderer: Renderer,
+) -> None:
+    """Recreate the display explicitly in windowed mode."""
+    if not settings.fullscreen and not bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
+        return
+    settings.fullscreen = False
+    _apply_display_mode(settings, simulation, renderer)
+
+
+def _apply_display_mode(
+    settings: Settings,
+    simulation: Simulation,
+    renderer: Renderer,
+) -> None:
+    """Apply the current display mode without mutating simulation world state."""
+    if settings.fullscreen:
+        width, height = _get_fullscreen_resolution()
+        flags = pygame.FULLSCREEN | pygame.SCALED
+    else:
+        width, height = DEFAULT_WINDOWED_SIZE
+        flags = 0
+
+    screen = pygame.display.set_mode((width, height), flags)
     pygame.mouse.set_visible(not settings.fullscreen)
-    renderer.resize(width, height, screen=screen)
-    simulation.resize(width, height)
+    renderer.resize(simulation.width, simulation.height, screen=screen)
 
 
 if __name__ == "__main__":

@@ -7,14 +7,20 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pygame
+
 from primordial.main import (
+    DEFAULT_WINDOWED_SIZE,
     FIXED_SIM_TIMESTEP_SECONDS,
     MAX_ACCUMULATED_SIM_SECONDS,
     MAX_SIM_STEPS_PER_OUTER_FRAME,
     LoopTimingCollector,
+    _apply_display_mode,
     _advance_fixed_step_frame,
     _create_fixed_step_loop_state,
     _default_snapshot_path,
+    _force_windowed_mode,
+    _get_fullscreen_resolution,
     _open_predator_prey_help,
     _resolve_snapshot_path,
     _run_profile_session,
@@ -26,6 +32,8 @@ class FakeSimulation:
     def __init__(self) -> None:
         self.paused = False
         self.step_calls = 0
+        self.width = 1280
+        self.height = 720
         self._pending_attacks: list[tuple[float, float, float, float, float]] = []
         self.restored_attacks: list[tuple[float, float, float, float, float]] = []
 
@@ -50,6 +58,8 @@ class FakeRenderer:
     def __init__(self) -> None:
         self.draw_calls = 0
         self.debug_payloads: list[dict[str, float]] = []
+        self.display_width = 1280
+        self.display_height = 720
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         self.debug_payloads.append(dict(metrics))
@@ -65,6 +75,14 @@ class FakeClock:
 
     def tick(self, fps: int) -> None:
         self.tick_calls.append(fps)
+
+
+class FakeScreen:
+    def __init__(self, flags: int) -> None:
+        self._flags = flags
+
+    def get_flags(self) -> int:
+        return self._flags
 
 
 class FixedStepLoopTests(unittest.TestCase):
@@ -234,14 +252,14 @@ class FixedStepLoopTests(unittest.TestCase):
 
             settings = SimpleNamespace(fullscreen=True)
             simulation = object()
-            renderer = object()
+            renderer = SimpleNamespace(screen=FakeScreen(pygame.FULLSCREEN))
 
             with patch(
                 "primordial.main.get_base_path",
                 return_value=Path(temp_dir),
             ), patch(
-                "primordial.main.toggle_fullscreen",
-            ) as toggle_fullscreen_mock, patch(
+                "primordial.main._force_windowed_mode",
+            ) as force_windowed_mode_mock, patch(
                 "primordial.main.webbrowser.open_new_tab",
                 return_value=True,
             ) as open_browser_mock:
@@ -253,7 +271,7 @@ class FixedStepLoopTests(unittest.TestCase):
 
             self.assertTrue(opened)
             self.assertEqual(message, "Opened predator_prey_system_guide.md in browser")
-            toggle_fullscreen_mock.assert_called_once_with(settings, simulation, renderer)
+            force_windowed_mode_mock.assert_called_once_with(settings, simulation, renderer)
             open_browser_mock.assert_called_once_with(guide_path.resolve().as_uri())
 
     def test_open_predator_prey_help_reports_missing_file(self) -> None:
@@ -275,6 +293,77 @@ class FixedStepLoopTests(unittest.TestCase):
             self.assertFalse(opened)
             self.assertEqual(message, "Help file missing: predator_prey_system_guide.md")
             open_browser_mock.assert_not_called()
+
+    def test_force_windowed_mode_recreates_non_fullscreen_display(self) -> None:
+        settings = SimpleNamespace(fullscreen=True)
+        simulation = SimpleNamespace(
+            width=1920,
+            height=1080,
+            resize=unittest.mock.Mock(),
+        )
+        renderer = SimpleNamespace(
+            screen=FakeScreen(pygame.FULLSCREEN),
+            resize=unittest.mock.Mock(),
+        )
+        replacement_screen = object()
+
+        with patch(
+            "primordial.main.pygame.display.set_mode",
+            return_value=replacement_screen,
+        ) as set_mode_mock, patch(
+            "primordial.main.pygame.mouse.set_visible",
+        ) as set_visible_mock:
+            _force_windowed_mode(settings, simulation, renderer)
+
+        self.assertFalse(settings.fullscreen)
+        set_mode_mock.assert_called_once_with(DEFAULT_WINDOWED_SIZE, 0)
+        set_visible_mock.assert_called_once_with(True)
+        renderer.resize.assert_called_once_with(
+            1920,
+            1080,
+            screen=replacement_screen,
+        )
+        simulation.resize.assert_not_called()
+
+    def test_get_fullscreen_resolution_prefers_desktop_size_over_current_window(self) -> None:
+        with patch(
+            "primordial.main.pygame.display.get_desktop_sizes",
+            return_value=[(1920, 1080)],
+        ), patch(
+            "primordial.main.pygame.display.Info",
+            return_value=SimpleNamespace(current_w=1280, current_h=720),
+        ):
+            self.assertEqual(_get_fullscreen_resolution(), (1920, 1080))
+
+    def test_apply_display_mode_fullscreen_uses_desktop_resolution(self) -> None:
+        settings = SimpleNamespace(fullscreen=True)
+        simulation = SimpleNamespace(
+            width=1280,
+            height=720,
+            resize=unittest.mock.Mock(),
+        )
+        renderer = SimpleNamespace(resize=unittest.mock.Mock())
+        replacement_screen = object()
+
+        with patch(
+            "primordial.main._get_fullscreen_resolution",
+            return_value=(1920, 1080),
+        ) as get_resolution_mock, patch(
+            "primordial.main.pygame.display.set_mode",
+            return_value=replacement_screen,
+        ) as set_mode_mock, patch(
+            "primordial.main.pygame.mouse.set_visible",
+        ) as set_visible_mock:
+            _apply_display_mode(settings, simulation, renderer)
+
+        get_resolution_mock.assert_called_once_with()
+        set_mode_mock.assert_called_once_with(
+            (1920, 1080),
+            pygame.FULLSCREEN | pygame.SCALED,
+        )
+        set_visible_mock.assert_called_once_with(False)
+        renderer.resize.assert_called_once_with(1280, 720, screen=replacement_screen)
+        simulation.resize.assert_not_called()
 
 
 if __name__ == "__main__":
