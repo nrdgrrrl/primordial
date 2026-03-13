@@ -498,6 +498,12 @@ class Renderer:
         stats: dict[str, object],
     ) -> list[tuple[str, tuple[int, int, int]]]:
         record_suffix = "  NEW BEST" if stats["collapse_was_new_highest"] else ""
+        survival_color = (
+            (255, 242, 176)
+            if stats["collapse_beat_average"]
+            else (255, 228, 228)
+        )
+        beat_suffix = "  BEAT AVG" if stats["collapse_beat_average"] else ""
         modifier_line = (
             "Adjustment step: "
             f"{float(stats['adjustment_step_multiplier']):.2f}x "
@@ -517,8 +523,12 @@ class Renderer:
             ),
             (
                 f"Survival ticks: {stats['survival_ticks']}   "
+                f"Rolling avg: {float(stats['collapse_rolling_average']):.0f}{beat_suffix}",
+                survival_color,
+            ),
+            (
                 f"Highest ticks: {stats['highest_survival_ticks']}{record_suffix}",
-                (255, 242, 176) if stats["collapse_was_new_highest"] else (255, 228, 228),
+                (255, 228, 228),
             ),
             (
                 modifier_line,

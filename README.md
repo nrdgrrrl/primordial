@@ -217,9 +217,9 @@ A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%)
 - Arms race evolution: predator aggression and prey speed evolve under mutual selection pressure.
 - Cosmic ray hits can flip species identity when aggression crosses the 0.5 threshold.
 - When predators exceed 60% of the population, predator reproduction becomes harder: their reproduction threshold increases by 20%.
-- Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 5 seconds, then restarts with a new seed.
+- Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 10 seconds, then restarts with a new seed.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
-- The `GAME OVER` overlay also shows the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, shows the current adaptive step modifier, and marks the highest survival tick record when a run sets a new best.
+- The `GAME OVER` overlay also shows the rolling average that the run had to beat, highlights the current survival ticks when they beat that rolling average, shows the current adaptive step modifier, lists the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and still notes when a run sets a new highest survival record.
 - The settings overlay exposes a predator-prey-only dial reset action that restores adaptive dials to baseline values and clears the max survival tick record before starting a fresh run.
 - The HUD shows `sim_ticks`, current seed, current `survival_ticks`, the rolling average survival over the configured history window (`stability_history_size`, 20 by default), and the best recent survival from that same window.
 - A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-average collapses. That comparison is against the rolling average, not the median and not the all-time high. Trial results are then kept or reverted based on whether the trial meets or beats the pre-trial rolling average on the next run. That tuning state is written on exit and restored on the next launch.

@@ -45,7 +45,7 @@ _PREY_DEPTH_ESCAPE_URGENCY = 0.30
 _PREDATOR_DIAG_ACTIVE_HUNT_FRAMES = 10
 _PREDATOR_DIAG_FAILED_PURSUIT_FRAMES = 45
 _DEFAULT_PREDATOR_PREY_HISTORY_SIZE = 20
-_PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 5.0
+_PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 10.0
 _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_RUNS = 5
 _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_PERCENT = 25.0
 
@@ -91,6 +91,8 @@ class PredatorPreyStabilityState:
     collapse_trial_delta: float = 0.0
     collapse_trial_value: float | None = None
     collapse_trial_decision: str = "none"
+    collapse_rolling_average: float = 0.0
+    collapse_beat_average: bool = False
     collapse_was_new_highest: bool = False
     adaptive_tuning: PredatorPreyAdaptiveTuningState = field(
         default_factory=PredatorPreyAdaptiveTuningState
@@ -623,6 +625,8 @@ class Simulation:
         state.collapse_trial_delta = 0.0
         state.collapse_trial_value = None
         state.collapse_trial_decision = "none"
+        state.collapse_rolling_average = 0.0
+        state.collapse_beat_average = False
         state.collapse_was_new_highest = False
         self._apply_predator_prey_tuning_values(state.adaptive_tuning.current_values)
         random.seed(seed)
@@ -1157,9 +1161,12 @@ class Simulation:
             time.monotonic() if now_seconds is None else now_seconds
         )
         tuning = state.adaptive_tuning
+        prior_average = self.predator_prey_rolling_average
         state.collapse_dial_values = dict(tuning.current_values)
         state.collapse_trial_dial = tuning.trial_dial
         state.collapse_trial_decision = tuning.last_decision
+        state.collapse_rolling_average = prior_average
+        state.collapse_beat_average = prior_average > 0 and state.survival_ticks > prior_average
         if tuning.trial_active and tuning.trial_dial is not None:
             previous_value = tuning.previous_values.get(
                 tuning.trial_dial,
@@ -1285,6 +1292,8 @@ class Simulation:
         state.collapse_trial_delta = 0.0
         state.collapse_trial_value = None
         state.collapse_trial_decision = "none"
+        state.collapse_rolling_average = 0.0
+        state.collapse_beat_average = False
         state.collapse_was_new_highest = False
         self._apply_predator_prey_tuning_values(tuning.current_values)
 
@@ -2374,6 +2383,8 @@ class Simulation:
             "collapse_trial_direction": collapse_trial_direction,
             "collapse_trial_value": state.collapse_trial_value,
             "collapse_trial_decision": state.collapse_trial_decision,
+            "collapse_rolling_average": state.collapse_rolling_average,
+            "collapse_beat_average": state.collapse_beat_average,
             "collapse_was_new_highest": state.collapse_was_new_highest,
             "restart_countdown_seconds": self.get_predator_prey_restart_countdown_seconds(),
         }
@@ -2397,6 +2408,8 @@ class Simulation:
                 "trial_delta": state.collapse_trial_delta,
                 "trial_value": state.collapse_trial_value,
                 "trial_decision": state.collapse_trial_decision,
+                "rolling_average": state.collapse_rolling_average,
+                "beat_average": state.collapse_beat_average,
                 "was_new_highest": state.collapse_was_new_highest,
             },
             "adaptive_tuning": {
@@ -2469,6 +2482,8 @@ class Simulation:
             state.collapse_trial_decision = str(
                 game_over.get("trial_decision", "none")
             )
+            state.collapse_rolling_average = float(game_over.get("rolling_average", 0.0))
+            state.collapse_beat_average = bool(game_over.get("beat_average", False))
             state.collapse_was_new_highest = bool(
                 game_over.get("was_new_highest", False)
             )

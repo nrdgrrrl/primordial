@@ -342,10 +342,12 @@ The HUD panel (bottom-left, toggled with H) shows:
 
 When a species collapses, the simulation freezes and a red full-screen **GAME OVER**
 overlay replaces the normal readout. It shows the collapse cause, seed,
-predator/prey counts, survival ticks, the highest survival tick record, the
-current adaptive step modifier, and a 5-second restart countdown. The overlay
-also lists the run's adaptive dial values and highlights the dial changed for
-that run with its signed delta.
+predator/prey counts, survival ticks, the rolling average captured at collapse
+time, the highest survival tick record, the current adaptive step modifier, and
+a 10-second restart countdown. The overlay also lists the run's adaptive dial
+values and highlights the dial changed for that run with its signed delta. The
+highlighted survival line compares the run against that rolling average, not
+against the highest record.
 Pressing `Space` skips the countdown and starts the next run immediately.
 
 ### Save/load state

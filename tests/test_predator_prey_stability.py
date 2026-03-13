@@ -128,7 +128,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["collapse_predators"], 0)
         self.assertEqual(stats["collapse_prey"], 1)
 
-    def test_game_over_auto_restart_after_five_seconds(self) -> None:
+    def test_game_over_auto_restart_after_ten_seconds(self) -> None:
         simulation = self._build_simulation()
         simulation.settings.mode_params["predator_prey"]["initial_population"] = 6
         simulation._predator_prey_state.current_seed = 111
@@ -140,8 +140,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
 
         with patch.object(simulation, "_generate_predator_prey_seed", return_value=222):
-            self.assertFalse(simulation.update_predator_prey_runtime(now_seconds=14.9))
-            self.assertTrue(simulation.update_predator_prey_runtime(now_seconds=15.0))
+            self.assertFalse(simulation.update_predator_prey_runtime(now_seconds=19.9))
+            self.assertTrue(simulation.update_predator_prey_runtime(now_seconds=20.0))
 
         self.assertFalse(simulation.predator_prey_game_over_active)
         self.assertEqual(simulation.get_predator_prey_stability_stats()["current_seed"], 222)
@@ -265,6 +265,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
 
     def test_game_over_preserves_trial_dial_delta_for_overlay(self) -> None:
         simulation = self._build_simulation()
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
         simulation._predator_prey_state.survival_ticks = 90
         simulation._predator_prey_state.highest_survival_ticks = 120
         tuning = simulation._predator_prey_state.adaptive_tuning
@@ -296,6 +297,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertAlmostEqual(stats["collapse_trial_delta"], -0.03, places=4)
         self.assertEqual(stats["collapse_trial_direction"], "-")
         self.assertEqual(stats["collapse_trial_value"], 0.97)
+        self.assertEqual(stats["collapse_rolling_average"], 100.0)
+        self.assertFalse(stats["collapse_beat_average"])
         self.assertFalse(stats["collapse_was_new_highest"])
         self.assertEqual(
             simulation._predator_prey_state.adaptive_tuning.current_values[
@@ -306,6 +309,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
 
     def test_game_over_marks_new_highest_survival_record(self) -> None:
         simulation = self._build_simulation()
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
         simulation._predator_prey_state.survival_ticks = 150
         simulation._predator_prey_state.highest_survival_ticks = 120
 
@@ -318,6 +322,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
 
         stats = simulation.get_predator_prey_stability_stats()
         self.assertEqual(stats["highest_survival_ticks"], 150)
+        self.assertTrue(stats["collapse_beat_average"])
         self.assertTrue(stats["collapse_was_new_highest"])
 
     def test_reset_predator_prey_adaptive_tuning_restores_baseline_and_clears_history(self) -> None:
@@ -413,6 +418,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
         joined = "\n".join(line for line, _color in lines)
         self.assertIn("Adjustment step: 1.25x (+25%)", joined)
+        self.assertIn("Rolling avg: 100", joined)
 
     def test_space_restarts_predator_prey_game_over_immediately(self) -> None:
         simulation = self._build_simulation()
