@@ -155,6 +155,35 @@ Even with single-run trialing, add one confirmation:
 
 This is often the best complexity/performance trade-off.
 
+### 4) Occasionally test multi-dial moves (to capture interactions)
+
+Right now the search is strictly one-dial-at-a-time. That is great for simplicity,
+but it misses cross-effects where two individually neutral changes are beneficial
+together (or vice versa).
+
+Suggested low-risk extension:
+
+- keep **most** trials as single-dial (e.g., 80-90%),
+- reserve a small fraction (10-20%) for **two-dial trials**,
+- use smaller per-dial steps for multi-dial trials (e.g., 0.5x normal step),
+- evaluate with the same multi-seed/confirmation criteria,
+- if accepted, attribute credit to the dial pair as a combo in logs.
+
+Practical pair candidates worth testing first:
+
+- `predator_hunt_sense_multiplier` + `prey_flee_sense_multiplier`
+- `predator_kill_energy_gain_cap` + `predator_prey_scarcity_penalty_multiplier`
+- `food_cycle_amplitude` + either sensing dial (to adapt to feast/famine pressure)
+
+Guardrails:
+
+- avoid proposing pairs when either dial is already at/near clamp boundaries,
+- limit consecutive multi-dial trials (e.g., max 1 in any 5 trials),
+- revert the whole pair if aggregate score fails threshold.
+
+This gives you interaction awareness without fully jumping to expensive global
+optimizers.
+
 ## Is this “multi-dimensional gradient descent”?
 
 Not strictly.
@@ -178,4 +207,5 @@ Your current approach is reasonable and safer than naive auto-tuning. For your g
 
 1. multi-seed/confirmation acceptance,
 2. a composite health-aware objective,
-3. optional smarter dial selection from historical lift once enough logs accumulate.
+3. occasional interaction-aware multi-dial trials,
+4. optional smarter dial selection from historical lift once enough logs accumulate.
