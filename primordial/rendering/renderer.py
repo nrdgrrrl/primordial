@@ -33,6 +33,15 @@ _ZONE_LABELS: dict[str, str] = {
     "deep_trench": "Deep Trench",
 }
 
+_PREDATOR_PREY_DIAL_LABELS: dict[str, str] = {
+    "predator_contact_kill_distance_scale": "Kill distance",
+    "predator_kill_energy_gain_cap": "Kill reward",
+    "predator_hunt_sense_multiplier": "Pred sense",
+    "prey_flee_sense_multiplier": "Prey flee",
+    "predator_prey_scarcity_penalty_multiplier": "Scarcity cost",
+    "food_cycle_amplitude": "Food cycle",
+}
+
 if TYPE_CHECKING:
     from ..simulation.simulation import Simulation
     from ..settings import Settings
@@ -117,6 +126,7 @@ class Renderer:
         self._debug_font = pygame.font.Font(None, 18)
         self._overlay_title_font = pygame.font.Font(None, 72)
         self._overlay_body_font = pygame.font.Font(None, 32)
+        self._overlay_small_font = pygame.font.Font(None, 24)
         self._debug_timing: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
 
@@ -417,26 +427,92 @@ class Renderer:
         )
         self._target_surface.blit(title, title_pos)
 
+        record_suffix = "  NEW BEST" if stats["collapse_was_new_highest"] else ""
         lines = [
-            f"Cause: {stats['collapse_cause'] or 'Unknown'}",
-            f"Seed: {stats['current_seed'] if stats['current_seed'] is not None else '—'}",
-            f"Predators: {stats['collapse_predators']}  Prey: {stats['collapse_prey']}",
-            f"Survival ticks: {stats['survival_ticks']}",
-            f"Restart in: {math.ceil(stats['restart_countdown_seconds'])}s",
+            (
+                f"Cause: {stats['collapse_cause'] or 'Unknown'}",
+                (255, 228, 228),
+            ),
+            (
+                "Seed: "
+                f"{stats['current_seed'] if stats['current_seed'] is not None else '—'}"
+                f"   Predators: {stats['collapse_predators']}   Prey: {stats['collapse_prey']}",
+                (255, 228, 228),
+            ),
+            (
+                f"Survival ticks: {stats['survival_ticks']}   "
+                f"Highest ticks: {stats['highest_survival_ticks']}{record_suffix}",
+                (255, 242, 176) if stats["collapse_was_new_highest"] else (255, 228, 228),
+            ),
+            (
+                f"Restart in: {math.ceil(stats['restart_countdown_seconds'])}s   Space: skip",
+                (255, 228, 228),
+            ),
         ]
 
-        y = title_pos[1] + title.get_height() + 24
-        for line in lines:
-            text = self._overlay_body_font.render(line, True, (255, 228, 228))
-            x = (self.width - text.get_width()) // 2
+        y = title_pos[1] + title.get_height() + 20
+        summary_font = self._overlay_small_font
+        panel_width = min(self.width - 80, 760)
+        for line, color in lines:
+            text = summary_font.render(line, True, color)
             panel = pygame.Surface(
-                (text.get_width() + 24, text.get_height() + 10),
+                (panel_width, text.get_height() + 10),
                 pygame.SRCALPHA,
             )
             panel.fill((24, 4, 6, 150))
-            panel.blit(text, (12, 5))
-            self._target_surface.blit(panel, (x - 12, y - 5))
-            y += text.get_height() + 14
+            text_x = max(12, (panel_width - text.get_width()) // 2)
+            panel.blit(text, (text_x, 5))
+            self._target_surface.blit(panel, ((self.width - panel_width) // 2, y - 5))
+            y += text.get_height() + 12
+
+        dial_values = stats["collapse_dial_values"] or {}
+        if not dial_values:
+            return
+
+        dial_title = self._overlay_small_font.render(
+            "Run dials",
+            True,
+            (255, 236, 236),
+        )
+        dial_title_y = y + 4
+        self._target_surface.blit(
+            dial_title,
+            ((self.width - dial_title.get_width()) // 2, dial_title_y),
+        )
+
+        changed_key = stats["collapse_trial_dial"]
+        changed_delta = float(stats["collapse_trial_delta"])
+        keys = [key for key in _PREDATOR_PREY_DIAL_LABELS if key in dial_values]
+        if not keys:
+            return
+        columns = 2
+        rows = math.ceil(len(keys) / columns)
+        cell_width = min(320, max(220, (self.width - 120) // columns))
+        start_x = (self.width - (cell_width * columns)) // 2
+        start_y = dial_title_y + dial_title.get_height() + 12
+        highlight_color = (255, 242, 176)
+        default_color = (255, 228, 228)
+
+        for index, key in enumerate(keys):
+            row = index % rows
+            col = index // rows
+            x = start_x + (col * cell_width)
+            y = start_y + (row * 28)
+            value = float(dial_values[key])
+            label = _PREDATOR_PREY_DIAL_LABELS.get(key, key)
+            line = f"{label}: {value:.2f}"
+            color = default_color
+            if key == changed_key and not math.isclose(changed_delta, 0.0, abs_tol=1e-9):
+                line = f"{line}  ({changed_delta:+.2f} this run)"
+                color = highlight_color
+            text = self._overlay_small_font.render(line, True, color)
+            panel = pygame.Surface(
+                (cell_width - 10, text.get_height() + 8),
+                pygame.SRCALPHA,
+            )
+            panel.fill((24, 4, 6, 150))
+            panel.blit(text, (8, 4))
+            self._target_surface.blit(panel, (x, y))
 
     # ------------------------------------------------------------------
     # Zone backgrounds

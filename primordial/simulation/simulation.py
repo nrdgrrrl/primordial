@@ -45,7 +45,7 @@ _PREY_DEPTH_ESCAPE_URGENCY = 0.30
 _PREDATOR_DIAG_ACTIVE_HUNT_FRAMES = 10
 _PREDATOR_DIAG_FAILED_PURSUIT_FRAMES = 45
 _PREDATOR_PREY_HISTORY_SIZE = 20
-_PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 30.0
+_PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -76,11 +76,18 @@ class PredatorPreyStabilityState:
     run_history: deque[int] = field(
         default_factory=lambda: deque(maxlen=_PREDATOR_PREY_HISTORY_SIZE)
     )
+    highest_survival_ticks: int = 0
     game_over_active: bool = False
     collapse_cause: str | None = None
     collapse_predator_count: int = 0
     collapse_prey_count: int = 0
     collapse_started_at_seconds: float | None = None
+    collapse_dial_values: dict[str, float] = field(default_factory=dict)
+    collapse_trial_dial: str | None = None
+    collapse_trial_delta: float = 0.0
+    collapse_trial_value: float | None = None
+    collapse_trial_decision: str = "none"
+    collapse_was_new_highest: bool = False
     adaptive_tuning: PredatorPreyAdaptiveTuningState = field(
         default_factory=PredatorPreyAdaptiveTuningState
     )
@@ -557,6 +564,12 @@ class Simulation:
         state.collapse_predator_count = 0
         state.collapse_prey_count = 0
         state.collapse_started_at_seconds = None
+        state.collapse_dial_values = {}
+        state.collapse_trial_dial = None
+        state.collapse_trial_delta = 0.0
+        state.collapse_trial_value = None
+        state.collapse_trial_decision = "none"
+        state.collapse_was_new_highest = False
         self._apply_predator_prey_tuning_values(state.adaptive_tuning.current_values)
         random.seed(seed)
 
@@ -1089,6 +1102,21 @@ class Simulation:
         state.collapse_started_at_seconds = (
             time.monotonic() if now_seconds is None else now_seconds
         )
+        tuning = state.adaptive_tuning
+        state.collapse_dial_values = dict(tuning.current_values)
+        state.collapse_trial_dial = tuning.trial_dial
+        state.collapse_trial_decision = tuning.last_decision
+        if tuning.trial_active and tuning.trial_dial is not None:
+            previous_value = tuning.previous_values.get(
+                tuning.trial_dial,
+                tuning.current_values.get(tuning.trial_dial, 0.0),
+            )
+            current_value = tuning.current_values.get(tuning.trial_dial, previous_value)
+            state.collapse_trial_delta = round(current_value - previous_value, 4)
+            state.collapse_trial_value = current_value
+        else:
+            state.collapse_trial_delta = 0.0
+            state.collapse_trial_value = None
         self._finalize_predator_prey_run(state.survival_ticks)
 
     def _finalize_predator_prey_run(self, survival_ticks: int) -> None:
@@ -1096,6 +1124,8 @@ class Simulation:
         tuning = state.adaptive_tuning
         prior_average = self.predator_prey_rolling_average
         was_trial = tuning.trial_active
+        state.collapse_was_new_highest = survival_ticks > state.highest_survival_ticks
+        state.highest_survival_ticks = max(state.highest_survival_ticks, survival_ticks)
 
         if was_trial:
             if survival_ticks < tuning.trial_baseline_average:
@@ -2216,12 +2246,18 @@ class Simulation:
             trial_direction = "+"
         elif state.adaptive_tuning.trial_direction < 0:
             trial_direction = "-"
+        collapse_trial_direction = ""
+        if state.collapse_trial_delta > 0:
+            collapse_trial_direction = "+"
+        elif state.collapse_trial_delta < 0:
+            collapse_trial_direction = "-"
         return {
             "current_seed": state.current_seed,
             "sim_ticks": state.sim_ticks,
             "survival_ticks": state.survival_ticks,
             "rolling_average_survival_ticks": self.predator_prey_rolling_average,
             "best_recent_survival_ticks": self.predator_prey_best_recent_ticks,
+            "highest_survival_ticks": state.highest_survival_ticks,
             "trial_active": state.adaptive_tuning.trial_active,
             "trial_dial": state.adaptive_tuning.trial_dial,
             "trial_direction": trial_direction,
@@ -2231,6 +2267,13 @@ class Simulation:
             "collapse_cause": state.collapse_cause,
             "collapse_predators": state.collapse_predator_count,
             "collapse_prey": state.collapse_prey_count,
+            "collapse_dial_values": dict(state.collapse_dial_values),
+            "collapse_trial_dial": state.collapse_trial_dial,
+            "collapse_trial_delta": state.collapse_trial_delta,
+            "collapse_trial_direction": collapse_trial_direction,
+            "collapse_trial_value": state.collapse_trial_value,
+            "collapse_trial_decision": state.collapse_trial_decision,
+            "collapse_was_new_highest": state.collapse_was_new_highest,
             "restart_countdown_seconds": self.get_predator_prey_restart_countdown_seconds(),
         }
 
@@ -2242,11 +2285,18 @@ class Simulation:
             "sim_ticks": state.sim_ticks,
             "survival_ticks": state.survival_ticks,
             "run_history": list(state.run_history),
+            "highest_survival_ticks": state.highest_survival_ticks,
             "game_over": {
                 "active": state.game_over_active,
                 "cause": state.collapse_cause,
                 "predators": state.collapse_predator_count,
                 "prey": state.collapse_prey_count,
+                "dial_values": dict(state.collapse_dial_values),
+                "trial_dial": state.collapse_trial_dial,
+                "trial_delta": state.collapse_trial_delta,
+                "trial_value": state.collapse_trial_value,
+                "trial_decision": state.collapse_trial_decision,
+                "was_new_highest": state.collapse_was_new_highest,
             },
             "adaptive_tuning": {
                 "current_values": dict(tuning.current_values),
@@ -2265,6 +2315,7 @@ class Simulation:
         tuning = state.adaptive_tuning
         return {
             "run_history": list(state.run_history),
+            "highest_survival_ticks": state.highest_survival_ticks,
             "adaptive_tuning": {
                 "current_values": dict(tuning.current_values),
                 "previous_values": dict(tuning.previous_values),
@@ -2289,6 +2340,9 @@ class Simulation:
             (int(item) for item in history),
             maxlen=_PREDATOR_PREY_HISTORY_SIZE,
         )
+        state.highest_survival_ticks = int(
+            payload.get("highest_survival_ticks", max((0, *state.run_history)))
+        )
 
         game_over = payload.get("game_over", {})
         if isinstance(game_over, dict):
@@ -2297,6 +2351,25 @@ class Simulation:
             state.collapse_predator_count = int(game_over.get("predators", 0))
             state.collapse_prey_count = int(game_over.get("prey", 0))
             state.collapse_started_at_seconds = None
+            dial_values = game_over.get("dial_values", {})
+            if isinstance(dial_values, dict) and dial_values:
+                state.collapse_dial_values = self._serialize_predator_prey_dial_values(
+                    dial_values
+                )
+            else:
+                state.collapse_dial_values = {}
+            state.collapse_trial_dial = game_over.get("trial_dial")
+            state.collapse_trial_delta = float(game_over.get("trial_delta", 0.0))
+            trial_value = game_over.get("trial_value")
+            state.collapse_trial_value = (
+                None if trial_value is None else float(trial_value)
+            )
+            state.collapse_trial_decision = str(
+                game_over.get("trial_decision", "none")
+            )
+            state.collapse_was_new_highest = bool(
+                game_over.get("was_new_highest", False)
+            )
 
         tuning_payload = payload.get("adaptive_tuning", {})
         if isinstance(tuning_payload, dict):
@@ -2328,6 +2401,9 @@ class Simulation:
         state.run_history = deque(
             (int(item) for item in history),
             maxlen=_PREDATOR_PREY_HISTORY_SIZE,
+        )
+        state.highest_survival_ticks = int(
+            payload.get("highest_survival_ticks", max((0, *state.run_history)))
         )
 
         tuning_payload = payload.get("adaptive_tuning", {})

@@ -148,7 +148,7 @@ Main simulation controller. Owns `creatures`, `food_manager`, `settings`.
 **Key methods (updated):**
 - `step()` — populates all event queues; runs food cycle, hunting, cosmic rays, aging
 - `update_predator_prey_runtime()` — holds the predator_prey `GAME OVER`
-  overlay for 30 wall-clock seconds, then restarts with a new seed
+  overlay for 5 wall-clock seconds, then restarts with a new seed
 - `restart_predator_prey_run()` — reset predator_prey while preserving rolling
   survival history and adaptive dial state
 - `get_lineage_counts() -> dict[int, int]`
@@ -157,7 +157,8 @@ Main simulation controller. Owns `creatures`, `food_manager`, `settings`.
 - `food_cycle_phase` property — 0.0=famine, 1.0=feast
 - `avg_old_age_lifespan_seconds` property — rolling avg of last 20 natural deaths
 - `get_predator_prey_stability_stats()` — current seed, `sim_ticks`,
-  `survival_ticks`, rolling average, best recent, trial status, game-over cause
+  `survival_ticks`, rolling average, best recent, highest-ever survival,
+  trial status, and game-over overlay metadata
 
 **Invariants (all preserved):**
 - `step()` never calls pygame or modifies rendering state
@@ -629,8 +630,11 @@ When predators exceed 60% of the live population, predator reproduction becomes
 harder by increasing the resolved predator threshold by 20%.
 Predator/prey extinction is no longer rescued in normal operation: either
 species hitting zero triggers a frozen red `GAME OVER` state, then an automatic
-restart after 30 seconds with a new seed. Pressing `Space` during that screen
+restart after 5 seconds with a new seed. Pressing `Space` during that screen
 skips the hold and restarts immediately.
+That `GAME OVER` overlay also shows the run's dial values, highlights the dial
+changed for that run with its signed delta, and marks the highest survival tick
+record when the just-ended run sets a new best.
 Adaptive predator_prey dials are intentionally small and ecological only:
 `predator_contact_kill_distance_scale`, `predator_kill_energy_gain_cap`,
 `predator_hunt_sense_multiplier`, `prey_flee_sense_multiplier`,

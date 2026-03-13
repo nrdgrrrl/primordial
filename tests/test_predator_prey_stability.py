@@ -118,7 +118,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["collapse_predators"], 0)
         self.assertEqual(stats["collapse_prey"], 1)
 
-    def test_game_over_auto_restart_after_thirty_seconds(self) -> None:
+    def test_game_over_auto_restart_after_five_seconds(self) -> None:
         simulation = self._build_simulation()
         simulation.settings.mode_params["predator_prey"]["initial_population"] = 6
         simulation._predator_prey_state.current_seed = 111
@@ -130,8 +130,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
 
         with patch.object(simulation, "_generate_predator_prey_seed", return_value=222):
-            self.assertFalse(simulation.update_predator_prey_runtime(now_seconds=39.9))
-            self.assertTrue(simulation.update_predator_prey_runtime(now_seconds=40.0))
+            self.assertFalse(simulation.update_predator_prey_runtime(now_seconds=14.9))
+            self.assertTrue(simulation.update_predator_prey_runtime(now_seconds=15.0))
 
         self.assertFalse(simulation.predator_prey_game_over_active)
         self.assertEqual(simulation.get_predator_prey_stability_stats()["current_seed"], 222)
@@ -200,12 +200,70 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
         self.assertNotEqual(trial_value, baseline)
 
+    def test_game_over_preserves_trial_dial_delta_for_overlay(self) -> None:
+        simulation = self._build_simulation()
+        simulation._predator_prey_state.survival_ticks = 90
+        simulation._predator_prey_state.highest_survival_ticks = 120
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        tuning.previous_values["predator_contact_kill_distance_scale"] = 1.00
+        tuning.current_values["predator_contact_kill_distance_scale"] = 0.97
+        tuning.trial_active = True
+        tuning.trial_dial = "predator_contact_kill_distance_scale"
+        tuning.trial_direction = -1
+        tuning.trial_baseline_average = 100.0
+        tuning.last_decision = "trial_started"
+        simulation._apply_predator_prey_tuning_values(tuning.current_values)
+
+        simulation._enter_predator_prey_game_over(
+            "Predators collapsed",
+            predator_count=0,
+            prey_count=3,
+            now_seconds=10.0,
+        )
+
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertEqual(
+            stats["collapse_dial_values"]["predator_contact_kill_distance_scale"],
+            0.97,
+        )
+        self.assertEqual(
+            stats["collapse_trial_dial"],
+            "predator_contact_kill_distance_scale",
+        )
+        self.assertAlmostEqual(stats["collapse_trial_delta"], -0.03, places=4)
+        self.assertEqual(stats["collapse_trial_direction"], "-")
+        self.assertEqual(stats["collapse_trial_value"], 0.97)
+        self.assertFalse(stats["collapse_was_new_highest"])
+        self.assertEqual(
+            simulation._predator_prey_state.adaptive_tuning.current_values[
+                "predator_contact_kill_distance_scale"
+            ],
+            1.00,
+        )
+
+    def test_game_over_marks_new_highest_survival_record(self) -> None:
+        simulation = self._build_simulation()
+        simulation._predator_prey_state.survival_ticks = 150
+        simulation._predator_prey_state.highest_survival_ticks = 120
+
+        simulation._enter_predator_prey_game_over(
+            "Prey collapsed",
+            predator_count=2,
+            prey_count=0,
+            now_seconds=10.0,
+        )
+
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertEqual(stats["highest_survival_ticks"], 150)
+        self.assertTrue(stats["collapse_was_new_highest"])
+
     def test_snapshot_round_trip_preserves_adaptive_tuning_state(self) -> None:
         simulation = self._build_simulation()
         simulation._predator_prey_state.current_seed = 424242
         simulation._predator_prey_state.sim_ticks = 123
         simulation._predator_prey_state.survival_ticks = 123
         simulation._predator_prey_state.run_history.extend([40, 60, 80])
+        simulation._predator_prey_state.highest_survival_ticks = 123
         tuning = simulation._predator_prey_state.adaptive_tuning
         tuning.current_values["predator_hunt_sense_multiplier"] = 2.10
         tuning.previous_values["predator_hunt_sense_multiplier"] = 2.05
@@ -266,6 +324,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
     def test_predator_prey_tuning_state_persists_across_launches(self) -> None:
         simulation = self._build_simulation()
         simulation._predator_prey_state.run_history.extend([25, 50, 75])
+        simulation._predator_prey_state.highest_survival_ticks = 75
         tuning = simulation._predator_prey_state.adaptive_tuning
         tuning.current_values["predator_hunt_sense_multiplier"] = 2.15
         tuning.previous_values["predator_hunt_sense_multiplier"] = 2.10

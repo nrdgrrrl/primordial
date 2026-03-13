@@ -216,8 +216,9 @@ A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%)
 - Arms race evolution: predator aggression and prey speed evolve under mutual selection pressure.
 - Cosmic ray hits can flip species identity when aggression crosses the 0.5 threshold.
 - When predators exceed 60% of the population, predator reproduction becomes harder: their reproduction threshold increases by 20%.
-- Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 30 seconds, then restarts with a new seed.
+- Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 5 seconds, then restarts with a new seed.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
+- The `GAME OVER` overlay also shows the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and marks the highest survival tick record when a run sets a new best.
 - The HUD shows `sim_ticks`, current seed, current `survival_ticks`, rolling average survival over the last 20 completed runs, and best recent survival.
 - A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-average collapses, then keeps or reverts the trial result on the next run. That tuning state is written on exit and restored on the next launch.
 - Predators render in warm hues (high hue), prey in cool hues (low hue).

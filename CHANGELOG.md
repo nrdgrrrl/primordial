@@ -15,8 +15,9 @@ All notable changes to Primordial are documented in this file.
   by increasing their reproduction threshold by 20%.
 - Removed automatic extinction rescue from normal predator-prey play.
   Species collapse now freezes the simulation, tints the screen red, shows a
-  `GAME OVER` overlay with cause/seed/counts/survival ticks, holds for 30
-  seconds, then restarts with a new seed.
+  `GAME OVER` overlay with cause/seed/counts/survival ticks, highest survival
+  record, and current run dial values, holds for 5 seconds, then restarts with
+  a new seed.
 - Pressing `Space` during predator-prey `GAME OVER` now skips the hold and
   immediately starts the next seeded run.
 - Replaced predator-prey HUD generation display with `sim_ticks`, seed,
