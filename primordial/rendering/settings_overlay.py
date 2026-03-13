@@ -30,6 +30,7 @@ class SettingsOverlay:
         self.fade = 0
         self.fade_dir = 0
         self.confirm_reset = False
+        self.confirm_reset_predator_prey_dials = False
         self.pending: dict[str, object] = {}
         self.snapshot_path = ""
         self.snapshot_status = ""
@@ -65,12 +66,14 @@ class SettingsOverlay:
     def close(self) -> None:
         self.fade_dir = -1
         self.confirm_reset = False
+        self.confirm_reset_predator_prey_dials = False
         self.snapshot_status = ""
         self.snapshot_status_is_error = False
 
     def sync_from_settings(self) -> None:
         self.pending = {f.attr: getattr(self.settings, f.attr) for f in self.fields}
         self.confirm_reset = False
+        self.confirm_reset_predator_prey_dials = False
 
     def set_snapshot_path(self, path: str) -> None:
         self.snapshot_path = path
@@ -87,13 +90,23 @@ class SettingsOverlay:
             return "discard"
         if event.key == pygame.K_v:
             self.confirm_reset = False
+            self.confirm_reset_predator_prey_dials = False
             return "save_snapshot"
         if event.key == pygame.K_l:
             self.confirm_reset = False
+            self.confirm_reset_predator_prey_dials = False
             return "load_snapshot"
         if event.key == pygame.K_h:
             self.confirm_reset = False
+            self.confirm_reset_predator_prey_dials = False
             return "help"
+        if event.key == pygame.K_d and self.settings.sim_mode == "predator_prey":
+            self.confirm_reset = False
+            if self.confirm_reset_predator_prey_dials:
+                self.confirm_reset_predator_prey_dials = False
+                return "reset_predator_prey_dials"
+            self.confirm_reset_predator_prey_dials = True
+            return None
         if event.key == pygame.K_UP:
             self.selected = (self.selected - 1) % len(self.fields)
         elif event.key == pygame.K_DOWN:
@@ -109,6 +122,7 @@ class SettingsOverlay:
             self.close()
             return "apply"
         elif event.key == pygame.K_r:
+            self.confirm_reset_predator_prey_dials = False
             if self.confirm_reset:
                 self.settings.reset_to_defaults()
                 self.pending = {f.attr: getattr(self.settings, f.attr) for f in self.fields}
@@ -121,6 +135,7 @@ class SettingsOverlay:
         field = self.fields[self.selected]
         value = self.pending[field.attr]
         self.confirm_reset = False
+        self.confirm_reset_predator_prey_dials = False
         if field.kind == "bool":
             self.pending[field.attr] = not bool(value)
         elif field.kind == "enum" and field.options:
@@ -180,19 +195,29 @@ class SettingsOverlay:
             (185, 225, 255),
         )
         self._panel.blit(action, (20, action_y))
+        if self.settings.sim_mode == "predator_prey":
+            dial_action = self._small.render(
+                "D = Reset predator-prey dials + max ticks",
+                True,
+                (185, 225, 255),
+            )
+            self._panel.blit(dial_action, (20, action_y + 26))
 
         path_text = self.snapshot_path or "(default path pending)"
         path = self._small.render(f"Path: {path_text}", True, (120, 165, 220))
-        self._panel.blit(path, (20, action_y + 26))
+        path_y = action_y + (52 if self.settings.sim_mode == "predator_prey" else 26)
+        self._panel.blit(path, (20, path_y))
 
         if self.snapshot_status:
             status_color = (240, 140, 140) if self.snapshot_status_is_error else (170, 225, 180)
             status = self._small.render(self.snapshot_status, True, status_color)
-            self._panel.blit(status, (20, action_y + 52))
+            self._panel.blit(status, (20, path_y + 26))
 
         hint = "Enter=Apply  Esc/S=Discard  R=Reset defaults"
         if self.confirm_reset:
             hint = "Press R again to confirm reset"
+        elif self.confirm_reset_predator_prey_dials:
+            hint = "Press D again to reset predator-prey dials"
         self._panel.blit(self._small.render(hint, True, (180, 205, 230)), (20, 590))
 
         x = screen.get_width() // 2 - self._panel.get_width() // 2

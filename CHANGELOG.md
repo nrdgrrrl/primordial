@@ -34,6 +34,9 @@ All notable changes to Primordial are documented in this file.
   `sim_ticks`, `survival_ticks`, rolling history, and trial metadata.
 - The adaptive predator-prey tuning state is also written on app exit and
   restored on next launch without requiring a world snapshot.
+- Added a settings-overlay action to reset predator-prey adaptive dials to
+  baseline values, clear the max survival tick record, and restart the mode
+  from a clean run.
 
 **Why:** predator-prey previously optimized for endless continuity via species
 rescue, which made extinction invisible and contradicted the intended

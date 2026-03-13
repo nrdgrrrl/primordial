@@ -59,6 +59,7 @@ class AdaptiveDialSpec:
 
 @dataclass
 class PredatorPreyAdaptiveTuningState:
+    baseline_values: dict[str, float] = field(default_factory=dict)
     current_values: dict[str, float] = field(default_factory=dict)
     previous_values: dict[str, float] = field(default_factory=dict)
     trial_active: bool = False
@@ -322,6 +323,7 @@ class Simulation:
         return PredatorPreyStabilityState(
             current_seed=seed,
             adaptive_tuning=PredatorPreyAdaptiveTuningState(
+                baseline_values=dict(current_values),
                 current_values=dict(current_values),
                 previous_values=dict(current_values),
             ),
@@ -358,6 +360,12 @@ class Simulation:
                 numeric = spec.default
             serialized[spec.key] = self._clamp_predator_prey_dial_value(spec, numeric)
         return serialized
+
+    def _default_predator_prey_dial_values(self) -> dict[str, float]:
+        return {
+            spec.key: self._clamp_predator_prey_dial_value(spec, spec.default)
+            for spec in _PREDATOR_PREY_ADAPTIVE_DIALS
+        }
 
     # ------------------------------------------------------------------
     # Setup helpers
@@ -1198,6 +1206,31 @@ class Simulation:
             preserve_predator_prey_state=True,
             new_seed=new_seed,
         )
+
+    def reset_predator_prey_adaptive_tuning(self) -> None:
+        """Restore adaptive dials to their baseline values and clear stability history."""
+        state = self._predator_prey_state
+        tuning = state.adaptive_tuning
+        baseline_values = dict(tuning.baseline_values)
+        if not baseline_values:
+            baseline_values = self._default_predator_prey_dial_values()
+            tuning.baseline_values = dict(baseline_values)
+        tuning.current_values = dict(baseline_values)
+        tuning.previous_values = dict(baseline_values)
+        tuning.trial_active = False
+        tuning.trial_dial = None
+        tuning.trial_direction = 0
+        tuning.trial_baseline_average = 0.0
+        tuning.last_decision = "reset_to_baseline"
+        state.run_history.clear()
+        state.highest_survival_ticks = 0
+        state.collapse_dial_values = {}
+        state.collapse_trial_dial = None
+        state.collapse_trial_delta = 0.0
+        state.collapse_trial_value = None
+        state.collapse_trial_decision = "none"
+        state.collapse_was_new_highest = False
+        self._apply_predator_prey_tuning_values(tuning.current_values)
 
     # ------------------------------------------------------------------
     # Boids mode
@@ -2299,6 +2332,7 @@ class Simulation:
                 "was_new_highest": state.collapse_was_new_highest,
             },
             "adaptive_tuning": {
+                "baseline_values": dict(tuning.baseline_values),
                 "current_values": dict(tuning.current_values),
                 "previous_values": dict(tuning.previous_values),
                 "trial_active": tuning.trial_active,
@@ -2317,6 +2351,7 @@ class Simulation:
             "run_history": list(state.run_history),
             "highest_survival_ticks": state.highest_survival_ticks,
             "adaptive_tuning": {
+                "baseline_values": dict(tuning.baseline_values),
                 "current_values": dict(tuning.current_values),
                 "previous_values": dict(tuning.previous_values),
                 "trial_active": tuning.trial_active,
@@ -2374,6 +2409,12 @@ class Simulation:
         tuning_payload = payload.get("adaptive_tuning", {})
         if isinstance(tuning_payload, dict):
             tuning = state.adaptive_tuning
+            tuning.baseline_values = self._serialize_predator_prey_dial_values(
+                tuning_payload.get(
+                    "baseline_values",
+                    tuning.current_values or self._default_predator_prey_dial_values(),
+                )
+            )
             tuning.current_values = self._serialize_predator_prey_dial_values(
                 tuning_payload.get("current_values", {})
             )
@@ -2411,6 +2452,12 @@ class Simulation:
             return
 
         tuning = state.adaptive_tuning
+        tuning.baseline_values = self._serialize_predator_prey_dial_values(
+            tuning_payload.get(
+                "baseline_values",
+                tuning.current_values or self._default_predator_prey_dial_values(),
+            )
+        )
         tuning.current_values = self._serialize_predator_prey_dial_values(
             tuning_payload.get("current_values", {})
         )

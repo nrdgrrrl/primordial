@@ -257,6 +257,29 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["highest_survival_ticks"], 150)
         self.assertTrue(stats["collapse_was_new_highest"])
 
+    def test_reset_predator_prey_adaptive_tuning_restores_baseline_and_clears_history(self) -> None:
+        simulation = self._build_simulation()
+        state = simulation._predator_prey_state
+        baseline = dict(state.adaptive_tuning.baseline_values)
+        state.run_history.extend([50, 75, 100])
+        state.highest_survival_ticks = 100
+        state.adaptive_tuning.current_values["predator_hunt_sense_multiplier"] = 2.15
+        state.adaptive_tuning.previous_values["predator_hunt_sense_multiplier"] = 2.10
+        state.adaptive_tuning.trial_active = True
+        state.adaptive_tuning.trial_dial = "predator_hunt_sense_multiplier"
+        state.adaptive_tuning.trial_direction = 1
+        state.adaptive_tuning.trial_baseline_average = 80.0
+        simulation._apply_predator_prey_tuning_values(state.adaptive_tuning.current_values)
+
+        simulation.reset_predator_prey_adaptive_tuning()
+
+        self.assertEqual(state.adaptive_tuning.current_values, baseline)
+        self.assertEqual(state.adaptive_tuning.previous_values, baseline)
+        self.assertFalse(state.adaptive_tuning.trial_active)
+        self.assertEqual(state.adaptive_tuning.last_decision, "reset_to_baseline")
+        self.assertEqual(list(state.run_history), [])
+        self.assertEqual(state.highest_survival_ticks, 0)
+
     def test_snapshot_round_trip_preserves_adaptive_tuning_state(self) -> None:
         simulation = self._build_simulation()
         simulation._predator_prey_state.current_seed = 424242

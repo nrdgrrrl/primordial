@@ -727,6 +727,21 @@ def main(
                             is_error=not opened,
                         )
                         runtime_loop.reset_timing_debt()
+                    elif action == "reset_predator_prey_dials":
+                        if settings.sim_mode != "predator_prey":
+                            renderer.settings_overlay.set_snapshot_status(
+                                "Predator-prey dial reset is only available in predator_prey mode.",
+                                is_error=True,
+                            )
+                        else:
+                            simulation.reset_predator_prey_adaptive_tuning()
+                            simulation.restart_predator_prey_run()
+                            renderer.reset_runtime_state()
+                            runtime_loop.reset_timing_debt()
+                            _save_predator_prey_tuning_state(settings, simulation)
+                            renderer.settings_overlay.set_snapshot_status(
+                                "Reset predator-prey dials to baseline and cleared max ticks."
+                            )
                 else:
                     if event.key == pygame.K_p:
                         renderer.set_predator_highlight(True)

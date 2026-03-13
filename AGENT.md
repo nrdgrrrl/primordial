@@ -635,6 +635,9 @@ skips the hold and restarts immediately.
 That `GAME OVER` overlay also shows the run's dial values, highlights the dial
 changed for that run with its signed delta, and marks the highest survival tick
 record when the just-ended run sets a new best.
+The settings overlay exposes a predator-prey-only reset action that restores
+adaptive dials to their baseline values, clears the max survival tick record,
+and starts a fresh predator_prey run.
 Adaptive predator_prey dials are intentionally small and ecological only:
 `predator_contact_kill_distance_scale`, `predator_kill_energy_gain_cap`,
 `predator_hunt_sense_multiplier`, `prey_flee_sense_multiplier`,

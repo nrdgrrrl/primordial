@@ -80,6 +80,7 @@ make clean     # remove build/dist and __pycache__ dirs
 | `F` | Toggle fullscreen/windowed mode |
 | `R` | Reset simulation (new population) |
 | `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
+| `D` | In the settings overlay, reset predator-prey adaptive dials to baseline and clear the max tick record |
 | Hold `P` | Highlight predators while held in `predator_prey` mode |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
@@ -219,6 +220,7 @@ A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%)
 - Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 5 seconds, then restarts with a new seed.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
 - The `GAME OVER` overlay also shows the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and marks the highest survival tick record when a run sets a new best.
+- The settings overlay exposes a predator-prey-only dial reset action that restores adaptive dials to baseline values and clears the max survival tick record before starting a fresh run.
 - The HUD shows `sim_ticks`, current seed, current `survival_ticks`, rolling average survival over the last 20 completed runs, and best recent survival.
 - A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-average collapses, then keeps or reverts the trial result on the next run. That tuning state is written on exit and restored on the next launch.
 - Predators render in warm hues (high hue), prey in cool hues (low hue).

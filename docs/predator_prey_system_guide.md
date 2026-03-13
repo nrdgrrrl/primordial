@@ -360,6 +360,9 @@ Predator_prey snapshots persist more than the world state. They also save:
 
 Even without a world snapshot, the adaptive tuning state is written on app exit
 and restored on the next launch so dial progress carries forward between sessions.
+If you want to discard that progress, the settings overlay includes a
+predator-prey dial reset action that restores the baseline dial values, clears
+the max survival tick record, and starts a fresh run.
 
 ### Keyboard controls
 
