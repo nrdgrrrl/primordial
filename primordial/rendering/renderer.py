@@ -427,28 +427,7 @@ class Renderer:
         )
         self._target_surface.blit(title, title_pos)
 
-        record_suffix = "  NEW BEST" if stats["collapse_was_new_highest"] else ""
-        lines = [
-            (
-                f"Cause: {stats['collapse_cause'] or 'Unknown'}",
-                (255, 228, 228),
-            ),
-            (
-                "Seed: "
-                f"{stats['current_seed'] if stats['current_seed'] is not None else '—'}"
-                f"   Predators: {stats['collapse_predators']}   Prey: {stats['collapse_prey']}",
-                (255, 228, 228),
-            ),
-            (
-                f"Survival ticks: {stats['survival_ticks']}   "
-                f"Highest ticks: {stats['highest_survival_ticks']}{record_suffix}",
-                (255, 242, 176) if stats["collapse_was_new_highest"] else (255, 228, 228),
-            ),
-            (
-                f"Restart in: {math.ceil(stats['restart_countdown_seconds'])}s   Space: skip",
-                (255, 228, 228),
-            ),
-        ]
+        lines = self._build_predator_prey_game_over_summary_lines(stats)
 
         y = title_pos[1] + title.get_height() + 20
         summary_font = self._overlay_small_font
@@ -513,6 +492,43 @@ class Renderer:
             panel.fill((24, 4, 6, 150))
             panel.blit(text, (8, 4))
             self._target_surface.blit(panel, (x, y))
+
+    def _build_predator_prey_game_over_summary_lines(
+        self,
+        stats: dict[str, object],
+    ) -> list[tuple[str, tuple[int, int, int]]]:
+        record_suffix = "  NEW BEST" if stats["collapse_was_new_highest"] else ""
+        modifier_line = (
+            "Adjustment step: "
+            f"{float(stats['adjustment_step_multiplier']):.2f}x "
+            f"(+{float(stats['adjustment_step_increase_percent']):.0f}%)"
+            f"   Streak: {int(stats['non_improving_run_streak'])}"
+        )
+        return [
+            (
+                f"Cause: {stats['collapse_cause'] or 'Unknown'}",
+                (255, 228, 228),
+            ),
+            (
+                "Seed: "
+                f"{stats['current_seed'] if stats['current_seed'] is not None else '—'}"
+                f"   Predators: {stats['collapse_predators']}   Prey: {stats['collapse_prey']}",
+                (255, 228, 228),
+            ),
+            (
+                f"Survival ticks: {stats['survival_ticks']}   "
+                f"Highest ticks: {stats['highest_survival_ticks']}{record_suffix}",
+                (255, 242, 176) if stats["collapse_was_new_highest"] else (255, 228, 228),
+            ),
+            (
+                modifier_line,
+                (255, 228, 228),
+            ),
+            (
+                f"Restart in: {math.ceil(float(stats['restart_countdown_seconds']))}s   Space: skip",
+                (255, 228, 228),
+            ),
+        ]
 
     # ------------------------------------------------------------------
     # Zone backgrounds

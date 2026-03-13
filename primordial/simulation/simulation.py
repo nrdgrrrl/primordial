@@ -44,8 +44,10 @@ _PREDATOR_DEPTH_TRACK_URGENCY = 0.28
 _PREY_DEPTH_ESCAPE_URGENCY = 0.30
 _PREDATOR_DIAG_ACTIVE_HUNT_FRAMES = 10
 _PREDATOR_DIAG_FAILED_PURSUIT_FRAMES = 45
-_PREDATOR_PREY_HISTORY_SIZE = 20
+_DEFAULT_PREDATOR_PREY_HISTORY_SIZE = 20
 _PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 5.0
+_DEFAULT_PREDATOR_PREY_STEP_ESCALATION_RUNS = 5
+_DEFAULT_PREDATOR_PREY_STEP_ESCALATION_PERCENT = 25.0
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,7 @@ class PredatorPreyAdaptiveTuningState:
     trial_direction: int = 0
     trial_baseline_average: float = 0.0
     last_decision: str = "none"
+    non_improving_run_streak: int = 0
 
 
 @dataclass
@@ -75,7 +78,7 @@ class PredatorPreyStabilityState:
     sim_ticks: int = 0
     survival_ticks: int = 0
     run_history: deque[int] = field(
-        default_factory=lambda: deque(maxlen=_PREDATOR_PREY_HISTORY_SIZE)
+        default_factory=lambda: deque(maxlen=_DEFAULT_PREDATOR_PREY_HISTORY_SIZE)
     )
     highest_survival_ticks: int = 0
     game_over_active: bool = False
@@ -303,6 +306,48 @@ class Simulation:
         """Resolve food-cycle amplitude, allowing predator-prey-only tuning."""
         return float(self._get_mode_param("food_cycle_amplitude", 1.0))
 
+    def _get_predator_prey_history_size(self) -> int:
+        return max(
+            1,
+            int(
+                self._get_mode_param(
+                    "stability_history_size",
+                    _DEFAULT_PREDATOR_PREY_HISTORY_SIZE,
+                )
+            ),
+        )
+
+    def _get_predator_prey_step_escalation_runs(self) -> int:
+        return max(
+            1,
+            int(
+                self._get_mode_param(
+                    "adaptive_step_escalation_runs",
+                    _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_RUNS,
+                )
+            ),
+        )
+
+    def _get_predator_prey_step_escalation_percent(self) -> float:
+        return max(
+            0.0,
+            float(
+                self._get_mode_param(
+                    "adaptive_step_escalation_percent",
+                    _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_PERCENT,
+                )
+            ),
+        )
+
+    def _build_predator_prey_run_history(
+        self,
+        history: list[int] | tuple[int, ...] = (),
+    ) -> deque[int]:
+        return deque(
+            (int(item) for item in history),
+            maxlen=self._get_predator_prey_history_size(),
+        )
+
     def _build_predator_prey_stability_state(
         self,
         seed: int | None,
@@ -322,6 +367,7 @@ class Simulation:
         self._apply_predator_prey_tuning_values(current_values)
         return PredatorPreyStabilityState(
             current_seed=seed,
+            run_history=self._build_predator_prey_run_history(),
             adaptive_tuning=PredatorPreyAdaptiveTuningState(
                 baseline_values=dict(current_values),
                 current_values=dict(current_values),
@@ -1148,6 +1194,14 @@ class Simulation:
             tuning.trial_baseline_average = 0.0
             self._apply_predator_prey_tuning_values(tuning.current_values)
 
+        if prior_average > 0:
+            if survival_ticks > prior_average:
+                tuning.non_improving_run_streak = 0
+            else:
+                tuning.non_improving_run_streak += 1
+        else:
+            tuning.non_improving_run_streak = 0
+
         state.run_history.append(int(survival_ticks))
 
         if not was_trial and prior_average > 0 and survival_ticks < prior_average:
@@ -1156,6 +1210,7 @@ class Simulation:
     def _start_predator_prey_trial(self, baseline_average: float) -> None:
         tuning = self._predator_prey_state.adaptive_tuning
         candidates = list(_PREDATOR_PREY_ADAPTIVE_DIALS)
+        step_multiplier = self.predator_prey_adjustment_step_multiplier
         random.shuffle(candidates)
 
         for spec in candidates:
@@ -1165,7 +1220,7 @@ class Simulation:
             for direction in directions:
                 candidate_value = self._clamp_predator_prey_dial_value(
                     spec,
-                    current_value + (spec.step * direction),
+                    current_value + (spec.step * step_multiplier * direction),
                 )
                 if math.isclose(candidate_value, current_value, abs_tol=1e-9):
                     continue
@@ -1222,6 +1277,7 @@ class Simulation:
         tuning.trial_direction = 0
         tuning.trial_baseline_average = 0.0
         tuning.last_decision = "reset_to_baseline"
+        tuning.non_improving_run_streak = 0
         state.run_history.clear()
         state.highest_survival_ticks = 0
         state.collapse_dial_values = {}
@@ -2290,12 +2346,24 @@ class Simulation:
             "survival_ticks": state.survival_ticks,
             "rolling_average_survival_ticks": self.predator_prey_rolling_average,
             "best_recent_survival_ticks": self.predator_prey_best_recent_ticks,
+            "history_window_size": self._get_predator_prey_history_size(),
             "highest_survival_ticks": state.highest_survival_ticks,
             "trial_active": state.adaptive_tuning.trial_active,
             "trial_dial": state.adaptive_tuning.trial_dial,
             "trial_direction": trial_direction,
             "trial_baseline_average": state.adaptive_tuning.trial_baseline_average,
             "trial_last_decision": state.adaptive_tuning.last_decision,
+            "non_improving_run_streak": state.adaptive_tuning.non_improving_run_streak,
+            "adjustment_step_multiplier": self.predator_prey_adjustment_step_multiplier,
+            "adjustment_step_increase_percent": (
+                (self.predator_prey_adjustment_step_multiplier - 1.0) * 100.0
+            ),
+            "adjustment_step_escalation_runs": (
+                self._get_predator_prey_step_escalation_runs()
+            ),
+            "adjustment_step_escalation_percent": (
+                self._get_predator_prey_step_escalation_percent()
+            ),
             "game_over_active": state.game_over_active,
             "collapse_cause": state.collapse_cause,
             "collapse_predators": state.collapse_predator_count,
@@ -2340,6 +2408,7 @@ class Simulation:
                 "trial_direction": tuning.trial_direction,
                 "trial_baseline_average": tuning.trial_baseline_average,
                 "last_decision": tuning.last_decision,
+                "non_improving_run_streak": tuning.non_improving_run_streak,
             },
         }
 
@@ -2359,6 +2428,7 @@ class Simulation:
                 "trial_direction": tuning.trial_direction,
                 "trial_baseline_average": tuning.trial_baseline_average,
                 "last_decision": tuning.last_decision,
+                "non_improving_run_streak": tuning.non_improving_run_streak,
             },
         }
 
@@ -2371,10 +2441,7 @@ class Simulation:
         state.sim_ticks = int(payload.get("sim_ticks", self._frame))
         state.survival_ticks = int(payload.get("survival_ticks", state.sim_ticks))
         history = payload.get("run_history", [])
-        state.run_history = deque(
-            (int(item) for item in history),
-            maxlen=_PREDATOR_PREY_HISTORY_SIZE,
-        )
+        state.run_history = self._build_predator_prey_run_history(history)
         state.highest_survival_ticks = int(
             payload.get("highest_survival_ticks", max((0, *state.run_history)))
         )
@@ -2428,6 +2495,12 @@ class Simulation:
                 tuning_payload.get("trial_baseline_average", 0.0)
             )
             tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
+            tuning.non_improving_run_streak = max(
+                0,
+                int(
+                    tuning_payload.get("non_improving_run_streak", 0)
+                ),
+            )
             self._apply_predator_prey_tuning_values(tuning.current_values)
 
         self._frame = state.sim_ticks
@@ -2439,10 +2512,7 @@ class Simulation:
 
         state = self._predator_prey_state
         history = payload.get("run_history", [])
-        state.run_history = deque(
-            (int(item) for item in history),
-            maxlen=_PREDATOR_PREY_HISTORY_SIZE,
-        )
+        state.run_history = self._build_predator_prey_run_history(history)
         state.highest_survival_ticks = int(
             payload.get("highest_survival_ticks", max((0, *state.run_history)))
         )
@@ -2471,6 +2541,10 @@ class Simulation:
             tuning_payload.get("trial_baseline_average", 0.0)
         )
         tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
+        tuning.non_improving_run_streak = max(
+            0,
+            int(tuning_payload.get("non_improving_run_streak", 0)),
+        )
         self._apply_predator_prey_tuning_values(tuning.current_values)
 
     def get_predator_prey_restart_countdown_seconds(
@@ -2602,6 +2676,17 @@ class Simulation:
         if not history:
             return 0.0
         return sum(history) / len(history)
+
+    @property
+    def predator_prey_adjustment_step_multiplier(self) -> float:
+        streak = max(
+            0,
+            self._predator_prey_state.adaptive_tuning.non_improving_run_streak,
+        )
+        threshold = self._get_predator_prey_step_escalation_runs()
+        increase_percent = self._get_predator_prey_step_escalation_percent()
+        steps = streak // threshold
+        return 1.0 + (steps * (increase_percent / 100.0))
 
     @property
     def predator_prey_best_recent_ticks(self) -> int:

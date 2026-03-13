@@ -55,6 +55,9 @@ predator_contact_kill_distance_scale = 1.0000
 prey_flee_sense_multiplier = 1.2000
 predator_prey_scarcity_penalty_multiplier = 2.0000
 food_cycle_amplitude = 1.0000
+stability_history_size = 20
+adaptive_step_escalation_runs = 5
+adaptive_step_escalation_percent = 25.0
 
 [modes.boids]
 initial_population = 150

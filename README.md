@@ -42,9 +42,9 @@ python main.py --load build/world.json --save build/world.json
 ```
 
 Predator-prey snapshots also persist the current seed, `sim_ticks`,
-`survival_ticks`, rolling last-20 survival history, and adaptive dial trial
-state. Separately, the adaptive predator-prey tuning state is saved on app exit
-and reloaded on the next launch, so dial progress survives without a world
+`survival_ticks`, rolling survival history, and adaptive dial trial state.
+Separately, the adaptive predator-prey tuning state is saved on app exit and
+reloaded on the next launch, so dial progress survives without a world
 snapshot.
 
 The screensaver will launch in fullscreen mode by default.
@@ -219,10 +219,11 @@ A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%)
 - When predators exceed 60% of the population, predator reproduction becomes harder: their reproduction threshold increases by 20%.
 - Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 5 seconds, then restarts with a new seed.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
-- The `GAME OVER` overlay also shows the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and marks the highest survival tick record when a run sets a new best.
+- The `GAME OVER` overlay also shows the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, shows the current adaptive step modifier, and marks the highest survival tick record when a run sets a new best.
 - The settings overlay exposes a predator-prey-only dial reset action that restores adaptive dials to baseline values and clears the max survival tick record before starting a fresh run.
-- The HUD shows `sim_ticks`, current seed, current `survival_ticks`, rolling average survival over the last 20 completed runs, and best recent survival.
-- A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-average collapses, then keeps or reverts the trial result on the next run. That tuning state is written on exit and restored on the next launch.
+- The HUD shows `sim_ticks`, current seed, current `survival_ticks`, the rolling average survival over the configured history window (`stability_history_size`, 20 by default), and the best recent survival from that same window.
+- A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-average collapses. That comparison is against the rolling average, not the median and not the all-time high. Trial results are then kept or reverted based on whether the trial meets or beats the pre-trial rolling average on the next run. That tuning state is written on exit and restored on the next launch.
+- If runs keep failing to beat the rolling average for `adaptive_step_escalation_runs` completed runs in a row (5 by default), the next dial trial increases its step size by `adaptive_step_escalation_percent` (25% by default) for each full streak block.
 - Predators render in warm hues (high hue), prey in cool hues (low hue).
 
 **Best for:** watching whether predator/prey coexistence remains stable across many seeded runs.
@@ -318,6 +319,9 @@ Mode-specific tuning keys:
 | modes.predator_prey | prey_flee_sense_multiplier | float 0.1..5 | Multiplier applied to prey threat sensing while fleeing |
 | modes.predator_prey | predator_prey_scarcity_penalty_multiplier | float 0.1..5 | Extra predator energy-cost multiplier when prey fall below 15% of population |
 | modes.predator_prey | food_cycle_amplitude | float 0..1 | Blend between constant food rate (`0`) and the full feast/famine swing (`1`) |
+| modes.predator_prey | stability_history_size | int >= 1 | Rolling run-history window used for `AvgN` / `BestN` survival stats and below-average comparisons |
+| modes.predator_prey | adaptive_step_escalation_runs | int >= 1 | Number of consecutive completed runs that fail to beat the rolling average before dial step sizes scale up |
+| modes.predator_prey | adaptive_step_escalation_percent | float >= 0 | Additional dial-step percentage applied for each full escalation streak block |
 
 These mode-table tuning keys live in TOML config authority today; the in-app settings overlay still edits only the top-level settings fields.
 

@@ -68,6 +68,9 @@ predator_kill_energy_gain_cap = 0.6500
 predator_hunt_sense_multiplier = 2.3000
 predator_hunt_speed_multiplier = 1.1500
 predator_contact_kill_distance_scale = 1.2000
+stability_history_size = 40
+adaptive_step_escalation_runs = 7
+adaptive_step_escalation_percent = 40.0
 """.strip()
                 + "\n",
                 encoding="utf-8",
@@ -99,6 +102,18 @@ predator_contact_kill_distance_scale = 1.2000
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_contact_kill_distance_scale"],
             1.2,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["stability_history_size"],
+            40,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["adaptive_step_escalation_runs"],
+            7,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["adaptive_step_escalation_percent"],
+            40.0,
         )
         self.assertEqual(
             settings.mode_params["predator_prey"]["prey_energy_to_reproduce"],

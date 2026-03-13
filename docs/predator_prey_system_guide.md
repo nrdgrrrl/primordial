@@ -169,7 +169,7 @@ The ecosystem has several explicit balancing mechanisms:
 2. **Predator reproduction penalty**: when predator fraction > 60%, predator reproduction threshold increases by 20% — slowing predator reproduction
 3. **Cosmic ray species flips**: a cosmic ray mutation to aggression that crosses the 0.5 threshold flips a creature's species identity — providing a trickle of cross-species conversion
 4. **Depth bands**: prey can escape into different bands, creating spatial refugia that prevent predators from achieving 100% kill efficiency
-5. **Run-to-run adaptive dials**: after a below-average collapse, one bounded ecological dial is nudged for the next seeded trial run, then kept or reverted based on whether the trial beats the pre-trial rolling average
+5. **Run-to-run adaptive dials**: after a below-average collapse, one bounded ecological dial is nudged for the next seeded trial run. "Below average" means below the rolling average of the configured run-history window, not below the median and not below the highest record. The trial is then kept or reverted based on whether it meets or beats that pre-trial rolling average. If the sim keeps failing to beat the rolling average for long enough, the trial step size is scaled up by a user-configurable percentage.
 
 There is no normal extinction rescue anymore. If predators or prey hit zero, the run is considered failed.
 
@@ -332,7 +332,7 @@ The HUD panel (bottom-left, toggled with H) shows:
 - **Actual speed P:N.NN Q:N.NN** — average instantaneous velocity of predators (P) and prey (Q)
 - **Kills (3s): N Cross-miss: N** — recent predation kills and cross-band near-misses in a rolling 3-second window
 - **sim_ticks: N Seed: N** — elapsed simulation steps in the current run and the current run seed
-- **Survival: N Avg20: N Best20: N** — current run survival ticks, rolling average of the last 20 completed runs, and best recent completed run
+- **Survival: N AvgN: N BestN: N** — current run survival ticks, rolling average of the last `stability_history_size` completed runs (20 by default), and best recent completed run from that same window
 - **Trial: dial +/-** — the currently active adaptive dial trial, if any
 - **Zone: name** — the zone type containing the most creatures
 - **Mode: predator_prey**
@@ -342,9 +342,10 @@ The HUD panel (bottom-left, toggled with H) shows:
 
 When a species collapses, the simulation freezes and a red full-screen **GAME OVER**
 overlay replaces the normal readout. It shows the collapse cause, seed,
-predator/prey counts, survival ticks, the highest survival tick record, and a
-5-second restart countdown. The overlay also lists the run's adaptive dial
-values and highlights the dial changed for that run with its signed delta.
+predator/prey counts, survival ticks, the highest survival tick record, the
+current adaptive step modifier, and a 5-second restart countdown. The overlay
+also lists the run's adaptive dial values and highlights the dial changed for
+that run with its signed delta.
 Pressing `Space` skips the countdown and starts the next run immediately.
 
 ### Save/load state
@@ -353,7 +354,7 @@ Predator_prey snapshots persist more than the world state. They also save:
 - current seed
 - current `sim_ticks`
 - current `survival_ticks`
-- rolling last-20 run history
+- rolling run history (window size controlled by `stability_history_size`)
 - current adaptive dial values
 - previous dial values kept for trial revert
 - whether a trial run is active and which dial is under trial

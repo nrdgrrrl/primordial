@@ -21,15 +21,19 @@ All notable changes to Primordial are documented in this file.
 - Pressing `Space` during predator-prey `GAME OVER` now skips the hold and
   immediately starts the next seeded run.
 - Replaced predator-prey HUD generation display with `sim_ticks`, seed,
-  current `survival_ticks`, rolling average survival over the last 20 completed
-  runs, best recent survival, and current adaptive trial status.
+  current `survival_ticks`, rolling average survival over the configured
+  history window, best recent survival from that same window, and current
+  adaptive trial status.
 - Added a bounded adaptive dial controller for a small set of ecological
   constants (`predator_contact_kill_distance_scale`,
   `predator_kill_energy_gain_cap`, `predator_hunt_sense_multiplier`,
   `prey_flee_sense_multiplier`,
   `predator_prey_scarcity_penalty_multiplier`, `food_cycle_amplitude`).
-  Below-average collapses start a one-dial trial run; the next run either keeps
-  or reverts the change based on survival performance.
+  Below-average collapses start a one-dial trial run; the threshold is the
+  rolling average, not the median or all-time best. The next run either keeps
+  or reverts the change based on whether it meets or beats that pre-trial
+  rolling average. Long non-improving streaks can scale the dial step size up
+  via user config.
 - Predator-prey snapshots now persist adaptive tuning state, current seed,
   `sim_ticks`, `survival_ticks`, rolling history, and trial metadata.
 - The adaptive predator-prey tuning state is also written on app exit and

@@ -101,6 +101,7 @@ class HUD:
             trial_line = (
                 f"Trial: {stability['trial_dial']} {stability['trial_direction']}"
             )
+        history_window = stability["history_window_size"]
 
         return [
             f"Predators: {pred_count}  /  Prey: {prey_count}",
@@ -108,8 +109,9 @@ class HUD:
             f"Kills (3s): {predation['recent_kills']}  Cross-miss: {predation['recent_cross_band_misses']}",
             f"sim_ticks: {stability['sim_ticks']}  Seed: {seed_str}",
             (
-                "Survival: {current}  Avg20: {average:.0f}  Best20: {best}".format(
+                "Survival: {current}  Avg{window}: {average:.0f}  Best{window}: {best}".format(
                     current=stability["survival_ticks"],
+                    window=history_window,
                     average=stability["rolling_average_survival_ticks"],
                     best=stability["best_recent_survival_ticks"],
                 )
