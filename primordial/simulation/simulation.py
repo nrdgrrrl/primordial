@@ -175,6 +175,7 @@ class Simulation:
         self.width = width
         self.height = height
         self.settings = settings
+        self._predator_prey_run_logger: Any = None
         if seed is not None and self.settings.sim_mode == "predator_prey":
             random.seed(seed)
 
@@ -236,6 +237,10 @@ class Simulation:
         # Initialize population
         if bootstrap_world:
             self._spawn_initial_population()
+
+    def set_predator_prey_run_logger(self, run_logger: Any) -> None:
+        """Attach an optional run logger used by predator-prey stability mode."""
+        self._predator_prey_run_logger = run_logger
 
     # ------------------------------------------------------------------
     # Mode parameter helpers
@@ -1214,6 +1219,9 @@ class Simulation:
         if not was_trial and prior_average > 0 and survival_ticks < prior_average:
             self._start_predator_prey_trial(prior_average)
 
+        if self._predator_prey_run_logger is not None:
+            self._predator_prey_run_logger.log_completed_run(self)
+
     def _start_predator_prey_trial(self, baseline_average: float) -> None:
         tuning = self._predator_prey_state.adaptive_tuning
         candidates = list(_PREDATOR_PREY_ADAPTIVE_DIALS)
@@ -1296,6 +1304,8 @@ class Simulation:
         state.collapse_beat_average = False
         state.collapse_was_new_highest = False
         self._apply_predator_prey_tuning_values(tuning.current_values)
+        if self._predator_prey_run_logger is not None:
+            self._predator_prey_run_logger.log_dial_reset(self)
 
     # ------------------------------------------------------------------
     # Boids mode

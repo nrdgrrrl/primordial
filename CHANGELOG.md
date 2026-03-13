@@ -41,6 +41,12 @@ All notable changes to Primordial are documented in this file.
 - Added a settings-overlay action to reset predator-prey adaptive dials to
   baseline values, clear the max survival tick record, and restart the mode
   from a clean run.
+- Clarified the `GAME OVER` overlay semantics in docs: dial highlight means
+  "this run tested that dial", not "that trial succeeded".
+- Added optional `--log=csv` predator-prey run logging. When enabled, the app
+  creates `run_logs/predator_prey_runs.csv`, appends one row per completed run
+  with seed/ticks/collapse/trial/dial telemetry, and writes a `dial_reset`
+  marker row when predator-prey adaptive dials are manually reset.
 
 **Why:** predator-prey previously optimized for endless continuity via species
 rescue, which made extinction invisible and contradicted the intended

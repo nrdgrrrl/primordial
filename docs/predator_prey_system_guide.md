@@ -347,7 +347,9 @@ time, the highest survival tick record, the current adaptive step modifier, and
 a 10-second restart countdown. The overlay also lists the run's adaptive dial
 values and highlights the dial changed for that run with its signed delta. The
 highlighted survival line compares the run against that rolling average, not
-against the highest record.
+against the highest record. Dial highlight means the run was the active trial
+that tested that dial change; it does not imply the change beat the rolling
+average or was ultimately kept.
 Pressing `Space` skips the countdown and starts the next run immediately.
 
 ### Save/load state
@@ -360,6 +362,15 @@ Predator_prey snapshots persist more than the world state. They also save:
 - current adaptive dial values
 - previous dial values kept for trial revert
 - whether a trial run is active and which dial is under trial
+
+### Optional CSV run logging
+
+If the app is launched with `--log=csv`, predator_prey appends analysis rows to
+`run_logs/predator_prey_runs.csv`. Each completed run writes one `run_complete`
+row with the run seed, `sim_ticks`, survival, collapse result, rolling-average
+comparison, trial metadata, and the adaptive dial values used during that run.
+Manual dial resets write a `dial_reset` row so offline analysis can identify
+where the tuning history was cleared.
 
 Even without a world snapshot, the adaptive tuning state is written on app exit
 and restored on the next launch so dial progress carries forward between sessions.

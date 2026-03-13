@@ -8,6 +8,7 @@ Usage (from source):
     python main.py           # normal mode
     python main.py --debug   # debug overlays + verbose console logs
     python main.py --profile # 60-second cProfile run, then exit
+    python main.py --log=csv # append predator_prey run data to run_logs/
     python main.py --mode boids --theme ocean
     python main.py --load build/world.json --save build/world.json
     python main.py /s        # screensaver mode

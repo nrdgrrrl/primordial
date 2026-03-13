@@ -37,6 +37,9 @@ python main.py --debug
 # Run a 60-second cProfile capture and exit
 python main.py --profile
 
+# Append predator_prey run telemetry rows to run_logs/predator_prey_runs.csv
+python main.py --log=csv
+
 # Resume a saved world, then save the updated snapshot on exit
 python main.py --load build/world.json --save build/world.json
 ```
@@ -59,6 +62,7 @@ The screensaver will launch in fullscreen mode by default.
 | `--theme <name>` | Launch override: `ocean`, `petri`, `geometric`, `chaotic` |
 | `--load <path>` | Load a saved simulation world snapshot instead of creating a new world |
 | `--save <path>` | Save the current world snapshot to the given path on exit |
+| `--log=csv` | Append predator-prey run and dial-reset telemetry rows to `run_logs/predator_prey_runs.csv` |
 
 ### Make Targets
 
@@ -220,10 +224,12 @@ A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%)
 - Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 10 seconds, then restarts with a new seed.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
 - The `GAME OVER` overlay also shows the rolling average that the run had to beat, highlights the current survival ticks when they beat that rolling average, shows the current adaptive step modifier, lists the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and still notes when a run sets a new highest survival record.
+- That dial highlight means "this run was the trial run that used this dial change," not "the dial change succeeded." A failed trial still highlights the changed dial, because that is the dial the run actually tested.
 - The settings overlay exposes a predator-prey-only dial reset action that restores adaptive dials to baseline values and clears the max survival tick record before starting a fresh run.
 - The HUD shows `sim_ticks`, current seed, current `survival_ticks`, the rolling average survival over the configured history window (`stability_history_size`, 20 by default), and the best recent survival from that same window.
 - A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-average collapses. That comparison is against the rolling average, not the median and not the all-time high. Trial results are then kept or reverted based on whether the trial meets or beats the pre-trial rolling average on the next run. That tuning state is written on exit and restored on the next launch.
 - If runs keep failing to beat the rolling average for `adaptive_step_escalation_runs` completed runs in a row (5 by default), the next dial trial increases its step size by `adaptive_step_escalation_percent` (25% by default) for each full streak block.
+- If you launch with `--log=csv`, predator-prey appends one row per completed run to `run_logs/predator_prey_runs.csv`, including seed, `sim_ticks`, survival, collapse metadata, trial/tuning state, and the dial values used for that run. Manual dial resets also append a `dial_reset` marker row so later analysis can segment the data.
 - Predators render in warm hues (high hue), prey in cool hues (low hue).
 
 **Best for:** watching whether predator/prey coexistence remains stable across many seeded runs.

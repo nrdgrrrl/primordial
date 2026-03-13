@@ -36,6 +36,7 @@ except (AttributeError, OSError):
     logger.debug("DPI awareness API unavailable on this platform.")
 
 from .rendering import Renderer
+from .run_logging import PredatorPreyCSVRunLogger
 from .settings import Settings
 from .simulation import (
     Simulation,
@@ -477,11 +478,12 @@ def main(
 
     log_path = _configure_logging(runtime_args.debug)
     logger.info(
-        "Starting Primordial mode=%s debug=%s profile=%s log=%s",
+        "Starting Primordial mode=%s debug=%s profile=%s debug_log=%s run_log=%s",
         scr_args.mode,
         runtime_args.debug,
         runtime_args.profile,
         log_path,
+        runtime_args.log,
     )
 
     # Config mode: show a simple settings dialog without running the simulation.
@@ -496,6 +498,7 @@ def main(
     settings = Settings()
     _apply_runtime_overrides(settings, runtime_args)
     loaded_world_size = _resolve_loaded_world_size(runtime_args)
+    csv_run_logger = _create_run_logger(settings, runtime_args)
 
     # Set up display based on mode
     if scr_args.mode == "screensaver":
@@ -547,6 +550,7 @@ def main(
     except SnapshotError as exc:
         pygame.quit()
         raise SystemExit(str(exc)) from exc
+    simulation.set_predator_prey_run_logger(csv_run_logger)
     renderer = Renderer(screen, settings, debug=runtime_args.debug)
     active_snapshot_path = _resolve_snapshot_path(
         settings,
@@ -945,6 +949,31 @@ def _default_snapshot_path(settings: Settings) -> Path:
 def _predator_prey_tuning_state_path(settings: Settings) -> Path:
     """Return the persisted predator-prey tuning state file path."""
     return Path(settings.config_path).parent / "predator_prey_tuning_state.json"
+
+
+def _run_log_directory(settings: Settings) -> Path:
+    """Return the directory that stores optional CSV run logs."""
+    if getattr(sys, "frozen", False):
+        return Path(settings.config_path).parent / "run_logs"
+    return get_base_path() / "run_logs"
+
+
+def _run_log_csv_path(settings: Settings) -> Path:
+    """Return the predator-prey stability CSV path."""
+    return _run_log_directory(settings) / "predator_prey_runs.csv"
+
+
+def _create_run_logger(
+    settings: Settings,
+    runtime_args: RuntimeArgs,
+) -> PredatorPreyCSVRunLogger | None:
+    """Create the optional CSV run logger when requested at launch."""
+    if runtime_args.log != "csv":
+        return None
+    csv_path = _run_log_csv_path(settings)
+    run_logger = PredatorPreyCSVRunLogger(csv_path)
+    logger.info("CSV run logging enabled: %s", csv_path)
+    return run_logger
 
 
 def _load_predator_prey_tuning_state(settings: Settings) -> dict[str, Any] | None:
