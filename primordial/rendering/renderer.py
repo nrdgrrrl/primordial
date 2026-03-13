@@ -115,6 +115,8 @@ class Renderer:
         self._fps_history: deque[float] = deque(maxlen=240)
         self._population_history: deque[int] = deque(maxlen=240)
         self._debug_font = pygame.font.Font(None, 18)
+        self._overlay_title_font = pygame.font.Font(None, 72)
+        self._overlay_body_font = pygame.font.Font(None, 32)
         self._debug_timing: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
 
@@ -359,6 +361,10 @@ class Renderer:
         timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
+        self._draw_predator_prey_game_over_overlay(simulation)
+        timings["overlay_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        t0 = time.perf_counter()
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
             self.settings_overlay.update()
             self.settings_overlay.draw(target)
@@ -393,6 +399,44 @@ class Renderer:
     def set_predator_highlight(self, active: bool) -> None:
         """Toggle the temporary predator locator overlay."""
         self.show_predator_highlight = active
+
+    def _draw_predator_prey_game_over_overlay(self, simulation: "Simulation") -> None:
+        """Tint the screen red and present restart details after ecological collapse."""
+        if not simulation.predator_prey_game_over_active:
+            return
+
+        stats = simulation.get_predator_prey_stability_stats()
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((160, 12, 18, 120))
+        self._target_surface.blit(overlay, (0, 0))
+
+        title = self._overlay_title_font.render("GAME OVER", True, (255, 236, 236))
+        title_pos = (
+            (self.width - title.get_width()) // 2,
+            max(40, self.height // 5),
+        )
+        self._target_surface.blit(title, title_pos)
+
+        lines = [
+            f"Cause: {stats['collapse_cause'] or 'Unknown'}",
+            f"Seed: {stats['current_seed'] if stats['current_seed'] is not None else '—'}",
+            f"Predators: {stats['collapse_predators']}  Prey: {stats['collapse_prey']}",
+            f"Survival ticks: {stats['survival_ticks']}",
+            f"Restart in: {math.ceil(stats['restart_countdown_seconds'])}s",
+        ]
+
+        y = title_pos[1] + title.get_height() + 24
+        for line in lines:
+            text = self._overlay_body_font.render(line, True, (255, 228, 228))
+            x = (self.width - text.get_width()) // 2
+            panel = pygame.Surface(
+                (text.get_width() + 24, text.get_height() + 10),
+                pygame.SRCALPHA,
+            )
+            panel.fill((24, 4, 6, 150))
+            panel.blit(text, (12, 5))
+            self._target_surface.blit(panel, (x - 12, y - 5))
+            y += text.get_height() + 14
 
     # ------------------------------------------------------------------
     # Zone backgrounds

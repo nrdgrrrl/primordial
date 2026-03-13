@@ -68,21 +68,15 @@ def _extract_metrics(
     active_lives = diagnostics["active_lives"]
     all_lives = completed_lives + active_lives
     events = diagnostics["events"]
+    stability = simulation.get_predator_prey_stability_stats()
 
     total_kills = sum(int(life["kills"]) for life in all_lives)
     zero_kill_lives = sum(1 for life in all_lives if int(life["kills"]) == 0)
     total_predator_lives = len(all_lives)
 
     true_births = len(events["births"])
-    rescues = len(events["rescues"])
     cosmic_flips_to = len(events["cosmic_flips_to_predator"])
     cosmic_flips_from = len(events.get("cosmic_flips_from_predator", []))
-
-    births_to_rescues_ratio = (
-        true_births / rescues if rescues > 0
-        else float("inf") if true_births > 0
-        else 0.0
-    )
 
     metrics: dict[str, Any] = {
         "label": label,
@@ -98,10 +92,11 @@ def _extract_metrics(
         "generation": simulation.generation,
         "predation_kill_count": simulation.predation_kill_count,
         "true_predator_births": true_births,
-        "predator_rescues": rescues,
         "cosmic_flips_to_predator": cosmic_flips_to,
         "cosmic_flips_from_predator": cosmic_flips_from,
-        "births_to_rescues_ratio": births_to_rescues_ratio,
+        "survival_ticks": stability["survival_ticks"],
+        "rolling_average_survival_ticks": stability["rolling_average_survival_ticks"],
+        "game_over_active": stability["game_over_active"],
         "total_predator_lives": total_predator_lives,
         "zero_kill_predator_lives": zero_kill_lives,
         "zero_kill_share": (
@@ -307,20 +302,21 @@ EXACT_MATCH_KEYS = [
     "generation",
     "predation_kill_count",
     "true_predator_births",
-    "predator_rescues",
     "cosmic_flips_to_predator",
     "cosmic_flips_from_predator",
+    "survival_ticks",
+    "game_over_active",
     "total_predator_lives",
     "zero_kill_predator_lives",
     "food_count",
 ]
 
 FLOAT_KEYS = [
-    "births_to_rescues_ratio",
     "zero_kill_share",
     "base_threshold",
     "predator_kill_energy_gain_cap",
     "predator_contact_kill_distance_scale",
+    "rolling_average_survival_ticks",
 ]
 
 
@@ -590,8 +586,11 @@ def _print_comparison_detail(
         print(f"    total_deaths:        {offline['total_deaths']}")
         print(f"    predation_kills:     {offline['predation_kill_count']}")
         print(f"    true_pred_births:    {offline['true_predator_births']}")
-        print(f"    pred_rescues:        {offline['predator_rescues']}")
-        print(f"    births/rescues:      {offline['births_to_rescues_ratio']:.3f}")
+        print(f"    survival_ticks:      {offline['survival_ticks']}")
+        print(
+            "    survival_avg20:      "
+            f"{offline['rolling_average_survival_ticks']:.1f}"
+        )
         print(f"    zero_kill_share:     {offline['zero_kill_share']:.3f}")
         print(f"    food_count:          {offline['food_count']}")
 

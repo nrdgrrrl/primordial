@@ -153,7 +153,7 @@ The predator gains energy. The prey is marked dead and removed at frame end with
 
 ### What causes predator collapse
 
-Predators pay 1.4× normal movement cost. When prey become scarce (< 15% of population), predators pay **2× energy cost** on top of that. Since predators cannot eat food, a prey population crash leads to cascading predator starvation.
+Predators pay 1.4× normal movement cost. When prey become scarce (< 15% of population), predators pay an additional scarcity multiplier (default **2× energy cost**) on top of that. Since predators cannot eat food, a prey population crash leads to cascading predator starvation.
 
 Additional collapse pressure: predators in zones that don't match their traits (e.g., a high-aggression predator in kelp forest, where aggression is penalized) pay higher energy costs.
 
@@ -165,11 +165,13 @@ If predators collapse, prey face only food-cycle pressure and overcrowding. With
 
 The ecosystem has several explicit balancing mechanisms:
 
-1. **Prey scarcity penalty**: when prey fraction < 15%, predators pay 2× energy cost — accelerating predator die-off
+1. **Prey scarcity penalty**: when prey fraction < 15%, predators pay an extra energy multiplier — accelerating predator die-off
 2. **Predator reproduction penalty**: when predator fraction > 60%, predator reproduction threshold increases by 20% — slowing predator reproduction
-3. **Ecosystem rescue**: if predators go completely extinct, the 3 highest-aggression prey are converted to predators. If prey go completely extinct, the 10 lowest-aggression predators are converted to prey.
-4. **Cosmic ray species flips**: a cosmic ray mutation to aggression that crosses the 0.5 threshold flips a creature's species identity — providing a trickle of cross-species conversion
-5. **Depth bands**: prey can escape into different bands, creating spatial refugia that prevent predators from achieving 100% kill efficiency
+3. **Cosmic ray species flips**: a cosmic ray mutation to aggression that crosses the 0.5 threshold flips a creature's species identity — providing a trickle of cross-species conversion
+4. **Depth bands**: prey can escape into different bands, creating spatial refugia that prevent predators from achieving 100% kill efficiency
+5. **Run-to-run adaptive dials**: after a below-average collapse, one bounded ecological dial is nudged for the next seeded trial run, then kept or reverted based on whether the trial beats the pre-trial rolling average
+
+There is no normal extinction rescue anymore. If predators or prey hit zero, the run is considered failed.
 
 ---
 
@@ -329,12 +331,33 @@ The HUD panel (bottom-left, toggled with H) shows:
 - **Predators: N / Prey: N** — current species counts
 - **Actual speed P:N.NN Q:N.NN** — average instantaneous velocity of predators (P) and prey (Q)
 - **Kills (3s): N Cross-miss: N** — recent predation kills and cross-band near-misses in a rolling 3-second window
-- **Generation: N** — total reproduction events
+- **sim_ticks: N Seed: N** — elapsed simulation steps in the current run and the current run seed
+- **Survival: N Avg20: N Best20: N** — current run survival ticks, rolling average of the last 20 completed runs, and best recent completed run
+- **Trial: dial +/-** — the currently active adaptive dial trial, if any
 - **Zone: name** — the zone type containing the most creatures
 - **Mode: predator_prey**
 - **Theme: ocean**
 - **FPS: N**
 - **Food cycle bar**: horizontal bar between "Famine" and "Feast" labels, color gradient red→green
+
+When a species collapses, the simulation freezes and a red full-screen **GAME OVER**
+overlay replaces the normal readout. It shows the collapse cause, seed,
+predator/prey counts, survival ticks, and a 30-second restart countdown.
+Pressing `Space` skips the countdown and starts the next run immediately.
+
+### Save/load state
+
+Predator_prey snapshots persist more than the world state. They also save:
+- current seed
+- current `sim_ticks`
+- current `survival_ticks`
+- rolling last-20 run history
+- current adaptive dial values
+- previous dial values kept for trial revert
+- whether a trial run is active and which dial is under trial
+
+Even without a world snapshot, the adaptive tuning state is written on app exit
+and restored on the next launch so dial progress carries forward between sessions.
 
 ### Keyboard controls
 
@@ -502,7 +525,7 @@ The combination of procedural glyphs, trails, bloom glow, kin lines, and death/b
 - **Visual identity per creature**: the glyph system is excellent. Family resemblance between kin is genuinely visible. Mutations produce recognizable-but-different offspring.
 - **Population dynamics**: the predator/prey oscillation is real and visible in the HUD. Boom-bust cycles emerge naturally from the food cycle interacting with predation.
 - **Depth band refuge**: this is a subtle and effective mechanic. It prevents predators from achieving 100% efficiency, which would collapse the ecosystem. The cross-band miss tracking in the HUD is a good diagnostic.
-- **Ecosystem rescue**: the automatic species conversion when either population goes extinct prevents dead-end states gracefully.
+- **Failure-state clarity**: extinction now produces a clean failure condition instead of silently rescuing the ecosystem. That makes stability legible and gives the adaptive tuning loop a meaningful score.
 - **Zone atmosphere**: the faint zone tints give the world geography without visual clutter.
 
 ### What feels subtle or unsatisfying

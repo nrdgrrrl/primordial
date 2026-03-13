@@ -52,6 +52,9 @@ predator_kill_energy_gain_cap = 0.5000
 predator_hunt_sense_multiplier = 2.0000
 predator_hunt_speed_multiplier = 1.0000
 predator_contact_kill_distance_scale = 1.0000
+prey_flee_sense_multiplier = 1.2000
+predator_prey_scarcity_penalty_multiplier = 2.0000
+food_cycle_amplitude = 1.0000
 
 [modes.boids]
 initial_population = 150

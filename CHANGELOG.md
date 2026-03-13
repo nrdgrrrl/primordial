@@ -2,6 +2,46 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-03-13] — feat: predator_prey stability scoring, extinction game-over, and adaptive tuning
+
+**What changed** (`simulation/simulation.py`, `rendering/hud.py`,
+`rendering/renderer.py`, `simulation/persistence.py`, `primordial/main.py`,
+`config/defaults.toml`, `config/config.py`):
+
+- Predator-prey now scores runs by **stability**: the key metric is how many
+  `sim_ticks` elapse before predators or prey collapse to zero.
+- Fixed the predator-dominance rule to the stabilizing behavior:
+  when predators exceed 60% of population, predator reproduction becomes harder
+  by increasing their reproduction threshold by 20%.
+- Removed automatic extinction rescue from normal predator-prey play.
+  Species collapse now freezes the simulation, tints the screen red, shows a
+  `GAME OVER` overlay with cause/seed/counts/survival ticks, holds for 30
+  seconds, then restarts with a new seed.
+- Pressing `Space` during predator-prey `GAME OVER` now skips the hold and
+  immediately starts the next seeded run.
+- Replaced predator-prey HUD generation display with `sim_ticks`, seed,
+  current `survival_ticks`, rolling average survival over the last 20 completed
+  runs, best recent survival, and current adaptive trial status.
+- Added a bounded adaptive dial controller for a small set of ecological
+  constants (`predator_contact_kill_distance_scale`,
+  `predator_kill_energy_gain_cap`, `predator_hunt_sense_multiplier`,
+  `prey_flee_sense_multiplier`,
+  `predator_prey_scarcity_penalty_multiplier`, `food_cycle_amplitude`).
+  Below-average collapses start a one-dial trial run; the next run either keeps
+  or reverts the change based on survival performance.
+- Predator-prey snapshots now persist adaptive tuning state, current seed,
+  `sim_ticks`, `survival_ticks`, rolling history, and trial metadata.
+- The adaptive predator-prey tuning state is also written on app exit and
+  restored on next launch without requiring a world snapshot.
+
+**Why:** predator-prey previously optimized for endless continuity via species
+rescue, which made extinction invisible and contradicted the intended
+stabilizing predator-dominance rule. The mode now exposes stability directly,
+keeps run-to-run tuning bounded and explicit, and remains replayable via saved
+state.
+
+---
+
 ## [2026-03-05] — Comprehensive Audit + Optimization Pass
 
 ### Summary
@@ -216,7 +256,7 @@ model, selection pressure, visual feel, and HUD stats.
   wander when no prey found; ignore food
 - Prey: flee nearest predator within `sense_radius*1.2`; seek food when safe
 - Ecosystem balance:
-  - >60% predators: reduce predator reproduction threshold by 20%
+  - >60% predators: increase predator reproduction threshold by 20%
   - <15% prey: predators pay 2× energy cost (prey scarcity)
   - Predators extinct: convert 3 highest-aggression prey → prevents sim death
   - Prey extinct: convert 10 lowest-aggression predators → prevents sim death

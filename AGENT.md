@@ -139,16 +139,25 @@ Main simulation controller. Owns `creatures`, `food_manager`, `settings`.
 - `active_attacks: list[tuple]` — (ax, ay, tx, ty, hue) attack lines; rebuilt per frame; consumed by renderer
 - `zone_manager: ZoneManager` — fixed environmental zones; reset() regenerates them
 - `_old_age_lifespans: deque[float]` — rolling last-20 natural deaths in frames
+- `_predator_prey_state` — predator_prey-only stability state:
+  seed, `sim_ticks`, `survival_ticks`, last-20 completed-run history,
+  game-over hold state, and bounded adaptive dial trial bookkeeping
 
 **Death event dict keys:** `x`, `y`, `genome`, `glyph_surface`, `lineage_id`, `cause` ("energy" | "age")
 
 **Key methods (updated):**
 - `step()` — populates all event queues; runs food cycle, hunting, cosmic rays, aging
+- `update_predator_prey_runtime()` — holds the predator_prey `GAME OVER`
+  overlay for 30 wall-clock seconds, then restarts with a new seed
+- `restart_predator_prey_run()` — reset predator_prey while preserving rolling
+  survival history and adaptive dial state
 - `get_lineage_counts() -> dict[int, int]`
 - `get_dominant_traits()` — now includes all 14 genome traits (+ longevity)
 - `get_hunter_grazer_counts() -> tuple[int, int, int]` — (hunters, grazers, opportunists)
 - `food_cycle_phase` property — 0.0=famine, 1.0=feast
 - `avg_old_age_lifespan_seconds` property — rolling avg of last 20 natural deaths
+- `get_predator_prey_stability_stats()` — current seed, `sim_ticks`,
+  `survival_ticks`, rolling average, best recent, trial status, game-over cause
 
 **Invariants (all preserved):**
 - `step()` never calls pygame or modifies rendering state
@@ -616,5 +625,19 @@ Predator/prey reproduction thresholds are mode-scoped config authority:
 `[modes.predator_prey].predator_energy_to_reproduce` override reproduction
 thresholds by species only in `predator_prey`; if absent, resolution falls back
 to the shared `energy_to_reproduce`.
+When predators exceed 60% of the live population, predator reproduction becomes
+harder by increasing the resolved predator threshold by 20%.
+Predator/prey extinction is no longer rescued in normal operation: either
+species hitting zero triggers a frozen red `GAME OVER` state, then an automatic
+restart after 30 seconds with a new seed. Pressing `Space` during that screen
+skips the hold and restarts immediately.
+Adaptive predator_prey dials are intentionally small and ecological only:
+`predator_contact_kill_distance_scale`, `predator_kill_energy_gain_cap`,
+`predator_hunt_sense_multiplier`, `prey_flee_sense_multiplier`,
+`predator_prey_scarcity_penalty_multiplier`, and `food_cycle_amplitude`.
+Snapshots must round-trip the adaptive tuning state, current seed, `sim_ticks`,
+and `survival_ticks`.
+The adaptive predator_prey tuning state is also persisted on app exit and
+reloaded on the next launch without requiring a world snapshot.
 These live in TOML mode params today; the in-app overlay still edits only
 top-level settings fields unless mode-param support is added explicitly.

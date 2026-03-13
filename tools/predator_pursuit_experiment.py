@@ -64,7 +64,10 @@ def _aggregate_reports(
     overrides: dict[str, float],
 ) -> dict[str, Any]:
     births = [int(report["continuity"]["predator_births"]) for report in seed_reports]
-    rescues = [int(report["continuity"]["predator_rescues"]) for report in seed_reports]
+    flips = [
+        int(report["continuity"]["predator_cosmic_flips_to_predator"])
+        for report in seed_reports
+    ]
     kills_per_life = [
         float(report["kills"]["mean_kills_per_life"] or 0.0)
         for report in seed_reports
@@ -84,7 +87,7 @@ def _aggregate_reports(
     total_zero_kill_lives = 0
     total_crossers = 0
     total_births = sum(births)
-    total_rescues = sum(rescues)
+    total_flips = sum(flips)
 
     for report in seed_reports:
         distribution = report["kills"]["distribution"]
@@ -113,10 +116,10 @@ def _aggregate_reports(
         "overrides": overrides,
         "window_starts": window_starts,
         "predator_births_total": total_births,
-        "predator_rescues_total": total_rescues,
-        "births_to_rescues_ratio": _safe_ratio(float(total_births), float(total_rescues)),
+        "predator_cosmic_flips_total": total_flips,
+        "births_to_flips_ratio": _safe_ratio(float(total_births), float(total_flips)),
         "mean_births_per_run": _mean_or_none([float(value) for value in births]),
-        "mean_rescues_per_run": _mean_or_none([float(value) for value in rescues]),
+        "mean_cosmic_flips_per_run": _mean_or_none([float(value) for value in flips]),
         "mean_kills_per_life": _mean_or_none(kills_per_life),
         "zero_kill_life_share": _safe_divide(total_zero_kill_lives, total_lives),
         "mean_zero_kill_share_per_run": _mean_or_none(zero_kill_shares),
@@ -137,11 +140,11 @@ def _aggregate_reports(
 
 def _ranking_tuple(aggregate: dict[str, Any]) -> tuple[float, float, float, float]:
     prey_stability = float(aggregate["mean_prey_in_window"] or 0.0)
-    births_to_rescues = float(aggregate["births_to_rescues_ratio"] or 0.0)
+    births_to_flips = float(aggregate["births_to_flips_ratio"] or 0.0)
     end_predators = float(aggregate["mean_end_predators"] or 0.0)
     zero_kill_share = float(aggregate["zero_kill_life_share"] or 1.0)
     return (
-        births_to_rescues,
+        births_to_flips,
         end_predators,
         prey_stability,
         -zero_kill_share,

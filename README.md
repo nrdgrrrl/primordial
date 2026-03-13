@@ -41,6 +41,12 @@ python main.py --profile
 python main.py --load build/world.json --save build/world.json
 ```
 
+Predator-prey snapshots also persist the current seed, `sim_ticks`,
+`survival_ticks`, rolling last-20 survival history, and adaptive dial trial
+state. Separately, the adaptive predator-prey tuning state is saved on app exit
+and reloaded on the next launch, so dial progress survives without a world
+snapshot.
+
 The screensaver will launch in fullscreen mode by default.
 
 ### Runtime CLI Flags
@@ -70,7 +76,7 @@ make clean     # remove build/dist and __pycache__ dirs
 |-----|--------|
 | `ESC` or `Q` | Quit the screensaver |
 | `H` | Toggle HUD (heads-up display) |
-| `Space` | Pause/unpause simulation |
+| `Space` | Pause/unpause simulation, or skip the predator_prey `GAME OVER` wait and restart immediately |
 | `F` | Toggle fullscreen/windowed mode |
 | `R` | Reset simulation (new population) |
 | `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
@@ -188,7 +194,8 @@ Over a 10–30 minute run, you can observe real selection pressure at work:
 - Population is soft-capped at `max_population` (default 220)
 - When population exceeds 50% of max, energy costs increase quadratically
 - Food cycles, predation, and aging interact to produce complex boom-bust dynamics
-- Generation count tracks total reproductions; oldest creature tracked as % of max lifespan
+- Energy/boids/drift expose generation counts; predator_prey tracks `sim_ticks`,
+  run `survival_ticks`, and rolling stability stats instead
 
 ## Simulation Modes
 
@@ -204,16 +211,20 @@ HUD shows: population, generation count, hunter/grazer/opportunist ratio, domina
 
 ### Predator Prey Mode
 
-A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%) or **prey** (70%). Predators hunt prey on contact and drain energy proportional to prey size; prey flee from nearby predators. Populations oscillate in classic predator-prey cycles.
+A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%) or **prey** (70%). Predators hunt prey on contact, prey flee from nearby predators, and the success metric is **stability**: how many simulation ticks the run survives before either species collapses to zero.
 
 - Arms race evolution: predator aggression and prey speed evolve under mutual selection pressure.
 - Cosmic ray hits can flip species identity when aggression crosses the 0.5 threshold.
-- Automatic ecosystem rescue when either species nears extinction (inject a small cohort of the depleted species).
+- When predators exceed 60% of the population, predator reproduction becomes harder: their reproduction threshold increases by 20%.
+- Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 30 seconds, then restarts with a new seed.
+- Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
+- The HUD shows `sim_ticks`, current seed, current `survival_ticks`, rolling average survival over the last 20 completed runs, and best recent survival.
+- A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-average collapses, then keeps or reverts the trial result on the next run. That tuning state is written on exit and restored on the next launch.
 - Predators render in warm hues (high hue), prey in cool hues (low hue).
 
-**Best for:** oscillating population dynamics — watch predator and prey counts chase each other in boom-bust waves.
+**Best for:** watching whether predator/prey coexistence remains stable across many seeded runs.
 
-HUD shows: predator count, prey count, avg predator speed vs. avg prey speed, dominant trait values.
+HUD shows: predator count, prey count, avg predator speed vs. avg prey speed, `sim_ticks`, seed, survival stats, and trial-dial status.
 
 ### Boids Mode
 
@@ -301,6 +312,9 @@ Mode-specific tuning keys:
 |---|---|---|---|
 | modes.predator_prey | prey_energy_to_reproduce | float 0.05..1 | Prey-only reproduction threshold in `predator_prey`; falls back to shared `simulation.energy_to_reproduce` if absent |
 | modes.predator_prey | predator_energy_to_reproduce | float 0.05..1 | Predator-only reproduction threshold in `predator_prey`; falls back to shared `simulation.energy_to_reproduce` if absent |
+| modes.predator_prey | prey_flee_sense_multiplier | float 0.1..5 | Multiplier applied to prey threat sensing while fleeing |
+| modes.predator_prey | predator_prey_scarcity_penalty_multiplier | float 0.1..5 | Extra predator energy-cost multiplier when prey fall below 15% of population |
+| modes.predator_prey | food_cycle_amplitude | float 0..1 | Blend between constant food rate (`0`) and the full feast/famine swing (`1`) |
 
 These mode-table tuning keys live in TOML config authority today; the in-app settings overlay still edits only the top-level settings fields.
 

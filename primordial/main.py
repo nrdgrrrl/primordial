@@ -13,6 +13,7 @@ import json
 import logging
 import platform
 import pstats
+import random
 import sys
 import time
 import webbrowser
@@ -53,6 +54,8 @@ MAX_ACCUMULATED_SIM_SECONDS = (
     FIXED_SIM_TIMESTEP_SECONDS * MAX_SIM_STEPS_PER_OUTER_FRAME
 )
 DEFAULT_WINDOWED_SIZE = (1280, 720)
+PREDATOR_PREY_TUNING_STATE_VERSION = 1
+PREDATOR_PREY_TUNING_STATE_KIND = "primordial.predator_prey_tuning_state"
 
 
 @dataclass(frozen=True)
@@ -298,7 +301,11 @@ def _simulation_timing_is_suppressed(
     transition_alpha: int = 0,
 ) -> bool:
     """Return whether fixed-step debt should be frozen for the current frame."""
-    return simulation.paused or transition_dir != 0
+    return (
+        simulation.paused
+        or simulation.predator_prey_game_over_active
+        or transition_dir != 0
+    )
 
 
 def _run_planned_simulation_steps(
@@ -529,7 +536,14 @@ def main(
         if runtime_args.load:
             simulation = load_snapshot(runtime_args.load, settings=settings)
         else:
-            simulation = Simulation(width, height, settings)
+            initial_seed = None
+            if settings.sim_mode == "predator_prey":
+                initial_seed = random.SystemRandom().randrange(1, 2_147_483_647)
+            simulation = Simulation(width, height, settings, seed=initial_seed)
+            if settings.sim_mode == "predator_prey":
+                persisted_tuning = _load_predator_prey_tuning_state(settings)
+                if persisted_tuning is not None:
+                    simulation.restore_predator_prey_tuning_state(persisted_tuning)
     except SnapshotError as exc:
         pygame.quit()
         raise SystemExit(str(exc)) from exc
@@ -746,6 +760,10 @@ def main(
                 if _transition_alpha <= 0:
                     _transition_dir = 0
 
+        if simulation.update_predator_prey_runtime(now_seconds=time.monotonic()):
+            renderer.reset_runtime_state()
+            runtime_loop.reset_timing_debt()
+
         sim_suppressed = _simulation_timing_is_suppressed(
             simulation,
             _transition_dir,
@@ -808,6 +826,10 @@ def main(
                 accumulator_seconds=runtime_loop.accumulator_seconds,
             )
         )
+
+    persisted_tuning_path = _save_predator_prey_tuning_state(settings, simulation)
+    if persisted_tuning_path is not None:
+        logger.info("Saved predator-prey tuning state to %s", persisted_tuning_path)
 
     if runtime_args.save:
         saved_path = save_snapshot(simulation, runtime_args.save)
@@ -903,6 +925,48 @@ def _resolve_loaded_world_size(
 def _default_snapshot_path(settings: Settings) -> Path:
     """Return the bounded default snapshot path used by in-app save/load."""
     return Path(settings.config_path).parent / "world_snapshot.json"
+
+
+def _predator_prey_tuning_state_path(settings: Settings) -> Path:
+    """Return the persisted predator-prey tuning state file path."""
+    return Path(settings.config_path).parent / "predator_prey_tuning_state.json"
+
+
+def _load_predator_prey_tuning_state(settings: Settings) -> dict[str, Any] | None:
+    path = _predator_prey_tuning_state_path(settings)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Unable to read predator-prey tuning state from %s: %s", path, exc)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("version") != PREDATOR_PREY_TUNING_STATE_VERSION:
+        return None
+    if payload.get("kind") != PREDATOR_PREY_TUNING_STATE_KIND:
+        return None
+    state = payload.get("state")
+    return state if isinstance(state, dict) else None
+
+
+def _save_predator_prey_tuning_state(settings: Settings, simulation: Simulation) -> Path | None:
+    if settings.sim_mode != "predator_prey":
+        return None
+    path = _predator_prey_tuning_state_path(settings)
+    payload = {
+        "version": PREDATOR_PREY_TUNING_STATE_VERSION,
+        "kind": PREDATOR_PREY_TUNING_STATE_KIND,
+        "state": simulation.export_predator_prey_tuning_state(),
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Unable to save predator-prey tuning state to %s: %s", path, exc)
+        return None
+    return path
 
 
 def _resolve_snapshot_path(
@@ -1135,12 +1199,21 @@ def handle_keydown(
     elif key == pygame.K_s and mode != "screensaver":
         renderer.toggle_settings_overlay()
     elif key == pygame.K_SPACE:
+        if simulation.predator_prey_game_over_active:
+            simulation.restart_predator_prey_run()
+            renderer.reset_runtime_state()
+            runtime_loop.reset_timing_debt()
+            return True
         simulation.paused = not simulation.paused
         runtime_loop.reset_timing_debt()
     elif key == pygame.K_f:
         toggle_fullscreen(settings, simulation, renderer)
     elif key == pygame.K_r:
-        simulation.reset()
+        if settings.sim_mode == "predator_prey":
+            simulation.restart_predator_prey_run()
+            renderer.reset_runtime_state()
+        else:
+            simulation.reset()
         runtime_loop.reset_timing_debt()
     elif key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
         settings.food_spawn_rate = min(2.0, settings.food_spawn_rate + 0.1)

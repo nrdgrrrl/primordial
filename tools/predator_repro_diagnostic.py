@@ -129,7 +129,6 @@ def _build_report(
 
     events = diagnostics["events"]
     births = [event for event in events["births"] if int(event["frame"]) >= window_start]
-    rescues = [event for event in events["rescues"] if int(event["frame"]) >= window_start]
     flips_to_predator = [
         event
         for event in events["cosmic_flips_to_predator"]
@@ -160,21 +159,19 @@ def _build_report(
     recovery_sources: list[str] = []
     if births:
         recovery_sources.append("true births")
-    if rescues:
-        recovery_sources.append("rescue conversion")
     if flips_to_predator:
         recovery_sources.append("cosmic flip")
     if not recovery_sources:
         recovery_sources.append("neither")
 
-    if len(rescues) > len(births) and len(rescues) > 0:
-        continuity_mode = "mostly rescue-driven"
-    elif len(births) > len(rescues) and len(births) > 0:
+    if len(births) > len(flips_to_predator) and len(births) > 0:
         continuity_mode = "mostly birth-driven"
-    elif len(births) == len(rescues) == 0:
-        continuity_mode = "neither births nor rescue restored predators"
+    elif len(flips_to_predator) > len(births) and len(flips_to_predator) > 0:
+        continuity_mode = "mostly cosmic-flip-driven"
+    elif len(births) == len(flips_to_predator) == 0:
+        continuity_mode = "neither births nor cosmic flips restored predators"
     else:
-        continuity_mode = "mixed birth/rescue continuity"
+        continuity_mode = "mixed birth/flip continuity"
 
     return {
         "scenario": scenario_id,
@@ -202,7 +199,6 @@ def _build_report(
             "recovery_sources": recovery_sources,
             "carryover_lives_at_window_start": len(carryover_lives),
             "predator_births": len(births),
-            "predator_rescues": len(rescues),
             "predator_cosmic_flips_to_predator": len(flips_to_predator),
             "active_end_origins": _count_by(active_lives, "origin"),
         },

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import math
 import random
+import time
 from collections import deque
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .creature import Creature
@@ -42,6 +44,95 @@ _PREDATOR_DEPTH_TRACK_URGENCY = 0.28
 _PREY_DEPTH_ESCAPE_URGENCY = 0.30
 _PREDATOR_DIAG_ACTIVE_HUNT_FRAMES = 10
 _PREDATOR_DIAG_FAILED_PURSUIT_FRAMES = 45
+_PREDATOR_PREY_HISTORY_SIZE = 20
+_PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 30.0
+
+
+@dataclass(frozen=True)
+class AdaptiveDialSpec:
+    key: str
+    minimum: float
+    maximum: float
+    step: float
+    default: float
+
+
+@dataclass
+class PredatorPreyAdaptiveTuningState:
+    current_values: dict[str, float] = field(default_factory=dict)
+    previous_values: dict[str, float] = field(default_factory=dict)
+    trial_active: bool = False
+    trial_dial: str | None = None
+    trial_direction: int = 0
+    trial_baseline_average: float = 0.0
+    last_decision: str = "none"
+
+
+@dataclass
+class PredatorPreyStabilityState:
+    current_seed: int | None = None
+    sim_ticks: int = 0
+    survival_ticks: int = 0
+    run_history: deque[int] = field(
+        default_factory=lambda: deque(maxlen=_PREDATOR_PREY_HISTORY_SIZE)
+    )
+    game_over_active: bool = False
+    collapse_cause: str | None = None
+    collapse_predator_count: int = 0
+    collapse_prey_count: int = 0
+    collapse_started_at_seconds: float | None = None
+    adaptive_tuning: PredatorPreyAdaptiveTuningState = field(
+        default_factory=PredatorPreyAdaptiveTuningState
+    )
+
+
+_PREDATOR_PREY_ADAPTIVE_DIALS: tuple[AdaptiveDialSpec, ...] = (
+    AdaptiveDialSpec(
+        key="predator_contact_kill_distance_scale",
+        minimum=0.80,
+        maximum=1.20,
+        step=0.03,
+        default=1.00,
+    ),
+    AdaptiveDialSpec(
+        key="predator_kill_energy_gain_cap",
+        minimum=0.35,
+        maximum=0.65,
+        step=0.02,
+        default=0.50,
+    ),
+    AdaptiveDialSpec(
+        key="predator_hunt_sense_multiplier",
+        minimum=1.50,
+        maximum=2.50,
+        step=0.05,
+        default=2.00,
+    ),
+    AdaptiveDialSpec(
+        key="prey_flee_sense_multiplier",
+        minimum=1.00,
+        maximum=1.60,
+        step=0.05,
+        default=1.20,
+    ),
+    AdaptiveDialSpec(
+        key="predator_prey_scarcity_penalty_multiplier",
+        minimum=1.40,
+        maximum=2.60,
+        step=0.10,
+        default=2.00,
+    ),
+    AdaptiveDialSpec(
+        key="food_cycle_amplitude",
+        minimum=0.40,
+        maximum=1.00,
+        step=0.05,
+        default=1.00,
+    ),
+)
+_PREDATOR_PREY_ADAPTIVE_DIALS_BY_KEY = {
+    spec.key: spec for spec in _PREDATOR_PREY_ADAPTIVE_DIALS
+}
 
 
 class Simulation:
@@ -66,10 +157,13 @@ class Simulation:
         settings: "Settings",
         *,
         bootstrap_world: bool = True,
+        seed: int | None = None,
     ) -> None:
         self.width = width
         self.height = height
         self.settings = settings
+        if seed is not None and self.settings.sim_mode == "predator_prey":
+            random.seed(seed)
 
         # Simulation state
         self.creatures: list[Creature] = []
@@ -121,10 +215,10 @@ class Simulation:
         self._predator_diag_completed: list[dict[str, Any]] = []
         self._predator_diag_events: dict[str, list[dict[str, Any]]] = {
             "births": [],
-            "rescues": [],
             "cosmic_flips_to_predator": [],
             "cosmic_flips_from_predator": [],
         }
+        self._predator_prey_state = self._build_predator_prey_stability_state(seed)
 
         # Initialize population
         if bootstrap_world:
@@ -186,6 +280,77 @@ class Simulation:
     def _get_predator_contact_kill_distance_scale(self) -> float:
         """Resolve predator contact-kill distance scale."""
         return float(self._get_mode_param("predator_contact_kill_distance_scale", 1.0))
+
+    def _get_prey_flee_sense_multiplier(self) -> float:
+        """Resolve prey flee sensing range multiplier."""
+        return float(self._get_mode_param("prey_flee_sense_multiplier", 1.2))
+
+    def _get_predator_prey_scarcity_penalty_multiplier(self) -> float:
+        """Resolve predator prey-scarcity energy penalty multiplier."""
+        return float(
+            self._get_mode_param("predator_prey_scarcity_penalty_multiplier", 2.0)
+        )
+
+    def _get_food_cycle_amplitude(self) -> float:
+        """Resolve food-cycle amplitude, allowing predator-prey-only tuning."""
+        return float(self._get_mode_param("food_cycle_amplitude", 1.0))
+
+    def _build_predator_prey_stability_state(
+        self,
+        seed: int | None,
+    ) -> PredatorPreyStabilityState:
+        current_values = {
+            spec.key: self._clamp_predator_prey_dial_value(
+                spec,
+                float(
+                    self.settings.mode_params.get("predator_prey", {}).get(
+                        spec.key,
+                        spec.default,
+                    )
+                ),
+            )
+            for spec in _PREDATOR_PREY_ADAPTIVE_DIALS
+        }
+        self._apply_predator_prey_tuning_values(current_values)
+        return PredatorPreyStabilityState(
+            current_seed=seed,
+            adaptive_tuning=PredatorPreyAdaptiveTuningState(
+                current_values=dict(current_values),
+                previous_values=dict(current_values),
+            ),
+        )
+
+    def _clamp_predator_prey_dial_value(
+        self,
+        spec: AdaptiveDialSpec,
+        value: float,
+    ) -> float:
+        clamped = max(spec.minimum, min(spec.maximum, float(value)))
+        return round(clamped, 4)
+
+    def _apply_predator_prey_tuning_values(self, values: dict[str, float]) -> None:
+        mode_params = self.settings.mode_params.setdefault("predator_prey", {})
+        for spec in _PREDATOR_PREY_ADAPTIVE_DIALS:
+            if spec.key not in values:
+                continue
+            mode_params[spec.key] = self._clamp_predator_prey_dial_value(
+                spec,
+                values[spec.key],
+            )
+
+    def _serialize_predator_prey_dial_values(
+        self,
+        values: dict[str, Any],
+    ) -> dict[str, float]:
+        serialized: dict[str, float] = {}
+        for spec in _PREDATOR_PREY_ADAPTIVE_DIALS:
+            raw = values.get(spec.key, spec.default)
+            try:
+                numeric = float(raw)
+            except (TypeError, ValueError):
+                numeric = spec.default
+            serialized[spec.key] = self._clamp_predator_prey_dial_value(spec, numeric)
+        return serialized
 
     # ------------------------------------------------------------------
     # Setup helpers
@@ -334,8 +499,21 @@ class Simulation:
             )
             self.creatures.append(creature)
 
-    def reset(self) -> None:
+    def reset(
+        self,
+        *,
+        preserve_predator_prey_state: bool = False,
+        new_seed: int | None = None,
+    ) -> None:
         """Reset the simulation to initial state."""
+        if self.settings.sim_mode == "predator_prey":
+            if preserve_predator_prey_state:
+                self._prepare_predator_prey_run_restart(new_seed)
+            else:
+                seed = new_seed if new_seed is not None else self._generate_predator_prey_seed()
+                random.seed(seed)
+                self._predator_prey_state = self._build_predator_prey_stability_state(seed)
+
         self.creatures.clear()
         self.food_manager = FoodManager(
             self.width, self.height,
@@ -364,6 +542,23 @@ class Simulation:
             self.settings.zone_strength,
         )
         self._spawn_initial_population()
+
+    def _generate_predator_prey_seed(self) -> int:
+        return random.SystemRandom().randrange(1, 2_147_483_647)
+
+    def _prepare_predator_prey_run_restart(self, new_seed: int | None = None) -> None:
+        state = self._predator_prey_state
+        seed = new_seed if new_seed is not None else self._generate_predator_prey_seed()
+        state.current_seed = seed
+        state.sim_ticks = 0
+        state.survival_ticks = 0
+        state.game_over_active = False
+        state.collapse_cause = None
+        state.collapse_predator_count = 0
+        state.collapse_prey_count = 0
+        state.collapse_started_at_seconds = None
+        self._apply_predator_prey_tuning_values(state.adaptive_tuning.current_values)
+        random.seed(seed)
 
     def resize(self, width: int, height: int) -> None:
         """Resize simulation world bounds and rebuild dependent spatial data."""
@@ -428,7 +623,7 @@ class Simulation:
 
     def step(self) -> None:
         """Advance the simulation by one frame, dispatching by mode."""
-        if self.paused:
+        if self.paused or self.predator_prey_game_over_active:
             return
 
         mode = self.settings.sim_mode
@@ -523,6 +718,8 @@ class Simulation:
     def _step_predator_prey(self) -> None:
         """Lotka-Volterra predator/prey ecosystem step."""
         self._frame += 1
+        self._predator_prey_state.sim_ticks += 1
+        self._predator_prey_state.survival_ticks += 1
         self._spawn_food()
         self.active_attacks.clear()
         self._predation_victims_this_frame.clear()
@@ -541,9 +738,9 @@ class Simulation:
         pred_fraction = pred_count / total
         prey_fraction = prey_count / total
 
-        # If > 60% predators: reduce their reproduction threshold
+        # If > 60% predators: increase their reproduction threshold
         pred_repro_penalty = 0.20 if pred_fraction > 0.60 else 0.0
-        # If < 15% prey: predators lose energy 2x faster
+        # If < 15% prey: predators pay an extra scarcity multiplier
         prey_scarce = prey_fraction < 0.15 and pred_count > 0
 
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
@@ -560,7 +757,7 @@ class Simulation:
 
             if creature.species == "predator":
                 repro_threshold = self._get_reproduction_threshold(creature) * (
-                    1.0 - pred_repro_penalty
+                    1.0 + pred_repro_penalty
                 )
                 self._predator_hunt_prey(
                     creature,
@@ -572,7 +769,7 @@ class Simulation:
                 # Predators pay 1.4× movement cost; prey scarcity doubles it
                 energy_cost = creature.get_movement_cost() * 1.4
                 if prey_scarce:
-                    energy_cost *= 2.0
+                    energy_cost *= self._get_predator_prey_scarcity_penalty_multiplier()
                 energy_cost += creature.genome.longevity * 0.0004
                 energy_cost += self._get_sensing_upkeep_cost(creature)
                 energy_cost *= 1.0 + overcrowding_penalty
@@ -625,7 +822,7 @@ class Simulation:
             self.birth_events.append(creature)
 
         self._process_deaths(dead_creatures, dead_causes)
-        self._check_ecosystem_balance()
+        self._check_predator_prey_collapse()
 
     def _predator_hunt_prey(
         self,
@@ -715,11 +912,12 @@ class Simulation:
             self._record_predator_cross_band_miss(predator)
 
     def _prey_flee(self, prey: Creature, bucket: dict) -> bool:
-        """Prey flees from nearest predator within sense_radius * 1.2.
+        """Prey flees from nearest predator within a tuned sensing range.
 
         Returns True if actively fleeing.
         """
-        flee_sense = self._get_effective_sensing_range(prey, multiplier=1.2)
+        flee_multiplier = self._get_prey_flee_sense_multiplier()
+        flee_sense = self._get_effective_sensing_range(prey, multiplier=flee_multiplier)
         nearest_pred: Creature | None = None
         nearest_dist = flee_sense
 
@@ -745,7 +943,7 @@ class Simulation:
             prey,
             nearest_pred.x,
             nearest_pred.y,
-            sense_multiplier=1.2,
+            sense_multiplier=flee_multiplier,
             target_depth_band=nearest_pred.depth_band,
         )
         if sensed_predator is None:
@@ -852,32 +1050,124 @@ class Simulation:
             self._register_predator_life(offspring, origin="birth")
         return offspring
 
-    def _check_ecosystem_balance(self) -> None:
-        """Rescue predators or prey if either goes extinct."""
-        if not self.creatures:
+    def _check_predator_prey_collapse(self, now_seconds: float | None = None) -> None:
+        """Freeze predator-prey runs once either species collapses to zero."""
+        if self.predator_prey_game_over_active:
             return
 
-        preds = [c for c in self.creatures if c.species == "predator"]
-        preys = [c for c in self.creatures if c.species == "prey"]
+        pred_count, prey_count = self.get_species_counts()
+        if pred_count > 0 and prey_count > 0:
+            return
 
-        # Predators extinct: convert 3 highest-aggression prey
-        if len(preds) == 0 and len(preys) > 0:
-            candidates = sorted(preys, key=lambda c: c.genome.aggression, reverse=True)
-            for c in candidates[:3]:
-                c.species = "predator"
-                c.lineage_id = self._alloc_lineage_id()
-                self._predator_diag_events["rescues"].append({
-                    "frame": self._frame,
-                    "lineage_id": c.lineage_id,
-                })
-                self._register_predator_life(c, origin="rescue")
+        if pred_count == 0 and prey_count == 0:
+            cause = "Both species collapsed"
+        elif pred_count == 0:
+            cause = "Predators collapsed"
+        else:
+            cause = "Prey collapsed"
 
-        # Prey extinct: convert 10 lowest-aggression predators
-        elif len(preys) == 0 and len(preds) > 0:
-            candidates = sorted(preds, key=lambda c: c.genome.aggression)
-            for c in candidates[:10]:
-                c.species = "prey"
-                c.lineage_id = self._alloc_lineage_id()
+        self._enter_predator_prey_game_over(
+            cause,
+            predator_count=pred_count,
+            prey_count=prey_count,
+            now_seconds=now_seconds,
+        )
+
+    def _enter_predator_prey_game_over(
+        self,
+        cause: str,
+        *,
+        predator_count: int,
+        prey_count: int,
+        now_seconds: float | None = None,
+    ) -> None:
+        state = self._predator_prey_state
+        state.game_over_active = True
+        state.collapse_cause = cause
+        state.collapse_predator_count = predator_count
+        state.collapse_prey_count = prey_count
+        state.collapse_started_at_seconds = (
+            time.monotonic() if now_seconds is None else now_seconds
+        )
+        self._finalize_predator_prey_run(state.survival_ticks)
+
+    def _finalize_predator_prey_run(self, survival_ticks: int) -> None:
+        state = self._predator_prey_state
+        tuning = state.adaptive_tuning
+        prior_average = self.predator_prey_rolling_average
+        was_trial = tuning.trial_active
+
+        if was_trial:
+            if survival_ticks < tuning.trial_baseline_average:
+                tuning.current_values = dict(tuning.previous_values)
+                tuning.last_decision = "reverted"
+            else:
+                tuning.previous_values = dict(tuning.current_values)
+                tuning.last_decision = "kept"
+            tuning.trial_active = False
+            tuning.trial_dial = None
+            tuning.trial_direction = 0
+            tuning.trial_baseline_average = 0.0
+            self._apply_predator_prey_tuning_values(tuning.current_values)
+
+        state.run_history.append(int(survival_ticks))
+
+        if not was_trial and prior_average > 0 and survival_ticks < prior_average:
+            self._start_predator_prey_trial(prior_average)
+
+    def _start_predator_prey_trial(self, baseline_average: float) -> None:
+        tuning = self._predator_prey_state.adaptive_tuning
+        candidates = list(_PREDATOR_PREY_ADAPTIVE_DIALS)
+        random.shuffle(candidates)
+
+        for spec in candidates:
+            current_value = tuning.current_values.get(spec.key, spec.default)
+            directions = [-1, 1]
+            random.shuffle(directions)
+            for direction in directions:
+                candidate_value = self._clamp_predator_prey_dial_value(
+                    spec,
+                    current_value + (spec.step * direction),
+                )
+                if math.isclose(candidate_value, current_value, abs_tol=1e-9):
+                    continue
+                tuning.previous_values = dict(tuning.current_values)
+                tuning.current_values[spec.key] = candidate_value
+                tuning.trial_active = True
+                tuning.trial_dial = spec.key
+                tuning.trial_direction = direction
+                tuning.trial_baseline_average = baseline_average
+                tuning.last_decision = "trial_started"
+                self._apply_predator_prey_tuning_values(tuning.current_values)
+                return
+
+        tuning.last_decision = "trial_skipped"
+
+    def update_predator_prey_runtime(self, now_seconds: float | None = None) -> bool:
+        """Hold the game-over screen, then restart predator-prey with a new seed."""
+        if not self.predator_prey_game_over_active:
+            return False
+
+        current_time = time.monotonic() if now_seconds is None else now_seconds
+        state = self._predator_prey_state
+        if state.collapse_started_at_seconds is None:
+            state.collapse_started_at_seconds = current_time
+            return False
+        if (
+            current_time - state.collapse_started_at_seconds
+            < _PREDATOR_PREY_GAME_OVER_HOLD_SECONDS
+        ):
+            return False
+
+        self.restart_predator_prey_run()
+        return True
+
+    def restart_predator_prey_run(self, new_seed: int | None = None) -> None:
+        """Start a fresh predator-prey run while preserving rolling stability state."""
+        self.reset(
+            preserve_predator_prey_state=True,
+            new_seed=new_seed,
+        )
 
     # ------------------------------------------------------------------
     # Boids mode
@@ -1355,7 +1645,10 @@ class Simulation:
             return base_rate
         period = max(1, self.settings.food_cycle_period)
         t = self._frame / period
-        return max(0.0, base_rate * (0.5 + 0.5 * math.sin(2 * math.pi * t)))
+        cycle_phase = 0.5 + 0.5 * math.sin(2 * math.pi * t)
+        amplitude = max(0.0, min(1.0, self._get_food_cycle_amplitude()))
+        multiplier = (1.0 - amplitude) + (amplitude * cycle_phase)
+        return max(0.0, base_rate * multiplier)
 
     # ------------------------------------------------------------------
     # Food seeking
@@ -1915,6 +2208,161 @@ class Simulation:
             "total_kills": self.predation_kill_count,
         }
 
+    def get_predator_prey_stability_stats(self) -> dict[str, Any]:
+        """Return predator-prey run stability telemetry for HUD and persistence."""
+        state = self._predator_prey_state
+        trial_direction = ""
+        if state.adaptive_tuning.trial_direction > 0:
+            trial_direction = "+"
+        elif state.adaptive_tuning.trial_direction < 0:
+            trial_direction = "-"
+        return {
+            "current_seed": state.current_seed,
+            "sim_ticks": state.sim_ticks,
+            "survival_ticks": state.survival_ticks,
+            "rolling_average_survival_ticks": self.predator_prey_rolling_average,
+            "best_recent_survival_ticks": self.predator_prey_best_recent_ticks,
+            "trial_active": state.adaptive_tuning.trial_active,
+            "trial_dial": state.adaptive_tuning.trial_dial,
+            "trial_direction": trial_direction,
+            "trial_baseline_average": state.adaptive_tuning.trial_baseline_average,
+            "trial_last_decision": state.adaptive_tuning.last_decision,
+            "game_over_active": state.game_over_active,
+            "collapse_cause": state.collapse_cause,
+            "collapse_predators": state.collapse_predator_count,
+            "collapse_prey": state.collapse_prey_count,
+            "restart_countdown_seconds": self.get_predator_prey_restart_countdown_seconds(),
+        }
+
+    def export_predator_prey_runtime_state(self) -> dict[str, Any]:
+        state = self._predator_prey_state
+        tuning = state.adaptive_tuning
+        return {
+            "current_seed": state.current_seed,
+            "sim_ticks": state.sim_ticks,
+            "survival_ticks": state.survival_ticks,
+            "run_history": list(state.run_history),
+            "game_over": {
+                "active": state.game_over_active,
+                "cause": state.collapse_cause,
+                "predators": state.collapse_predator_count,
+                "prey": state.collapse_prey_count,
+            },
+            "adaptive_tuning": {
+                "current_values": dict(tuning.current_values),
+                "previous_values": dict(tuning.previous_values),
+                "trial_active": tuning.trial_active,
+                "trial_dial": tuning.trial_dial,
+                "trial_direction": tuning.trial_direction,
+                "trial_baseline_average": tuning.trial_baseline_average,
+                "last_decision": tuning.last_decision,
+            },
+        }
+
+    def export_predator_prey_tuning_state(self) -> dict[str, Any]:
+        """Persist only cross-run predator-prey tuning state across launches."""
+        state = self._predator_prey_state
+        tuning = state.adaptive_tuning
+        return {
+            "run_history": list(state.run_history),
+            "adaptive_tuning": {
+                "current_values": dict(tuning.current_values),
+                "previous_values": dict(tuning.previous_values),
+                "trial_active": tuning.trial_active,
+                "trial_dial": tuning.trial_dial,
+                "trial_direction": tuning.trial_direction,
+                "trial_baseline_average": tuning.trial_baseline_average,
+                "last_decision": tuning.last_decision,
+            },
+        }
+
+    def restore_predator_prey_runtime_state(self, payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            return
+
+        state = self._predator_prey_state
+        state.current_seed = payload.get("current_seed")
+        state.sim_ticks = int(payload.get("sim_ticks", self._frame))
+        state.survival_ticks = int(payload.get("survival_ticks", state.sim_ticks))
+        history = payload.get("run_history", [])
+        state.run_history = deque(
+            (int(item) for item in history),
+            maxlen=_PREDATOR_PREY_HISTORY_SIZE,
+        )
+
+        game_over = payload.get("game_over", {})
+        if isinstance(game_over, dict):
+            state.game_over_active = bool(game_over.get("active", False))
+            state.collapse_cause = game_over.get("cause")
+            state.collapse_predator_count = int(game_over.get("predators", 0))
+            state.collapse_prey_count = int(game_over.get("prey", 0))
+            state.collapse_started_at_seconds = None
+
+        tuning_payload = payload.get("adaptive_tuning", {})
+        if isinstance(tuning_payload, dict):
+            tuning = state.adaptive_tuning
+            tuning.current_values = self._serialize_predator_prey_dial_values(
+                tuning_payload.get("current_values", {})
+            )
+            tuning.previous_values = self._serialize_predator_prey_dial_values(
+                tuning_payload.get("previous_values", tuning.current_values)
+            )
+            tuning.trial_active = bool(tuning_payload.get("trial_active", False))
+            tuning.trial_dial = tuning_payload.get("trial_dial")
+            tuning.trial_direction = int(tuning_payload.get("trial_direction", 0))
+            tuning.trial_baseline_average = float(
+                tuning_payload.get("trial_baseline_average", 0.0)
+            )
+            tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
+            self._apply_predator_prey_tuning_values(tuning.current_values)
+
+        self._frame = state.sim_ticks
+
+    def restore_predator_prey_tuning_state(self, payload: dict[str, Any]) -> None:
+        """Restore cross-launch predator-prey tuning without restoring the world."""
+        if not isinstance(payload, dict):
+            return
+
+        state = self._predator_prey_state
+        history = payload.get("run_history", [])
+        state.run_history = deque(
+            (int(item) for item in history),
+            maxlen=_PREDATOR_PREY_HISTORY_SIZE,
+        )
+
+        tuning_payload = payload.get("adaptive_tuning", {})
+        if not isinstance(tuning_payload, dict):
+            return
+
+        tuning = state.adaptive_tuning
+        tuning.current_values = self._serialize_predator_prey_dial_values(
+            tuning_payload.get("current_values", {})
+        )
+        tuning.previous_values = self._serialize_predator_prey_dial_values(
+            tuning_payload.get("previous_values", tuning.current_values)
+        )
+        tuning.trial_active = bool(tuning_payload.get("trial_active", False))
+        tuning.trial_dial = tuning_payload.get("trial_dial")
+        tuning.trial_direction = int(tuning_payload.get("trial_direction", 0))
+        tuning.trial_baseline_average = float(
+            tuning_payload.get("trial_baseline_average", 0.0)
+        )
+        tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
+        self._apply_predator_prey_tuning_values(tuning.current_values)
+
+    def get_predator_prey_restart_countdown_seconds(
+        self,
+        now_seconds: float | None = None,
+    ) -> float:
+        if not self.predator_prey_game_over_active:
+            return 0.0
+        current_time = time.monotonic() if now_seconds is None else now_seconds
+        started = self._predator_prey_state.collapse_started_at_seconds
+        if started is None:
+            return _PREDATOR_PREY_GAME_OVER_HOLD_SECONDS
+        remaining = _PREDATOR_PREY_GAME_OVER_HOLD_SECONDS - (current_time - started)
+        return max(0.0, remaining)
+
     def export_predator_diagnostics(self) -> dict[str, Any]:
         """Return a structured predator-only diagnostic snapshot."""
         base_threshold = float(
@@ -2007,7 +2455,9 @@ class Simulation:
         if not self.settings.food_cycle_enabled:
             return 1.0
         t = self._frame / max(1, self.settings.food_cycle_period)
-        return 0.5 + 0.5 * math.sin(2 * math.pi * t)
+        phase = 0.5 + 0.5 * math.sin(2 * math.pi * t)
+        amplitude = max(0.0, min(1.0, self._get_food_cycle_amplitude()))
+        return (1.0 - amplitude) + (amplitude * phase)
 
     @property
     def avg_old_age_lifespan_seconds(self) -> float:
@@ -2015,6 +2465,27 @@ class Simulation:
         if not self._old_age_lifespans:
             return 0.0
         return (sum(self._old_age_lifespans) / len(self._old_age_lifespans)) / 60.0
+
+    @property
+    def predator_prey_game_over_active(self) -> bool:
+        return (
+            self.settings.sim_mode == "predator_prey"
+            and self._predator_prey_state.game_over_active
+        )
+
+    @property
+    def predator_prey_rolling_average(self) -> float:
+        history = self._predator_prey_state.run_history
+        if not history:
+            return 0.0
+        return sum(history) / len(history)
+
+    @property
+    def predator_prey_best_recent_ticks(self) -> int:
+        history = self._predator_prey_state.run_history
+        if not history:
+            return 0
+        return max(history)
 
     @property
     def population(self) -> int:
@@ -2075,6 +2546,7 @@ class Simulation:
             depth_counts = self.get_depth_band_counts()
             pred_actual_speed, prey_actual_speed = self.get_species_avg_actual_speeds()
             predation_stats = self.get_recent_predation_stats()
+            stability_stats = self.get_predator_prey_stability_stats()
             snapshot["species"] = {
                 "predators": predator_count,
                 "prey": prey_count,
@@ -2090,6 +2562,20 @@ class Simulation:
                 ),
             }
             snapshot["predation"] = predation_stats
+            snapshot["stability"] = {
+                "seed": stability_stats["current_seed"],
+                "sim_ticks": stability_stats["sim_ticks"],
+                "survival_ticks": stability_stats["survival_ticks"],
+                "rolling_average_survival_ticks": (
+                    stability_stats["rolling_average_survival_ticks"]
+                ),
+                "best_recent_survival_ticks": (
+                    stability_stats["best_recent_survival_ticks"]
+                ),
+                "trial_active": stability_stats["trial_active"],
+                "trial_dial": stability_stats["trial_dial"],
+                "trial_last_decision": stability_stats["trial_last_decision"],
+            }
         elif self.settings.sim_mode == "boids":
             flock_count, avg_flock_size, largest_flock = self.get_flock_stats()
             snapshot["flocks"] = {

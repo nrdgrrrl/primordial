@@ -91,13 +91,30 @@ class HUD:
         pred_count, prey_count = simulation.get_species_counts()
         pred_speed, prey_speed = simulation.get_species_avg_actual_speeds()
         predation = simulation.get_recent_predation_stats()
+        stability = simulation.get_predator_prey_stability_stats()
         dom_zone = simulation.zone_manager.get_dominant_zone(simulation.creatures)
+        seed = stability["current_seed"]
+        seed_str = str(seed) if seed is not None else "—"
+
+        trial_line = "Trial: none"
+        if stability["trial_active"] and stability["trial_dial"]:
+            trial_line = (
+                f"Trial: {stability['trial_dial']} {stability['trial_direction']}"
+            )
 
         return [
             f"Predators: {pred_count}  /  Prey: {prey_count}",
             f"Actual speed P:{pred_speed:.2f}  Q:{prey_speed:.2f}",
             f"Kills (3s): {predation['recent_kills']}  Cross-miss: {predation['recent_cross_band_misses']}",
-            f"Generation: {simulation.generation}",
+            f"sim_ticks: {stability['sim_ticks']}  Seed: {seed_str}",
+            (
+                "Survival: {current}  Avg20: {average:.0f}  Best20: {best}".format(
+                    current=stability["survival_ticks"],
+                    average=stability["rolling_average_survival_ticks"],
+                    best=stability["best_recent_survival_ticks"],
+                )
+            ),
+            trial_line,
             f"Zone: {dom_zone}",
             f"Mode: predator_prey",
             f"Theme: {simulation.settings.visual_theme}",

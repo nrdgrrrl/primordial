@@ -95,6 +95,8 @@ def load_snapshot_payload(
     simulation._next_lineage_id = int(counters["next_lineage_id"])
     simulation.paused = False
     simulation._old_age_lifespans.clear()
+    if resolved_settings.sim_mode == "predator_prey":
+        simulation.restore_predator_prey_runtime_state(world.get("predator_prey", {}))
     simulation.rebuild_derived_state()
 
     random.setstate(_deserialize_random_state(world["rng_state"]))
@@ -123,6 +125,11 @@ def build_snapshot(simulation: Simulation) -> dict[str, Any]:
             "food": _serialize_food_manager(simulation.food_manager),
             "zones": _serialize_zone_manager(simulation.zone_manager),
             "rng_state": _serialize_random_state(random.getstate()),
+            "predator_prey": (
+                simulation.export_predator_prey_runtime_state()
+                if simulation.settings.sim_mode == "predator_prey"
+                else {}
+            ),
         },
     }
 
