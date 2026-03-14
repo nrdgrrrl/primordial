@@ -86,6 +86,7 @@ _CANONICAL_MODE_KEYS: dict[str, tuple[str, ...]] = {
         "stability_history_size",
         "adaptive_step_escalation_runs",
         "adaptive_step_escalation_percent",
+        "adaptive_trial_seed_count",
     ),
     "boids": (
         "initial_population",
@@ -126,6 +127,7 @@ _MODE_PARAM_RULES: dict[str, tuple[str, float | int | None, float | int | None]]
     "stability_history_size": ("int", 1, None),
     "adaptive_step_escalation_runs": ("int", 1, None),
     "adaptive_step_escalation_percent": ("float", 0.0, None),
+    "adaptive_trial_seed_count": ("int", 1, None),
     "food_cycle_enabled": ("bool", None, None),
     "zone_strength": ("float", 0.0, 1.0),
     "target_fps": ("int", 1, None),

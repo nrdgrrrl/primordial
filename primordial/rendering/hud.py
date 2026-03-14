@@ -109,7 +109,7 @@ class HUD:
             f"Kills (3s): {predation['recent_kills']}  Cross-miss: {predation['recent_cross_band_misses']}",
             f"sim_ticks: {stability['sim_ticks']}  Seed: {seed_str}",
             (
-                "Survival: {current}  Avg{window}: {average:.0f}  Best{window}: {best}".format(
+                "Survival: {current}  Med{window}: {average:.0f}  Best{window}: {best}".format(
                     current=stability["survival_ticks"],
                     window=history_window,
                     average=stability["rolling_average_survival_ticks"],

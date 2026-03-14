@@ -169,7 +169,7 @@ The ecosystem has several explicit balancing mechanisms:
 2. **Predator reproduction penalty**: when predator fraction > 60%, predator reproduction threshold increases by 20% — slowing predator reproduction
 3. **Cosmic ray species flips**: a cosmic ray mutation to aggression that crosses the 0.5 threshold flips a creature's species identity — providing a trickle of cross-species conversion
 4. **Depth bands**: prey can escape into different bands, creating spatial refugia that prevent predators from achieving 100% kill efficiency
-5. **Run-to-run adaptive dials**: after a below-average collapse, one bounded ecological dial is nudged for the next seeded trial run. "Below average" means below the rolling average of the configured run-history window, not below the median and not below the highest record. The trial is then kept or reverted based on whether it meets or beats that pre-trial rolling average. If the sim keeps failing to beat the rolling average for long enough, the trial step size is scaled up by a user-configurable percentage.
+5. **Run-to-run adaptive dials**: after a below-median collapse, one bounded ecological dial is nudged for a same-seed trial sequence. "Below median" means below the rolling median of the configured run-history window, not below the highest record. Each candidate is evaluated against the unchanged baseline on the same seed set, and the candidate is kept only if its median survival meets or beats the baseline median. The seed-pair count defaults to `3` and can be overridden with `adaptive_trial_seed_count`. If the sim keeps failing to beat the rolling median for long enough, the trial step size is scaled up by a user-configurable percentage.
 
 There is no normal extinction rescue anymore. If predators or prey hit zero, the run is considered failed.
 
@@ -332,7 +332,7 @@ The HUD panel (bottom-left, toggled with H) shows:
 - **Actual speed P:N.NN Q:N.NN** — average instantaneous velocity of predators (P) and prey (Q)
 - **Kills (3s): N Cross-miss: N** — recent predation kills and cross-band near-misses in a rolling 3-second window
 - **sim_ticks: N Seed: N** — elapsed simulation steps in the current run and the current run seed
-- **Survival: N AvgN: N BestN: N** — current run survival ticks, rolling average of the last `stability_history_size` completed runs (20 by default), and best recent completed run from that same window
+- **Survival: N MedN: N BestN: N** — current run survival ticks, rolling median of the last `stability_history_size` completed runs (20 by default), and best recent completed run from that same window
 - **Trial: dial +/-** — the currently active adaptive dial trial, if any
 - **Zone: name** — the zone type containing the most creatures
 - **Mode: predator_prey**
@@ -342,11 +342,11 @@ The HUD panel (bottom-left, toggled with H) shows:
 
 When a species collapses, the simulation freezes and a red full-screen **GAME OVER**
 overlay replaces the normal readout. It shows the collapse cause, seed,
-predator/prey counts, survival ticks, the rolling average captured at collapse
+predator/prey counts, survival ticks, the rolling median captured at collapse
 time, the highest survival tick record, the current adaptive step modifier, and
 a 10-second restart countdown. The overlay also lists the run's adaptive dial
 values and highlights the dial changed for that run with its signed delta. The
-highlighted survival line compares the run against that rolling average, not
+highlighted survival line compares the run against that rolling median, not
 against the highest record. Dial highlight means the run was the active trial
 that tested that dial change; it does not imply the change beat the rolling
 average or was ultimately kept.
@@ -367,7 +367,7 @@ Predator_prey snapshots persist more than the world state. They also save:
 
 If the app is launched with `--log=csv`, predator_prey appends analysis rows to
 `run_logs/predator_prey_runs.csv`. Each completed run writes one `run_complete`
-row with the run seed, `sim_ticks`, survival, collapse result, rolling-average
+row with the run seed, `sim_ticks`, survival, collapse result, rolling-median
 comparison, trial metadata, and the adaptive dial values used during that run.
 Manual dial resets write a `dial_reset` row so offline analysis can identify
 where the tuning history was cleared.

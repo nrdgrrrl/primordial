@@ -42,6 +42,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         history_size: int = 20,
         escalation_runs: int = 5,
         escalation_percent: float = 25.0,
+        trial_count: int = 3,
     ) -> Settings:
         settings = Settings()
         settings.mode_params = deepcopy(settings.DEFAULT_MODE_PARAMS)
@@ -55,6 +56,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         predator_prey["stability_history_size"] = history_size
         predator_prey["adaptive_step_escalation_runs"] = escalation_runs
         predator_prey["adaptive_step_escalation_percent"] = escalation_percent
+        predator_prey["adaptive_trial_seed_count"] = trial_count
         return settings
 
     def _build_simulation(self, **settings_kwargs: float | int) -> Simulation:
@@ -171,8 +173,18 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(simulation.predator_prey_best_recent_ticks, 400)
         self.assertEqual(simulation.predator_prey_rolling_average, 300.0)
 
-    def test_trial_dial_change_applies_and_can_revert(self) -> None:
+    def test_rolling_survival_baseline_uses_median(self) -> None:
         simulation = self._build_simulation()
+
+        simulation._finalize_predator_prey_run(100)
+        simulation._finalize_predator_prey_run(100)
+        simulation._finalize_predator_prey_run(100)
+        simulation._finalize_predator_prey_run(1000)
+
+        self.assertEqual(simulation.predator_prey_rolling_average, 100.0)
+
+    def test_trial_dial_change_applies_and_can_revert(self) -> None:
+        simulation = self._build_simulation(trial_count=1)
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
         baseline = simulation._predator_prey_state.adaptive_tuning.current_values[
             "predator_contact_kill_distance_scale"
@@ -190,7 +202,14 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
 
         simulation._finalize_predator_prey_run(80)
+        self.assertTrue(tuning.trial_active)
+        self.assertEqual(tuning.trial_phase, "baseline")
+        self.assertEqual(
+            tuning.current_values["predator_contact_kill_distance_scale"],
+            baseline,
+        )
 
+        simulation._finalize_predator_prey_run(90)
         tuning = simulation._predator_prey_state.adaptive_tuning
         self.assertFalse(tuning.trial_active)
         self.assertEqual(tuning.last_decision, "reverted")
@@ -200,7 +219,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
 
     def test_accepted_trial_dial_change_persists(self) -> None:
-        simulation = self._build_simulation()
+        simulation = self._build_simulation(trial_count=1)
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
         baseline = simulation._predator_prey_state.adaptive_tuning.current_values[
             "predator_contact_kill_distance_scale"
@@ -213,6 +232,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
             "predator_contact_kill_distance_scale"
         ]
         simulation._finalize_predator_prey_run(120)
+        self.assertTrue(simulation._predator_prey_state.adaptive_tuning.trial_active)
+        simulation._finalize_predator_prey_run(90)
 
         tuning = simulation._predator_prey_state.adaptive_tuning
         self.assertFalse(tuning.trial_active)
@@ -227,6 +248,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         simulation = self._build_simulation(
             escalation_runs=2,
             escalation_percent=25.0,
+            trial_count=1,
         )
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
         baseline = simulation._predator_prey_state.adaptive_tuning.current_values[
@@ -237,19 +259,41 @@ class PredatorPreyStabilityTests(unittest.TestCase):
             simulation._finalize_predator_prey_run(50)
             simulation._finalize_predator_prey_run(80)
             simulation._finalize_predator_prey_run(70)
+            simulation._finalize_predator_prey_run(60)
 
         tuning = simulation._predator_prey_state.adaptive_tuning
         self.assertTrue(tuning.trial_active)
-        self.assertEqual(tuning.non_improving_run_streak, 3)
+        self.assertEqual(tuning.non_improving_run_streak, 4)
         self.assertAlmostEqual(
             tuning.current_values["predator_contact_kill_distance_scale"],
-            baseline - 0.0375,
+            baseline - 0.075,
             places=4,
         )
         self.assertAlmostEqual(
             simulation.predator_prey_adjustment_step_multiplier,
-            1.25,
+            1.5,
         )
+
+    def test_multi_seed_trial_reuses_same_seed_for_baseline_and_candidate_runs(self) -> None:
+        simulation = self._build_simulation(trial_count=2)
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with (
+            patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None),
+            patch.object(simulation, "_generate_predator_prey_seed", side_effect=[111, 222]),
+        ):
+            simulation._finalize_predator_prey_run(50)
+
+        simulation.restart_predator_prey_run()
+        self.assertEqual(simulation.get_predator_prey_stability_stats()["current_seed"], 111)
+
+        simulation._finalize_predator_prey_run(120)
+        simulation.restart_predator_prey_run()
+        self.assertEqual(simulation.get_predator_prey_stability_stats()["current_seed"], 111)
+
+        simulation._finalize_predator_prey_run(90)
+        simulation.restart_predator_prey_run()
+        self.assertEqual(simulation.get_predator_prey_stability_stats()["current_seed"], 222)
 
     def test_non_improving_streak_resets_when_run_beats_average(self) -> None:
         simulation = self._build_simulation()
@@ -333,10 +377,18 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         state.highest_survival_ticks = 100
         state.adaptive_tuning.current_values["predator_hunt_sense_multiplier"] = 2.15
         state.adaptive_tuning.previous_values["predator_hunt_sense_multiplier"] = 2.10
+        state.adaptive_tuning.trial_candidate_values = dict(
+            state.adaptive_tuning.current_values
+        )
         state.adaptive_tuning.trial_active = True
+        state.adaptive_tuning.trial_phase = "baseline"
         state.adaptive_tuning.trial_dial = "predator_hunt_sense_multiplier"
         state.adaptive_tuning.trial_direction = 1
         state.adaptive_tuning.trial_baseline_average = 80.0
+        state.adaptive_tuning.trial_seeds = [111, 222, 333]
+        state.adaptive_tuning.trial_seed_index = 1
+        state.adaptive_tuning.trial_candidate_results = [70]
+        state.adaptive_tuning.trial_baseline_results = [90]
         state.adaptive_tuning.non_improving_run_streak = 4
         simulation._apply_predator_prey_tuning_values(state.adaptive_tuning.current_values)
 
@@ -344,6 +396,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
 
         self.assertEqual(state.adaptive_tuning.current_values, baseline)
         self.assertEqual(state.adaptive_tuning.previous_values, baseline)
+        self.assertEqual(state.adaptive_tuning.trial_candidate_values, {})
         self.assertFalse(state.adaptive_tuning.trial_active)
         self.assertEqual(state.adaptive_tuning.last_decision, "reset_to_baseline")
         self.assertEqual(state.adaptive_tuning.non_improving_run_streak, 0)
@@ -360,10 +413,16 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         tuning = simulation._predator_prey_state.adaptive_tuning
         tuning.current_values["predator_hunt_sense_multiplier"] = 2.10
         tuning.previous_values["predator_hunt_sense_multiplier"] = 2.05
+        tuning.trial_candidate_values = dict(tuning.current_values)
         tuning.trial_active = True
+        tuning.trial_phase = "baseline"
         tuning.trial_dial = "predator_hunt_sense_multiplier"
         tuning.trial_direction = 1
         tuning.trial_baseline_average = 75.0
+        tuning.trial_seeds = [101, 202, 303]
+        tuning.trial_seed_index = 1
+        tuning.trial_candidate_results = [90]
+        tuning.trial_baseline_results = [75]
         tuning.last_decision = "trial_started"
         tuning.non_improving_run_streak = 3
         simulation._apply_predator_prey_tuning_values(tuning.current_values)
@@ -396,7 +455,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         lines = hud._lines_predator_prey(simulation)
 
         joined = "\n".join(lines)
-        self.assertIn("Avg40:", joined)
+        self.assertIn("Med40:", joined)
         self.assertIn("Best40:", joined)
 
     def test_game_over_summary_lines_include_adjustment_modifier(self) -> None:
@@ -418,7 +477,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
         joined = "\n".join(line for line, _color in lines)
         self.assertIn("Adjustment step: 1.25x (+25%)", joined)
-        self.assertIn("Rolling avg: 100", joined)
+        self.assertIn("Rolling median: 100", joined)
 
     def test_space_restarts_predator_prey_game_over_immediately(self) -> None:
         simulation = self._build_simulation()
@@ -453,10 +512,16 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         tuning = simulation._predator_prey_state.adaptive_tuning
         tuning.current_values["predator_hunt_sense_multiplier"] = 2.15
         tuning.previous_values["predator_hunt_sense_multiplier"] = 2.10
+        tuning.trial_candidate_values = dict(tuning.current_values)
         tuning.trial_active = True
+        tuning.trial_phase = "baseline"
         tuning.trial_dial = "predator_hunt_sense_multiplier"
         tuning.trial_direction = 1
         tuning.trial_baseline_average = 60.0
+        tuning.trial_seeds = [111, 222, 333]
+        tuning.trial_seed_index = 1
+        tuning.trial_candidate_results = [80]
+        tuning.trial_baseline_results = [70]
         tuning.last_decision = "trial_started"
         tuning.non_improving_run_streak = 2
         simulation._apply_predator_prey_tuning_values(tuning.current_values)

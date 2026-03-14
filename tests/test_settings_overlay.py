@@ -41,6 +41,7 @@ class SettingsOverlayTests(unittest.TestCase):
         self.assertIn("stability_history_size = 20", serialized)
         self.assertIn("adaptive_step_escalation_runs = 5", serialized)
         self.assertIn("adaptive_step_escalation_percent = 25.0000", serialized)
+        self.assertIn("adaptive_trial_seed_count = 3", serialized)
 
     def test_settings_overlay_apply_saves_mode_change(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

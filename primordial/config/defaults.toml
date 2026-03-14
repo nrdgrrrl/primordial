@@ -58,6 +58,7 @@ food_cycle_amplitude = 1.0000
 stability_history_size = 20
 adaptive_step_escalation_runs = 5
 adaptive_step_escalation_percent = 25.0
+adaptive_trial_seed_count = 3
 
 [modes.boids]
 initial_population = 150

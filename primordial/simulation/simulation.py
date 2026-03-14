@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import random
+from statistics import median
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -48,6 +49,7 @@ _DEFAULT_PREDATOR_PREY_HISTORY_SIZE = 20
 _PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 10.0
 _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_RUNS = 5
 _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_PERCENT = 25.0
+_DEFAULT_PREDATOR_PREY_TRIAL_COUNT = 3
 
 
 @dataclass(frozen=True)
@@ -64,10 +66,16 @@ class PredatorPreyAdaptiveTuningState:
     baseline_values: dict[str, float] = field(default_factory=dict)
     current_values: dict[str, float] = field(default_factory=dict)
     previous_values: dict[str, float] = field(default_factory=dict)
+    trial_candidate_values: dict[str, float] = field(default_factory=dict)
     trial_active: bool = False
+    trial_phase: str = "candidate"
     trial_dial: str | None = None
     trial_direction: int = 0
     trial_baseline_average: float = 0.0
+    trial_seeds: list[int] = field(default_factory=list)
+    trial_seed_index: int = 0
+    trial_candidate_results: list[int] = field(default_factory=list)
+    trial_baseline_results: list[int] = field(default_factory=list)
     last_decision: str = "none"
     non_improving_run_streak: int = 0
 
@@ -346,6 +354,17 @@ class Simulation:
             ),
         )
 
+    def _get_predator_prey_trial_count(self) -> int:
+        return max(
+            1,
+            int(
+                self._get_mode_param(
+                    "adaptive_trial_seed_count",
+                    _DEFAULT_PREDATOR_PREY_TRIAL_COUNT,
+                )
+            ),
+        )
+
     def _build_predator_prey_run_history(
         self,
         history: list[int] | tuple[int, ...] = (),
@@ -616,7 +635,7 @@ class Simulation:
 
     def _prepare_predator_prey_run_restart(self, new_seed: int | None = None) -> None:
         state = self._predator_prey_state
-        seed = new_seed if new_seed is not None else self._generate_predator_prey_seed()
+        seed = self._resolve_predator_prey_restart_seed(new_seed)
         state.current_seed = seed
         state.sim_ticks = 0
         state.survival_ticks = 0
@@ -635,6 +654,16 @@ class Simulation:
         state.collapse_was_new_highest = False
         self._apply_predator_prey_tuning_values(state.adaptive_tuning.current_values)
         random.seed(seed)
+
+    def _resolve_predator_prey_restart_seed(self, new_seed: int | None = None) -> int:
+        if new_seed is not None:
+            return new_seed
+
+        tuning = self._predator_prey_state.adaptive_tuning
+        if tuning.trial_active and tuning.trial_seeds:
+            index = min(max(tuning.trial_seed_index, 0), len(tuning.trial_seeds) - 1)
+            return int(tuning.trial_seeds[index])
+        return self._generate_predator_prey_seed()
 
     def resize(self, width: int, height: int) -> None:
         """Resize simulation world bounds and rebuild dependent spatial data."""
@@ -1168,18 +1197,24 @@ class Simulation:
         tuning = state.adaptive_tuning
         prior_average = self.predator_prey_rolling_average
         state.collapse_dial_values = dict(tuning.current_values)
-        state.collapse_trial_dial = tuning.trial_dial
         state.collapse_trial_decision = tuning.last_decision
         state.collapse_rolling_average = prior_average
         state.collapse_beat_average = prior_average > 0 and state.survival_ticks > prior_average
+        state.collapse_trial_dial = None
         if tuning.trial_active and tuning.trial_dial is not None:
             previous_value = tuning.previous_values.get(
                 tuning.trial_dial,
                 tuning.current_values.get(tuning.trial_dial, 0.0),
             )
             current_value = tuning.current_values.get(tuning.trial_dial, previous_value)
-            state.collapse_trial_delta = round(current_value - previous_value, 4)
-            state.collapse_trial_value = current_value
+            delta = round(current_value - previous_value, 4)
+            if not math.isclose(delta, 0.0, abs_tol=1e-9):
+                state.collapse_trial_dial = tuning.trial_dial
+                state.collapse_trial_delta = delta
+                state.collapse_trial_value = current_value
+            else:
+                state.collapse_trial_delta = 0.0
+                state.collapse_trial_value = None
         else:
             state.collapse_trial_delta = 0.0
             state.collapse_trial_value = None
@@ -1194,17 +1229,7 @@ class Simulation:
         state.highest_survival_ticks = max(state.highest_survival_ticks, survival_ticks)
 
         if was_trial:
-            if survival_ticks < tuning.trial_baseline_average:
-                tuning.current_values = dict(tuning.previous_values)
-                tuning.last_decision = "reverted"
-            else:
-                tuning.previous_values = dict(tuning.current_values)
-                tuning.last_decision = "kept"
-            tuning.trial_active = False
-            tuning.trial_dial = None
-            tuning.trial_direction = 0
-            tuning.trial_baseline_average = 0.0
-            self._apply_predator_prey_tuning_values(tuning.current_values)
+            self._advance_predator_prey_trial(survival_ticks)
 
         if prior_average > 0:
             if survival_ticks > prior_average:
@@ -1239,17 +1264,81 @@ class Simulation:
                 )
                 if math.isclose(candidate_value, current_value, abs_tol=1e-9):
                     continue
-                tuning.previous_values = dict(tuning.current_values)
-                tuning.current_values[spec.key] = candidate_value
+                baseline_values = dict(tuning.current_values)
+                candidate_values = dict(baseline_values)
+                candidate_values[spec.key] = candidate_value
+                tuning.previous_values = baseline_values
+                tuning.current_values = dict(candidate_values)
+                tuning.trial_candidate_values = dict(candidate_values)
                 tuning.trial_active = True
+                tuning.trial_phase = "candidate"
                 tuning.trial_dial = spec.key
                 tuning.trial_direction = direction
                 tuning.trial_baseline_average = baseline_average
+                tuning.trial_seeds = [
+                    self._generate_predator_prey_seed()
+                    for _ in range(self._get_predator_prey_trial_count())
+                ]
+                tuning.trial_seed_index = 0
+                tuning.trial_candidate_results = []
+                tuning.trial_baseline_results = []
                 tuning.last_decision = "trial_started"
                 self._apply_predator_prey_tuning_values(tuning.current_values)
                 return
 
         tuning.last_decision = "trial_skipped"
+
+    def _advance_predator_prey_trial(self, survival_ticks: int) -> None:
+        tuning = self._predator_prey_state.adaptive_tuning
+        phase = tuning.trial_phase
+        if phase == "baseline":
+            tuning.trial_baseline_results.append(int(survival_ticks))
+            tuning.trial_baseline_average = self._predator_prey_median(
+                tuning.trial_baseline_results
+            )
+            if len(tuning.trial_baseline_results) >= len(tuning.trial_seeds):
+                candidate_score = self._predator_prey_median(
+                    tuning.trial_candidate_results
+                )
+                baseline_score = self._predator_prey_median(
+                    tuning.trial_baseline_results
+                )
+                if candidate_score < baseline_score:
+                    tuning.current_values = dict(tuning.previous_values)
+                    tuning.last_decision = "reverted"
+                else:
+                    tuning.current_values = dict(tuning.trial_candidate_values)
+                    tuning.previous_values = dict(tuning.current_values)
+                    tuning.last_decision = "kept"
+                tuning.trial_active = False
+                tuning.trial_dial = None
+                tuning.trial_direction = 0
+                tuning.trial_baseline_average = 0.0
+                self._clear_predator_prey_trial_state(tuning)
+                self._apply_predator_prey_tuning_values(tuning.current_values)
+                return
+
+            tuning.trial_seed_index += 1
+            tuning.trial_phase = "candidate"
+            tuning.current_values = dict(tuning.trial_candidate_values)
+            self._apply_predator_prey_tuning_values(tuning.current_values)
+            return
+
+        tuning.trial_candidate_results.append(int(survival_ticks))
+        tuning.trial_phase = "baseline"
+        tuning.current_values = dict(tuning.previous_values)
+        self._apply_predator_prey_tuning_values(tuning.current_values)
+
+    def _clear_predator_prey_trial_state(
+        self,
+        tuning: PredatorPreyAdaptiveTuningState,
+    ) -> None:
+        tuning.trial_candidate_values = {}
+        tuning.trial_phase = "candidate"
+        tuning.trial_seeds = []
+        tuning.trial_seed_index = 0
+        tuning.trial_candidate_results = []
+        tuning.trial_baseline_results = []
 
     def update_predator_prey_runtime(self, now_seconds: float | None = None) -> bool:
         """Hold the game-over screen, then restart predator-prey with a new seed."""
@@ -1287,10 +1376,16 @@ class Simulation:
             tuning.baseline_values = dict(baseline_values)
         tuning.current_values = dict(baseline_values)
         tuning.previous_values = dict(baseline_values)
+        tuning.trial_candidate_values = {}
         tuning.trial_active = False
+        tuning.trial_phase = "candidate"
         tuning.trial_dial = None
         tuning.trial_direction = 0
         tuning.trial_baseline_average = 0.0
+        tuning.trial_seeds = []
+        tuning.trial_seed_index = 0
+        tuning.trial_candidate_results = []
+        tuning.trial_baseline_results = []
         tuning.last_decision = "reset_to_baseline"
         tuning.non_improving_run_streak = 0
         state.run_history.clear()
@@ -2426,10 +2521,16 @@ class Simulation:
                 "baseline_values": dict(tuning.baseline_values),
                 "current_values": dict(tuning.current_values),
                 "previous_values": dict(tuning.previous_values),
+                "trial_candidate_values": dict(tuning.trial_candidate_values),
                 "trial_active": tuning.trial_active,
+                "trial_phase": tuning.trial_phase,
                 "trial_dial": tuning.trial_dial,
                 "trial_direction": tuning.trial_direction,
                 "trial_baseline_average": tuning.trial_baseline_average,
+                "trial_seeds": list(tuning.trial_seeds),
+                "trial_seed_index": tuning.trial_seed_index,
+                "trial_candidate_results": list(tuning.trial_candidate_results),
+                "trial_baseline_results": list(tuning.trial_baseline_results),
                 "last_decision": tuning.last_decision,
                 "non_improving_run_streak": tuning.non_improving_run_streak,
             },
@@ -2446,10 +2547,16 @@ class Simulation:
                 "baseline_values": dict(tuning.baseline_values),
                 "current_values": dict(tuning.current_values),
                 "previous_values": dict(tuning.previous_values),
+                "trial_candidate_values": dict(tuning.trial_candidate_values),
                 "trial_active": tuning.trial_active,
+                "trial_phase": tuning.trial_phase,
                 "trial_dial": tuning.trial_dial,
                 "trial_direction": tuning.trial_direction,
                 "trial_baseline_average": tuning.trial_baseline_average,
+                "trial_seeds": list(tuning.trial_seeds),
+                "trial_seed_index": tuning.trial_seed_index,
+                "trial_candidate_results": list(tuning.trial_candidate_results),
+                "trial_baseline_results": list(tuning.trial_baseline_results),
                 "last_decision": tuning.last_decision,
                 "non_improving_run_streak": tuning.non_improving_run_streak,
             },
@@ -2513,12 +2620,37 @@ class Simulation:
             tuning.previous_values = self._serialize_predator_prey_dial_values(
                 tuning_payload.get("previous_values", tuning.current_values)
             )
+            candidate_values = tuning_payload.get("trial_candidate_values")
+            if isinstance(candidate_values, dict) and not candidate_values:
+                tuning.trial_candidate_values = {}
+            else:
+                tuning.trial_candidate_values = self._serialize_predator_prey_dial_values(
+                    candidate_values or tuning.current_values
+                )
             tuning.trial_active = bool(tuning_payload.get("trial_active", False))
+            tuning.trial_phase = str(
+                tuning_payload.get("trial_phase", tuning.trial_phase)
+            )
             tuning.trial_dial = tuning_payload.get("trial_dial")
             tuning.trial_direction = int(tuning_payload.get("trial_direction", 0))
             tuning.trial_baseline_average = float(
                 tuning_payload.get("trial_baseline_average", 0.0)
             )
+            tuning.trial_seeds = [
+                int(seed) for seed in tuning_payload.get("trial_seeds", [])
+            ]
+            tuning.trial_seed_index = max(
+                0,
+                int(tuning_payload.get("trial_seed_index", 0)),
+            )
+            tuning.trial_candidate_results = [
+                int(score)
+                for score in tuning_payload.get("trial_candidate_results", [])
+            ]
+            tuning.trial_baseline_results = [
+                int(score)
+                for score in tuning_payload.get("trial_baseline_results", [])
+            ]
             tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
             tuning.non_improving_run_streak = max(
                 0,
@@ -2559,12 +2691,31 @@ class Simulation:
         tuning.previous_values = self._serialize_predator_prey_dial_values(
             tuning_payload.get("previous_values", tuning.current_values)
         )
+        candidate_values = tuning_payload.get("trial_candidate_values")
+        if isinstance(candidate_values, dict) and not candidate_values:
+            tuning.trial_candidate_values = {}
+        else:
+            tuning.trial_candidate_values = self._serialize_predator_prey_dial_values(
+                candidate_values or tuning.current_values
+            )
         tuning.trial_active = bool(tuning_payload.get("trial_active", False))
+        tuning.trial_phase = str(tuning_payload.get("trial_phase", tuning.trial_phase))
         tuning.trial_dial = tuning_payload.get("trial_dial")
         tuning.trial_direction = int(tuning_payload.get("trial_direction", 0))
         tuning.trial_baseline_average = float(
             tuning_payload.get("trial_baseline_average", 0.0)
         )
+        tuning.trial_seeds = [int(seed) for seed in tuning_payload.get("trial_seeds", [])]
+        tuning.trial_seed_index = max(
+            0,
+            int(tuning_payload.get("trial_seed_index", 0)),
+        )
+        tuning.trial_candidate_results = [
+            int(score) for score in tuning_payload.get("trial_candidate_results", [])
+        ]
+        tuning.trial_baseline_results = [
+            int(score) for score in tuning_payload.get("trial_baseline_results", [])
+        ]
         tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
         tuning.non_improving_run_streak = max(
             0,
@@ -2700,7 +2851,12 @@ class Simulation:
         history = self._predator_prey_state.run_history
         if not history:
             return 0.0
-        return sum(history) / len(history)
+        return self._predator_prey_median(history)
+
+    def _predator_prey_median(self, values: deque[int] | list[int]) -> float:
+        if not values:
+            return 0.0
+        return float(median(values))
 
     @property
     def predator_prey_adjustment_step_multiplier(self) -> float:

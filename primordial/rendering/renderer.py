@@ -523,7 +523,7 @@ class Renderer:
             ),
             (
                 f"Survival ticks: {stats['survival_ticks']}   "
-                f"Rolling avg: {float(stats['collapse_rolling_average']):.0f}{beat_suffix}",
+                f"Rolling median: {float(stats['collapse_rolling_average']):.0f}{beat_suffix}",
                 survival_color,
             ),
             (

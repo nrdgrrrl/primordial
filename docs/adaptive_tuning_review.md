@@ -1,17 +1,20 @@
 # Predator-prey adaptive dial tuning review
 
-This note reviews the current "small adjustment + rerun" loop used in predator-prey mode and flags strengths, risks, and likely improvements.
+This note reviews the current predator-prey adaptive tuning loop and flags strengths, risks, and likely improvements.
 
 ## What the current loop does today (with concrete mechanics)
 
 1. A run ends only when predator or prey count reaches zero.
 2. The mode enters a red `GAME OVER` hold for **10 seconds**.
-3. On collapse, the run's `survival_ticks` are finalized, compared to the rolling average from `run_history`, and logged.
-4. If no trial is active and the run was below the rolling average, the next run starts a **one-dial trial**.
-5. The next completed run decides the trial:
-   - **keep** if `survival_ticks >= trial_baseline_average`
-   - **revert** if `survival_ticks < trial_baseline_average`
-6. The sim restarts with a new seed while preserving rolling stability/tuning state.
+3. On collapse, the run's `survival_ticks` are finalized, compared to the rolling median from `run_history`, and logged.
+4. If no trial is active and the run was below that rolling median, the mode starts a **one-dial multi-seed trial**.
+5. Each dial trial generates a fixed seed set and runs both:
+   - the candidate dial values on those seeds
+   - the unchanged baseline dial values on those same seeds
+6. The trial decision uses robust aggregates:
+   - **keep** if `median(candidate_survivals) >= median(baseline_survivals)`
+   - **revert** if `median(candidate_survivals) < median(baseline_survivals)`
+7. The sim restarts with those scheduled seeds while preserving rolling stability/tuning state.
 
 Important detail: ties are treated as success (`>=`), so "equal to baseline" keeps the change.
 
@@ -30,34 +33,48 @@ The adaptive loop mutates only these six predator-prey mode params:
 
 Every candidate change is clamped to `[min, max]`, so out-of-range moves are prevented.
 
-## Rolling average, rollback, and step escalation (specific numbers)
+## Rolling median, rollback, and step escalation (specific numbers)
 
-### Rolling average
+### Rolling median
 
 - `run_history` is a bounded deque.
 - Default history window: **20 runs** (`stability_history_size = 20`).
-- Rolling baseline used for comparisons is the arithmetic mean of the current deque.
+- Rolling baseline used for comparisons is the median of the current deque.
 
-So if your last 20 runs averaged 3200 ticks, that becomes the baseline for triggering trials and for evaluating whether a normal (non-trial) run is "improving".
+So if your last 20 runs have a median survival of 3200 ticks, that becomes the baseline for triggering trials and for evaluating whether a normal (non-trial) run is "improving".
 
 ### Trial start trigger
 
 A new trial starts only when all are true:
 
 - no trial currently active,
-- rolling average exists (`> 0`),
-- just-finished run is below rolling average.
+- rolling median exists (`> 0`),
+- just-finished run is below rolling median.
 
 Then one random dial and one random direction (`-1` or `+1`) is attempted, skipping no-op moves caused by clamping.
 
 ### Rollback/keep decision
 
-When the trial run ends:
+Default multi-seed evaluation config:
 
-- if `trial_survival < trial_baseline_average` → revert to `previous_values`
+- `adaptive_trial_seed_count = 3`
+
+For each selected seed:
+
+- run the candidate dial values on that seed,
+- run the unchanged baseline dial values on that same seed.
+
+Then compute:
+
+- `candidate_score = median(candidate_survivals)`
+- `baseline_score = median(baseline_survivals)`
+
+Decision rule:
+
+- if `candidate_score < baseline_score` → revert to `previous_values`
 - else (equal or better) → keep trial values
 
-This is a strict one-step A/B with immediate rollback capability.
+This is still a bounded one-dial A/B search, but it now uses same-seed median scoring instead of a single follow-up run.
 
 ### Step escalation
 
@@ -89,7 +106,7 @@ Example: `predator_contact_kill_distance_scale` base step is `0.03`; at streak 1
 
 ## Risks and blind spots
 
-- High-variance objective: run survival can vary significantly by seed and stochastic interactions; one-run accept/revert can overfit noise.
+- High-variance objective: run survival can still vary significantly by seed and stochastic interactions, even though same-seed median scoring reduces one-run noise.
 - Delayed coupling effects: one dial may help immediately but harm after several runs due to ecological feedback loops.
 - Scalar objective only: optimizing survival ticks alone can drift toward brittle or degenerate ecologies.
 - Myopic search: random one-dial perturbation ignores interactions among dials (cross terms).
@@ -98,34 +115,28 @@ Example: `predator_contact_kill_distance_scale` base step is `0.03`; at streak 1
 
 ## More detailed upgrades for your stated goal
 
-### 1) Multi-seed trial evaluation (recommended first)
+### 1) Multi-seed trial evaluation (implemented)
 
-Instead of deciding from a single trial run, evaluate each candidate on a small seed set.
+This is now in place.
 
-Suggested practical policy:
+Current policy:
 
 - keep your current candidate-generation logic (one dial, one signed step),
-- evaluate candidate on **k = 3 to 5** fixed seeds,
-- compute robust aggregate score (`median` preferred; mean also fine),
+- evaluate candidate on **k = 3** fixed seeds by default,
+- compute robust aggregate score with `median`,
 - compare against baseline aggregate on same seed set,
-- keep only if improvement clears a margin.
+- keep on ties, revert only when candidate median is lower.
 
-Decision rule example:
+Config:
 
-- `candidate_score = median(survival_ticks over k seeds)`
-- `baseline_score = median(current config over same k seeds)`
-- keep if `candidate_score >= baseline_score + max(50, 0.02 * baseline_score)`
+- `adaptive_trial_seed_count` controls `k`
+- minimum allowed value is `1`
 
 Why this helps:
 
 - controls RNG noise,
 - reduces false keeps/reverts,
 - makes tuning progress less streaky.
-
-Low-cost variant if full k-run trials are expensive:
-
-- run `k=2` quickly,
-- only if candidate looks better, run a 3rd confirmation seed.
 
 ### 2) Add ecological health to the objective (not just survival)
 
@@ -203,9 +214,8 @@ Better labels:
 
 ## Bottom line
 
-Your current approach is reasonable and safer than naive auto-tuning. For your goal (longer and longer hands-off stability), the highest-leverage upgrades are:
+Your current approach is reasonable and safer than naive auto-tuning. With rolling-median comparisons and multi-seed acceptance now in place, the highest-leverage remaining upgrades are:
 
-1. multi-seed/confirmation acceptance,
-2. a composite health-aware objective,
-3. occasional interaction-aware multi-dial trials,
-4. optional smarter dial selection from historical lift once enough logs accumulate.
+1. a composite health-aware objective,
+2. occasional interaction-aware multi-dial trials,
+3. optional smarter dial selection from historical lift once enough logs accumulate.

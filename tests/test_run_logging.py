@@ -22,6 +22,7 @@ class RunLoggingTests(unittest.TestCase):
         settings.food_max_particles = 32
         settings.zone_count = 0
         settings.mode_params["predator_prey"]["initial_population"] = 0
+        settings.mode_params["predator_prey"]["adaptive_trial_seed_count"] = 1
         return settings
 
     def _build_simulation(self) -> Simulation:
@@ -45,10 +46,13 @@ class RunLoggingTests(unittest.TestCase):
         tuning = simulation._predator_prey_state.adaptive_tuning
         tuning.previous_values["predator_contact_kill_distance_scale"] = 1.00
         tuning.current_values["predator_contact_kill_distance_scale"] = 0.97
+        tuning.trial_candidate_values["predator_contact_kill_distance_scale"] = 0.97
         tuning.trial_active = True
+        tuning.trial_phase = "candidate"
         tuning.trial_dial = "predator_contact_kill_distance_scale"
         tuning.trial_direction = -1
         tuning.trial_baseline_average = 100.0
+        tuning.trial_seeds = [111]
         tuning.last_decision = "trial_started"
         simulation._apply_predator_prey_tuning_values(tuning.current_values)
 
@@ -86,8 +90,8 @@ class RunLoggingTests(unittest.TestCase):
             completed["current_dial_predator_contact_kill_distance_scale"],
             "1.0",
         )
-        self.assertEqual(completed["post_run_trial_decision"], "reverted")
-        self.assertEqual(completed["next_trial_active"], "False")
+        self.assertEqual(completed["post_run_trial_decision"], "trial_started")
+        self.assertEqual(completed["next_trial_active"], "True")
         self.assertEqual(completed["run_history"], "100|100|100|90")
 
         reset = rows[1]
