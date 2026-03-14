@@ -275,6 +275,10 @@ class LoopTimingCollector:
             },
         }
 
+    def get_samples(self, name: str) -> list[float]:
+        """Return a copy of retained samples for the requested metric."""
+        return list(self._samples[name])
+
     def _summarize_samples(self, name: str) -> dict[str, float | int]:
         samples = self._samples[name]
         if not samples:
@@ -282,16 +286,26 @@ class LoopTimingCollector:
                 "count": 0,
                 "min": 0.0,
                 "mean": 0.0,
+                "median": 0.0,
                 "p95": 0.0,
+                "p99": 0.0,
                 "max": 0.0,
             }
         ordered = sorted(samples)
-        index = min(len(ordered) - 1, int(0.95 * (len(ordered) - 1)))
+        p95_index = min(len(ordered) - 1, int(0.95 * (len(ordered) - 1)))
+        p99_index = min(len(ordered) - 1, int(0.99 * (len(ordered) - 1)))
+        middle = len(ordered) // 2
+        if len(ordered) % 2 == 0:
+            median = (ordered[middle - 1] + ordered[middle]) / 2.0
+        else:
+            median = ordered[middle]
         return {
             "count": len(ordered),
             "min": ordered[0],
             "mean": sum(ordered) / len(ordered),
-            "p95": ordered[index],
+            "median": median,
+            "p95": ordered[p95_index],
+            "p99": ordered[p99_index],
             "max": ordered[-1],
         }
 

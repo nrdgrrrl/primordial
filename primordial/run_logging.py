@@ -28,6 +28,9 @@ _BASE_FIELDNAMES = [
     "seed",
     "sim_ticks",
     "survival_ticks",
+    "predator_low_ticks",
+    "prey_low_ticks",
+    "near_extinction_pressure",
     "collapse_cause",
     "collapse_predators",
     "collapse_prey",
@@ -44,6 +47,16 @@ _BASE_FIELDNAMES = [
     "run_trial_delta",
     "run_trial_value",
     "run_trial_baseline_average",
+    "trial_id",
+    "run_evaluation_role",
+    "verification_seed",
+    "survival_deadband",
+    "decision_basis",
+    "keep_revert_outcome",
+    "survival_median_candidate",
+    "survival_median_baseline",
+    "near_extinction_candidate",
+    "near_extinction_baseline",
     "post_run_trial_decision",
     "next_trial_active",
     "next_trial_dial",
@@ -85,6 +98,9 @@ class PredatorPreyCSVRunLogger:
     def log_completed_run(self, simulation: "Simulation") -> None:
         self._append_row(self._build_completed_run_row(simulation))
 
+    def log_trial_decision(self, simulation: "Simulation") -> None:
+        self._append_row(self._build_trial_decision_row(simulation))
+
     def log_dial_reset(
         self,
         simulation: "Simulation",
@@ -102,9 +118,11 @@ class PredatorPreyCSVRunLogger:
         baseline_dials = adaptive.get("baseline_values", {}) or {}
         pred_actual_speed, prey_actual_speed = simulation.get_species_avg_actual_speeds()
         predation = simulation.get_recent_predation_stats()
-        run_was_trial = bool(stats.get("collapse_trial_dial")) and float(
-            stats.get("collapse_trial_delta", 0.0)
-        ) != 0.0
+        run_was_trial = stats.get("collapse_trial_role") in {"candidate", "baseline"}
+        decision_completed = (
+            run_was_trial
+            and adaptive.get("last_decision") in {"kept", "reverted"}
+        )
         row = self._base_row(
             event_type="run_complete",
             event_note="species_collapse",
@@ -125,6 +143,62 @@ class PredatorPreyCSVRunLogger:
                 "run_trial_baseline_average": (
                     self._float_or_none(stats.get("collapse_rolling_average"))
                     if run_was_trial
+                    else None
+                ),
+                "trial_id": (
+                    stats.get("collapse_trial_id")
+                    if run_was_trial
+                    else None
+                ),
+                "run_evaluation_role": (
+                    stats.get("collapse_trial_role")
+                    if run_was_trial
+                    else None
+                ),
+                "verification_seed": (
+                    stats.get("collapse_trial_seed")
+                    if run_was_trial
+                    else None
+                ),
+                "survival_deadband": self._float_or_none(
+                    stats.get("survival_deadband")
+                ),
+                "decision_basis": (
+                    stats.get("trial_last_decision_basis")
+                    if decision_completed
+                    else None
+                ),
+                "keep_revert_outcome": (
+                    adaptive.get("last_decision")
+                    if decision_completed
+                    else None
+                ),
+                "survival_median_candidate": (
+                    self._float_or_none(
+                        stats.get("trial_last_survival_median_candidate")
+                    )
+                    if decision_completed
+                    else None
+                ),
+                "survival_median_baseline": (
+                    self._float_or_none(
+                        stats.get("trial_last_survival_median_baseline")
+                    )
+                    if decision_completed
+                    else None
+                ),
+                "near_extinction_candidate": (
+                    self._float_or_none(
+                        stats.get("trial_last_near_extinction_candidate")
+                    )
+                    if decision_completed
+                    else None
+                ),
+                "near_extinction_baseline": (
+                    self._float_or_none(
+                        stats.get("trial_last_near_extinction_baseline")
+                    )
+                    if decision_completed
                     else None
                 ),
                 "post_run_trial_decision": adaptive.get("last_decision"),
@@ -160,6 +234,84 @@ class PredatorPreyCSVRunLogger:
         )
         return row
 
+    def _build_trial_decision_row(self, simulation: "Simulation") -> dict[str, Any]:
+        stats = simulation.get_predator_prey_stability_stats()
+        runtime_state = simulation.export_predator_prey_runtime_state()
+        adaptive = runtime_state.get("adaptive_tuning", {})
+        run_dials = stats.get("collapse_dial_values", {}) or {}
+        current_dials = adaptive.get("current_values", {}) or {}
+        baseline_dials = adaptive.get("baseline_values", {}) or {}
+        row = self._base_row(
+            event_type="trial_decision",
+            event_note="adaptive_trial_complete",
+            simulation=simulation,
+            stats=stats,
+        )
+        row.update(
+            {
+                "run_was_trial": True,
+                "run_trial_dial": stats.get("collapse_trial_dial"),
+                "run_trial_direction": stats.get("collapse_trial_direction"),
+                "run_trial_delta": self._float_or_none(
+                    stats.get("collapse_trial_delta")
+                ),
+                "run_trial_value": self._float_or_none(
+                    stats.get("collapse_trial_value")
+                ),
+                "run_trial_baseline_average": self._float_or_none(
+                    stats.get("collapse_rolling_average")
+                ),
+                "trial_id": stats.get("trial_last_decision_trial_id"),
+                "run_evaluation_role": stats.get("collapse_trial_role"),
+                "verification_seed": stats.get("collapse_trial_seed"),
+                "survival_deadband": self._float_or_none(
+                    stats.get("survival_deadband")
+                ),
+                "decision_basis": stats.get("trial_last_decision_basis"),
+                "keep_revert_outcome": adaptive.get("last_decision"),
+                "survival_median_candidate": self._float_or_none(
+                    stats.get("trial_last_survival_median_candidate")
+                ),
+                "survival_median_baseline": self._float_or_none(
+                    stats.get("trial_last_survival_median_baseline")
+                ),
+                "near_extinction_candidate": self._float_or_none(
+                    stats.get("trial_last_near_extinction_candidate")
+                ),
+                "near_extinction_baseline": self._float_or_none(
+                    stats.get("trial_last_near_extinction_baseline")
+                ),
+                "post_run_trial_decision": adaptive.get("last_decision"),
+                "next_trial_active": bool(stats.get("trial_active", False)),
+                "next_trial_dial": stats.get("trial_dial"),
+                "next_trial_direction": stats.get("trial_direction"),
+                "next_trial_baseline_average": self._float_or_none(
+                    stats.get("trial_baseline_average")
+                ),
+                "non_improving_run_streak": int(
+                    stats.get("non_improving_run_streak", 0)
+                ),
+                "adjustment_step_multiplier": self._float_or_none(
+                    stats.get("adjustment_step_multiplier")
+                ),
+                "adjustment_step_increase_percent": self._float_or_none(
+                    stats.get("adjustment_step_increase_percent")
+                ),
+                "predator_actual_speed": None,
+                "prey_actual_speed": None,
+                "recent_kills": None,
+                "recent_cross_band_misses": None,
+                "total_kills": None,
+            }
+        )
+        self._add_dial_columns(
+            row,
+            run_dials=run_dials,
+            current_dials=current_dials,
+            baseline_dials=baseline_dials,
+        )
+        return row
+
     def _build_reset_row(
         self,
         simulation: "Simulation",
@@ -185,6 +337,18 @@ class PredatorPreyCSVRunLogger:
                 "run_trial_delta": None,
                 "run_trial_value": None,
                 "run_trial_baseline_average": None,
+                "trial_id": None,
+                "run_evaluation_role": None,
+                "verification_seed": None,
+                "survival_deadband": self._float_or_none(
+                    stats.get("survival_deadband")
+                ),
+                "decision_basis": None,
+                "keep_revert_outcome": None,
+                "survival_median_candidate": None,
+                "survival_median_baseline": None,
+                "near_extinction_candidate": None,
+                "near_extinction_baseline": None,
                 "post_run_trial_decision": adaptive.get("last_decision"),
                 "next_trial_active": bool(stats.get("trial_active", False)),
                 "next_trial_dial": stats.get("trial_dial"),
@@ -233,6 +397,11 @@ class PredatorPreyCSVRunLogger:
             "seed": stats.get("current_seed"),
             "sim_ticks": int(stats.get("sim_ticks", 0)),
             "survival_ticks": int(stats.get("survival_ticks", 0)),
+            "predator_low_ticks": int(stats.get("predator_low_ticks", 0)),
+            "prey_low_ticks": int(stats.get("prey_low_ticks", 0)),
+            "near_extinction_pressure": int(
+                stats.get("near_extinction_pressure", 0)
+            ),
             "collapse_cause": stats.get("collapse_cause"),
             "collapse_predators": int(stats.get("collapse_predators", 0)),
             "collapse_prey": int(stats.get("collapse_prey", 0)),

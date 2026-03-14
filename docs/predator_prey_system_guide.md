@@ -169,7 +169,7 @@ The ecosystem has several explicit balancing mechanisms:
 2. **Predator reproduction penalty**: when predator fraction > 60%, predator reproduction threshold increases by 20% — slowing predator reproduction
 3. **Cosmic ray species flips**: a cosmic ray mutation to aggression that crosses the 0.5 threshold flips a creature's species identity — providing a trickle of cross-species conversion
 4. **Depth bands**: prey can escape into different bands, creating spatial refugia that prevent predators from achieving 100% kill efficiency
-5. **Run-to-run adaptive dials**: after a below-median collapse, one bounded ecological dial is nudged for a same-seed trial sequence. "Below median" means below the rolling median of the configured run-history window, not below the highest record. Each candidate is evaluated against the unchanged baseline on the same seed set, and the candidate is kept only if its median survival meets or beats the baseline median. The seed-pair count defaults to `3` and can be overridden with `adaptive_trial_seed_count`. If the sim keeps failing to beat the rolling median for long enough, the trial step size is scaled up by a user-configurable percentage.
+5. **Run-to-run adaptive dials**: after a below-median collapse, one bounded ecological dial is nudged for a same-seed trial sequence. "Below median" means below the rolling median of the configured run-history window, not below the highest record. Each candidate is evaluated against the unchanged baseline on the same seed set, and the candidate is kept or reverted using the median survival from those runs. The seed-pair count defaults to `2` and can be overridden with `adaptive_trial_seed_count`. Survival remains the primary objective. If the candidate and baseline survival medians are within `adaptive_survival_deadband` ticks (`50` by default), lower near-extinction pressure wins, where near-extinction pressure is `predator_low_ticks + prey_low_ticks` counted below the configurable predator/prey floors. If both medians are still tied, the existing keep-on-tie behavior is preserved when candidate survival meets baseline; otherwise the candidate is reverted. If the sim keeps failing to beat the rolling median for long enough, the trial step size is scaled up by a user-configurable percentage.
 
 There is no normal extinction rescue anymore. If predators or prey hit zero, the run is considered failed.
 
@@ -367,10 +367,15 @@ Predator_prey snapshots persist more than the world state. They also save:
 
 If the app is launched with `--log=csv`, predator_prey appends analysis rows to
 `run_logs/predator_prey_runs.csv`. Each completed run writes one `run_complete`
-row with the run seed, `sim_ticks`, survival, collapse result, rolling-median
-comparison, trial metadata, and the adaptive dial values used during that run.
-Manual dial resets write a `dial_reset` row so offline analysis can identify
-where the tuning history was cleared.
+row with the run seed, `sim_ticks`, `survival_ticks`, `predator_low_ticks`,
+`prey_low_ticks`, `near_extinction_pressure`, rolling-median comparison, trial
+metadata, and the adaptive dial values used during that run. Each completed
+adaptive trial also writes a `trial_decision` row with the candidate/baseline
+survival medians, candidate/baseline near-extinction medians, the deadband
+used, the decision basis (`survival`, `near_extinction_tiebreak`,
+`exact_tie_keep_candidate`, or `exact_tie_revert_candidate`), and the final
+keep/revert outcome. Manual dial resets write a `dial_reset` row so offline
+analysis can identify where the tuning history was cleared.
 
 Even without a world snapshot, the adaptive tuning state is written on app exit
 and restored on the next launch so dial progress carries forward between sessions.

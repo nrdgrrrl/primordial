@@ -49,7 +49,10 @@ _DEFAULT_PREDATOR_PREY_HISTORY_SIZE = 20
 _PREDATOR_PREY_GAME_OVER_HOLD_SECONDS = 10.0
 _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_RUNS = 5
 _DEFAULT_PREDATOR_PREY_STEP_ESCALATION_PERCENT = 25.0
-_DEFAULT_PREDATOR_PREY_TRIAL_COUNT = 3
+_DEFAULT_PREDATOR_PREY_TRIAL_COUNT = 2
+_DEFAULT_PREDATOR_PREY_SURVIVAL_DEADBAND = 50
+_DEFAULT_PREDATOR_NEAR_EXTINCTION_FLOOR = 5
+_DEFAULT_PREY_NEAR_EXTINCTION_FLOOR = 5
 
 
 @dataclass(frozen=True)
@@ -72,11 +75,22 @@ class PredatorPreyAdaptiveTuningState:
     trial_dial: str | None = None
     trial_direction: int = 0
     trial_baseline_average: float = 0.0
+    trial_id: int | None = None
+    next_trial_id: int = 1
     trial_seeds: list[int] = field(default_factory=list)
     trial_seed_index: int = 0
     trial_candidate_results: list[int] = field(default_factory=list)
     trial_baseline_results: list[int] = field(default_factory=list)
+    trial_candidate_pressures: list[int] = field(default_factory=list)
+    trial_baseline_pressures: list[int] = field(default_factory=list)
     last_decision: str = "none"
+    last_decision_basis: str | None = None
+    last_decision_trial_id: int | None = None
+    last_decision_survival_median_candidate: float | None = None
+    last_decision_survival_median_baseline: float | None = None
+    last_decision_near_extinction_candidate: float | None = None
+    last_decision_near_extinction_baseline: float | None = None
+    last_decision_pending_log: bool = False
     non_improving_run_streak: int = 0
 
 
@@ -85,6 +99,8 @@ class PredatorPreyStabilityState:
     current_seed: int | None = None
     sim_ticks: int = 0
     survival_ticks: int = 0
+    predator_low_ticks: int = 0
+    prey_low_ticks: int = 0
     run_history: deque[int] = field(
         default_factory=lambda: deque(maxlen=_DEFAULT_PREDATOR_PREY_HISTORY_SIZE)
     )
@@ -96,6 +112,9 @@ class PredatorPreyStabilityState:
     collapse_started_at_seconds: float | None = None
     collapse_dial_values: dict[str, float] = field(default_factory=dict)
     collapse_trial_dial: str | None = None
+    collapse_trial_phase: str | None = None
+    collapse_trial_seed: int | None = None
+    collapse_trial_id: int | None = None
     collapse_trial_delta: float = 0.0
     collapse_trial_value: float | None = None
     collapse_trial_decision: str = "none"
@@ -184,6 +203,7 @@ class Simulation:
         self.height = height
         self.settings = settings
         self._predator_prey_run_logger: Any = None
+        self._predator_prey_adaptive_tuning_enabled = True
         if seed is not None and self.settings.sim_mode == "predator_prey":
             random.seed(seed)
 
@@ -249,6 +269,10 @@ class Simulation:
     def set_predator_prey_run_logger(self, run_logger: Any) -> None:
         """Attach an optional run logger used by predator-prey stability mode."""
         self._predator_prey_run_logger = run_logger
+
+    def set_predator_prey_adaptive_tuning_enabled(self, enabled: bool) -> None:
+        """Enable or freeze predator-prey adaptive tuning updates."""
+        self._predator_prey_adaptive_tuning_enabled = bool(enabled)
 
     # ------------------------------------------------------------------
     # Mode parameter helpers
@@ -361,6 +385,39 @@ class Simulation:
                 self._get_mode_param(
                     "adaptive_trial_seed_count",
                     _DEFAULT_PREDATOR_PREY_TRIAL_COUNT,
+                )
+            ),
+        )
+
+    def _get_predator_prey_survival_deadband(self) -> int:
+        return max(
+            0,
+            int(
+                self._get_mode_param(
+                    "adaptive_survival_deadband",
+                    _DEFAULT_PREDATOR_PREY_SURVIVAL_DEADBAND,
+                )
+            ),
+        )
+
+    def _get_predator_near_extinction_floor(self) -> int:
+        return max(
+            0,
+            int(
+                self._get_mode_param(
+                    "adaptive_near_extinction_predator_floor",
+                    _DEFAULT_PREDATOR_NEAR_EXTINCTION_FLOOR,
+                )
+            ),
+        )
+
+    def _get_prey_near_extinction_floor(self) -> int:
+        return max(
+            0,
+            int(
+                self._get_mode_param(
+                    "adaptive_near_extinction_prey_floor",
+                    _DEFAULT_PREY_NEAR_EXTINCTION_FLOOR,
                 )
             ),
         )
@@ -639,6 +696,8 @@ class Simulation:
         state.current_seed = seed
         state.sim_ticks = 0
         state.survival_ticks = 0
+        state.predator_low_ticks = 0
+        state.prey_low_ticks = 0
         state.game_over_active = False
         state.collapse_cause = None
         state.collapse_predator_count = 0
@@ -646,6 +705,9 @@ class Simulation:
         state.collapse_started_at_seconds = None
         state.collapse_dial_values = {}
         state.collapse_trial_dial = None
+        state.collapse_trial_phase = None
+        state.collapse_trial_seed = None
+        state.collapse_trial_id = None
         state.collapse_trial_delta = 0.0
         state.collapse_trial_value = None
         state.collapse_trial_decision = "none"
@@ -1161,6 +1223,11 @@ class Simulation:
             return
 
         pred_count, prey_count = self.get_species_counts()
+        state = self._predator_prey_state
+        if pred_count < self._get_predator_near_extinction_floor():
+            state.predator_low_ticks += 1
+        if prey_count < self._get_prey_near_extinction_floor():
+            state.prey_low_ticks += 1
         if pred_count > 0 and prey_count > 0:
             return
 
@@ -1200,7 +1267,13 @@ class Simulation:
         state.collapse_trial_decision = tuning.last_decision
         state.collapse_rolling_average = prior_average
         state.collapse_beat_average = prior_average > 0 and state.survival_ticks > prior_average
-        state.collapse_trial_dial = None
+        state.collapse_trial_dial = tuning.trial_dial if tuning.trial_active else None
+        state.collapse_trial_phase = tuning.trial_phase if tuning.trial_active else None
+        state.collapse_trial_seed = None
+        state.collapse_trial_id = tuning.trial_id if tuning.trial_active else None
+        if tuning.trial_active and tuning.trial_seeds:
+            index = min(max(tuning.trial_seed_index, 0), len(tuning.trial_seeds) - 1)
+            state.collapse_trial_seed = int(tuning.trial_seeds[index])
         if tuning.trial_active and tuning.trial_dial is not None:
             previous_value = tuning.previous_values.get(
                 tuning.trial_dial,
@@ -1208,13 +1281,8 @@ class Simulation:
             )
             current_value = tuning.current_values.get(tuning.trial_dial, previous_value)
             delta = round(current_value - previous_value, 4)
-            if not math.isclose(delta, 0.0, abs_tol=1e-9):
-                state.collapse_trial_dial = tuning.trial_dial
-                state.collapse_trial_delta = delta
-                state.collapse_trial_value = current_value
-            else:
-                state.collapse_trial_delta = 0.0
-                state.collapse_trial_value = None
+            state.collapse_trial_delta = delta
+            state.collapse_trial_value = current_value
         else:
             state.collapse_trial_delta = 0.0
             state.collapse_trial_value = None
@@ -1228,7 +1296,7 @@ class Simulation:
         state.collapse_was_new_highest = survival_ticks > state.highest_survival_ticks
         state.highest_survival_ticks = max(state.highest_survival_ticks, survival_ticks)
 
-        if was_trial:
+        if was_trial and self._predator_prey_adaptive_tuning_enabled:
             self._advance_predator_prey_trial(survival_ticks)
 
         if prior_average > 0:
@@ -1241,11 +1309,19 @@ class Simulation:
 
         state.run_history.append(int(survival_ticks))
 
-        if not was_trial and prior_average > 0 and survival_ticks < prior_average:
+        if (
+            not was_trial
+            and self._predator_prey_adaptive_tuning_enabled
+            and prior_average > 0
+            and survival_ticks < prior_average
+        ):
             self._start_predator_prey_trial(prior_average)
 
         if self._predator_prey_run_logger is not None:
             self._predator_prey_run_logger.log_completed_run(self)
+            if tuning.last_decision_pending_log:
+                self._predator_prey_run_logger.log_trial_decision(self)
+                tuning.last_decision_pending_log = False
 
     def _start_predator_prey_trial(self, baseline_average: float) -> None:
         tuning = self._predator_prey_state.adaptive_tuning
@@ -1275,6 +1351,8 @@ class Simulation:
                 tuning.trial_dial = spec.key
                 tuning.trial_direction = direction
                 tuning.trial_baseline_average = baseline_average
+                tuning.trial_id = tuning.next_trial_id
+                tuning.next_trial_id += 1
                 tuning.trial_seeds = [
                     self._generate_predator_prey_seed()
                     for _ in range(self._get_predator_prey_trial_count())
@@ -1282,17 +1360,29 @@ class Simulation:
                 tuning.trial_seed_index = 0
                 tuning.trial_candidate_results = []
                 tuning.trial_baseline_results = []
+                tuning.trial_candidate_pressures = []
+                tuning.trial_baseline_pressures = []
                 tuning.last_decision = "trial_started"
+                tuning.last_decision_basis = None
+                tuning.last_decision_trial_id = None
+                tuning.last_decision_survival_median_candidate = None
+                tuning.last_decision_survival_median_baseline = None
+                tuning.last_decision_near_extinction_candidate = None
+                tuning.last_decision_near_extinction_baseline = None
+                tuning.last_decision_pending_log = False
                 self._apply_predator_prey_tuning_values(tuning.current_values)
                 return
 
         tuning.last_decision = "trial_skipped"
 
     def _advance_predator_prey_trial(self, survival_ticks: int) -> None:
+        state = self._predator_prey_state
         tuning = self._predator_prey_state.adaptive_tuning
         phase = tuning.trial_phase
+        run_pressure = state.predator_low_ticks + state.prey_low_ticks
         if phase == "baseline":
             tuning.trial_baseline_results.append(int(survival_ticks))
+            tuning.trial_baseline_pressures.append(int(run_pressure))
             tuning.trial_baseline_average = self._predator_prey_median(
                 tuning.trial_baseline_results
             )
@@ -1303,7 +1393,26 @@ class Simulation:
                 baseline_score = self._predator_prey_median(
                     tuning.trial_baseline_results
                 )
-                if candidate_score < baseline_score:
+                candidate_pressure = self._predator_prey_median(
+                    tuning.trial_candidate_pressures
+                )
+                baseline_pressure = self._predator_prey_median(
+                    tuning.trial_baseline_pressures
+                )
+                keep_candidate, decision_basis = self._decide_predator_prey_trial_winner(
+                    candidate_score=candidate_score,
+                    baseline_score=baseline_score,
+                    candidate_pressure=candidate_pressure,
+                    baseline_pressure=baseline_pressure,
+                )
+                tuning.last_decision_basis = decision_basis
+                tuning.last_decision_trial_id = tuning.trial_id
+                tuning.last_decision_survival_median_candidate = candidate_score
+                tuning.last_decision_survival_median_baseline = baseline_score
+                tuning.last_decision_near_extinction_candidate = candidate_pressure
+                tuning.last_decision_near_extinction_baseline = baseline_pressure
+                tuning.last_decision_pending_log = True
+                if not keep_candidate:
                     tuning.current_values = dict(tuning.previous_values)
                     tuning.last_decision = "reverted"
                 else:
@@ -1325,9 +1434,29 @@ class Simulation:
             return
 
         tuning.trial_candidate_results.append(int(survival_ticks))
+        tuning.trial_candidate_pressures.append(int(run_pressure))
         tuning.trial_phase = "baseline"
         tuning.current_values = dict(tuning.previous_values)
         self._apply_predator_prey_tuning_values(tuning.current_values)
+
+    def _decide_predator_prey_trial_winner(
+        self,
+        *,
+        candidate_score: float,
+        baseline_score: float,
+        candidate_pressure: float,
+        baseline_pressure: float,
+    ) -> tuple[bool, str]:
+        survival_diff = candidate_score - baseline_score
+        if abs(survival_diff) > self._get_predator_prey_survival_deadband():
+            return (candidate_score >= baseline_score, "survival")
+        if candidate_pressure < baseline_pressure:
+            return (True, "near_extinction_tiebreak")
+        if candidate_pressure > baseline_pressure:
+            return (False, "near_extinction_tiebreak")
+        if candidate_score >= baseline_score:
+            return (True, "exact_tie_keep_candidate")
+        return (False, "exact_tie_revert_candidate")
 
     def _clear_predator_prey_trial_state(
         self,
@@ -1335,10 +1464,13 @@ class Simulation:
     ) -> None:
         tuning.trial_candidate_values = {}
         tuning.trial_phase = "candidate"
+        tuning.trial_id = None
         tuning.trial_seeds = []
         tuning.trial_seed_index = 0
         tuning.trial_candidate_results = []
         tuning.trial_baseline_results = []
+        tuning.trial_candidate_pressures = []
+        tuning.trial_baseline_pressures = []
 
     def update_predator_prey_runtime(self, now_seconds: float | None = None) -> bool:
         """Hold the game-over screen, then restart predator-prey with a new seed."""
@@ -1382,16 +1514,31 @@ class Simulation:
         tuning.trial_dial = None
         tuning.trial_direction = 0
         tuning.trial_baseline_average = 0.0
+        tuning.trial_id = None
         tuning.trial_seeds = []
         tuning.trial_seed_index = 0
         tuning.trial_candidate_results = []
         tuning.trial_baseline_results = []
+        tuning.trial_candidate_pressures = []
+        tuning.trial_baseline_pressures = []
         tuning.last_decision = "reset_to_baseline"
+        tuning.last_decision_basis = None
+        tuning.last_decision_trial_id = None
+        tuning.last_decision_survival_median_candidate = None
+        tuning.last_decision_survival_median_baseline = None
+        tuning.last_decision_near_extinction_candidate = None
+        tuning.last_decision_near_extinction_baseline = None
+        tuning.last_decision_pending_log = False
         tuning.non_improving_run_streak = 0
         state.run_history.clear()
         state.highest_survival_ticks = 0
+        state.predator_low_ticks = 0
+        state.prey_low_ticks = 0
         state.collapse_dial_values = {}
         state.collapse_trial_dial = None
+        state.collapse_trial_phase = None
+        state.collapse_trial_seed = None
+        state.collapse_trial_id = None
         state.collapse_trial_delta = 0.0
         state.collapse_trial_value = None
         state.collapse_trial_decision = "none"
@@ -2458,15 +2605,34 @@ class Simulation:
             "current_seed": state.current_seed,
             "sim_ticks": state.sim_ticks,
             "survival_ticks": state.survival_ticks,
+            "predator_low_ticks": state.predator_low_ticks,
+            "prey_low_ticks": state.prey_low_ticks,
+            "near_extinction_pressure": state.predator_low_ticks + state.prey_low_ticks,
             "rolling_average_survival_ticks": self.predator_prey_rolling_average,
             "best_recent_survival_ticks": self.predator_prey_best_recent_ticks,
             "history_window_size": self._get_predator_prey_history_size(),
             "highest_survival_ticks": state.highest_survival_ticks,
             "trial_active": state.adaptive_tuning.trial_active,
+            "trial_id": state.adaptive_tuning.trial_id,
             "trial_dial": state.adaptive_tuning.trial_dial,
             "trial_direction": trial_direction,
             "trial_baseline_average": state.adaptive_tuning.trial_baseline_average,
             "trial_last_decision": state.adaptive_tuning.last_decision,
+            "trial_last_decision_basis": state.adaptive_tuning.last_decision_basis,
+            "trial_last_decision_trial_id": state.adaptive_tuning.last_decision_trial_id,
+            "trial_last_survival_median_candidate": (
+                state.adaptive_tuning.last_decision_survival_median_candidate
+            ),
+            "trial_last_survival_median_baseline": (
+                state.adaptive_tuning.last_decision_survival_median_baseline
+            ),
+            "trial_last_near_extinction_candidate": (
+                state.adaptive_tuning.last_decision_near_extinction_candidate
+            ),
+            "trial_last_near_extinction_baseline": (
+                state.adaptive_tuning.last_decision_near_extinction_baseline
+            ),
+            "survival_deadband": self._get_predator_prey_survival_deadband(),
             "non_improving_run_streak": state.adaptive_tuning.non_improving_run_streak,
             "adjustment_step_multiplier": self.predator_prey_adjustment_step_multiplier,
             "adjustment_step_increase_percent": (
@@ -2484,6 +2650,9 @@ class Simulation:
             "collapse_prey": state.collapse_prey_count,
             "collapse_dial_values": dict(state.collapse_dial_values),
             "collapse_trial_dial": state.collapse_trial_dial,
+            "collapse_trial_role": state.collapse_trial_phase,
+            "collapse_trial_seed": state.collapse_trial_seed,
+            "collapse_trial_id": state.collapse_trial_id,
             "collapse_trial_delta": state.collapse_trial_delta,
             "collapse_trial_direction": collapse_trial_direction,
             "collapse_trial_value": state.collapse_trial_value,
@@ -2501,6 +2670,8 @@ class Simulation:
             "current_seed": state.current_seed,
             "sim_ticks": state.sim_ticks,
             "survival_ticks": state.survival_ticks,
+            "predator_low_ticks": state.predator_low_ticks,
+            "prey_low_ticks": state.prey_low_ticks,
             "run_history": list(state.run_history),
             "highest_survival_ticks": state.highest_survival_ticks,
             "game_over": {
@@ -2510,6 +2681,9 @@ class Simulation:
                 "prey": state.collapse_prey_count,
                 "dial_values": dict(state.collapse_dial_values),
                 "trial_dial": state.collapse_trial_dial,
+                "trial_role": state.collapse_trial_phase,
+                "trial_seed": state.collapse_trial_seed,
+                "trial_id": state.collapse_trial_id,
                 "trial_delta": state.collapse_trial_delta,
                 "trial_value": state.collapse_trial_value,
                 "trial_decision": state.collapse_trial_decision,
@@ -2527,11 +2701,29 @@ class Simulation:
                 "trial_dial": tuning.trial_dial,
                 "trial_direction": tuning.trial_direction,
                 "trial_baseline_average": tuning.trial_baseline_average,
+                "trial_id": tuning.trial_id,
+                "next_trial_id": tuning.next_trial_id,
                 "trial_seeds": list(tuning.trial_seeds),
                 "trial_seed_index": tuning.trial_seed_index,
                 "trial_candidate_results": list(tuning.trial_candidate_results),
                 "trial_baseline_results": list(tuning.trial_baseline_results),
+                "trial_candidate_pressures": list(tuning.trial_candidate_pressures),
+                "trial_baseline_pressures": list(tuning.trial_baseline_pressures),
                 "last_decision": tuning.last_decision,
+                "last_decision_basis": tuning.last_decision_basis,
+                "last_decision_trial_id": tuning.last_decision_trial_id,
+                "last_decision_survival_median_candidate": (
+                    tuning.last_decision_survival_median_candidate
+                ),
+                "last_decision_survival_median_baseline": (
+                    tuning.last_decision_survival_median_baseline
+                ),
+                "last_decision_near_extinction_candidate": (
+                    tuning.last_decision_near_extinction_candidate
+                ),
+                "last_decision_near_extinction_baseline": (
+                    tuning.last_decision_near_extinction_baseline
+                ),
                 "non_improving_run_streak": tuning.non_improving_run_streak,
             },
         }
@@ -2553,11 +2745,29 @@ class Simulation:
                 "trial_dial": tuning.trial_dial,
                 "trial_direction": tuning.trial_direction,
                 "trial_baseline_average": tuning.trial_baseline_average,
+                "trial_id": tuning.trial_id,
+                "next_trial_id": tuning.next_trial_id,
                 "trial_seeds": list(tuning.trial_seeds),
                 "trial_seed_index": tuning.trial_seed_index,
                 "trial_candidate_results": list(tuning.trial_candidate_results),
                 "trial_baseline_results": list(tuning.trial_baseline_results),
+                "trial_candidate_pressures": list(tuning.trial_candidate_pressures),
+                "trial_baseline_pressures": list(tuning.trial_baseline_pressures),
                 "last_decision": tuning.last_decision,
+                "last_decision_basis": tuning.last_decision_basis,
+                "last_decision_trial_id": tuning.last_decision_trial_id,
+                "last_decision_survival_median_candidate": (
+                    tuning.last_decision_survival_median_candidate
+                ),
+                "last_decision_survival_median_baseline": (
+                    tuning.last_decision_survival_median_baseline
+                ),
+                "last_decision_near_extinction_candidate": (
+                    tuning.last_decision_near_extinction_candidate
+                ),
+                "last_decision_near_extinction_baseline": (
+                    tuning.last_decision_near_extinction_baseline
+                ),
                 "non_improving_run_streak": tuning.non_improving_run_streak,
             },
         }
@@ -2570,6 +2780,8 @@ class Simulation:
         state.current_seed = payload.get("current_seed")
         state.sim_ticks = int(payload.get("sim_ticks", self._frame))
         state.survival_ticks = int(payload.get("survival_ticks", state.sim_ticks))
+        state.predator_low_ticks = int(payload.get("predator_low_ticks", 0))
+        state.prey_low_ticks = int(payload.get("prey_low_ticks", 0))
         history = payload.get("run_history", [])
         state.run_history = self._build_predator_prey_run_history(history)
         state.highest_survival_ticks = int(
@@ -2591,6 +2803,11 @@ class Simulation:
             else:
                 state.collapse_dial_values = {}
             state.collapse_trial_dial = game_over.get("trial_dial")
+            state.collapse_trial_phase = game_over.get("trial_role")
+            trial_seed = game_over.get("trial_seed")
+            state.collapse_trial_seed = None if trial_seed is None else int(trial_seed)
+            trial_id = game_over.get("trial_id")
+            state.collapse_trial_id = None if trial_id is None else int(trial_id)
             state.collapse_trial_delta = float(game_over.get("trial_delta", 0.0))
             trial_value = game_over.get("trial_value")
             state.collapse_trial_value = (
@@ -2636,6 +2853,12 @@ class Simulation:
             tuning.trial_baseline_average = float(
                 tuning_payload.get("trial_baseline_average", 0.0)
             )
+            trial_id = tuning_payload.get("trial_id")
+            tuning.trial_id = None if trial_id is None else int(trial_id)
+            tuning.next_trial_id = max(
+                1,
+                int(tuning_payload.get("next_trial_id", 1)),
+            )
             tuning.trial_seeds = [
                 int(seed) for seed in tuning_payload.get("trial_seeds", [])
             ]
@@ -2651,7 +2874,35 @@ class Simulation:
                 int(score)
                 for score in tuning_payload.get("trial_baseline_results", [])
             ]
+            tuning.trial_candidate_pressures = [
+                int(score)
+                for score in tuning_payload.get("trial_candidate_pressures", [])
+            ]
+            tuning.trial_baseline_pressures = [
+                int(score)
+                for score in tuning_payload.get("trial_baseline_pressures", [])
+            ]
             tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
+            tuning.last_decision_basis = tuning_payload.get("last_decision_basis")
+            last_decision_trial_id = tuning_payload.get("last_decision_trial_id")
+            tuning.last_decision_trial_id = (
+                None
+                if last_decision_trial_id is None
+                else int(last_decision_trial_id)
+            )
+            tuning.last_decision_survival_median_candidate = self._float_or_none(
+                tuning_payload.get("last_decision_survival_median_candidate")
+            )
+            tuning.last_decision_survival_median_baseline = self._float_or_none(
+                tuning_payload.get("last_decision_survival_median_baseline")
+            )
+            tuning.last_decision_near_extinction_candidate = self._float_or_none(
+                tuning_payload.get("last_decision_near_extinction_candidate")
+            )
+            tuning.last_decision_near_extinction_baseline = self._float_or_none(
+                tuning_payload.get("last_decision_near_extinction_baseline")
+            )
+            tuning.last_decision_pending_log = False
             tuning.non_improving_run_streak = max(
                 0,
                 int(
@@ -2705,6 +2956,12 @@ class Simulation:
         tuning.trial_baseline_average = float(
             tuning_payload.get("trial_baseline_average", 0.0)
         )
+        trial_id = tuning_payload.get("trial_id")
+        tuning.trial_id = None if trial_id is None else int(trial_id)
+        tuning.next_trial_id = max(
+            1,
+            int(tuning_payload.get("next_trial_id", 1)),
+        )
         tuning.trial_seeds = [int(seed) for seed in tuning_payload.get("trial_seeds", [])]
         tuning.trial_seed_index = max(
             0,
@@ -2716,7 +2973,31 @@ class Simulation:
         tuning.trial_baseline_results = [
             int(score) for score in tuning_payload.get("trial_baseline_results", [])
         ]
+        tuning.trial_candidate_pressures = [
+            int(score) for score in tuning_payload.get("trial_candidate_pressures", [])
+        ]
+        tuning.trial_baseline_pressures = [
+            int(score) for score in tuning_payload.get("trial_baseline_pressures", [])
+        ]
         tuning.last_decision = str(tuning_payload.get("last_decision", "none"))
+        tuning.last_decision_basis = tuning_payload.get("last_decision_basis")
+        last_decision_trial_id = tuning_payload.get("last_decision_trial_id")
+        tuning.last_decision_trial_id = (
+            None if last_decision_trial_id is None else int(last_decision_trial_id)
+        )
+        tuning.last_decision_survival_median_candidate = self._float_or_none(
+            tuning_payload.get("last_decision_survival_median_candidate")
+        )
+        tuning.last_decision_survival_median_baseline = self._float_or_none(
+            tuning_payload.get("last_decision_survival_median_baseline")
+        )
+        tuning.last_decision_near_extinction_candidate = self._float_or_none(
+            tuning_payload.get("last_decision_near_extinction_candidate")
+        )
+        tuning.last_decision_near_extinction_baseline = self._float_or_none(
+            tuning_payload.get("last_decision_near_extinction_baseline")
+        )
+        tuning.last_decision_pending_log = False
         tuning.non_improving_run_streak = max(
             0,
             int(tuning_payload.get("non_improving_run_streak", 0)),
@@ -2857,6 +3138,15 @@ class Simulation:
         if not values:
             return 0.0
         return float(median(values))
+
+    @staticmethod
+    def _float_or_none(value: Any) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     @property
     def predator_prey_adjustment_step_multiplier(self) -> float:

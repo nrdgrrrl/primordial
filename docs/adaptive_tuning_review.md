@@ -12,11 +12,13 @@ This note reviews the current predator-prey adaptive tuning loop and flags stren
    - the candidate dial values on those seeds
    - the unchanged baseline dial values on those same seeds
 6. The trial decision uses robust aggregates:
-   - **keep** if `median(candidate_survivals) >= median(baseline_survivals)`
-   - **revert** if `median(candidate_survivals) < median(baseline_survivals)`
+   - first compare `median(candidate_survivals)` vs `median(baseline_survivals)`
+   - if the absolute survival-median gap is greater than `adaptive_survival_deadband`, decide by survival alone
+   - if the gap is inside the deadband, compare `median(candidate_near_extinction_pressure)` vs `median(baseline_near_extinction_pressure)` and prefer the lower pressure
+   - if both survival and pressure are tied, preserve the old keep-on-tie behavior when candidate survival meets baseline; otherwise revert
 7. The sim restarts with those scheduled seeds while preserving rolling stability/tuning state.
 
-Important detail: ties are treated as success (`>=`), so "equal to baseline" keeps the change.
+Important detail: survival remains the primary objective. Near-extinction pressure is only a tie-breaker inside the deadband.
 
 ## Exactly which dials are tuned
 
@@ -57,7 +59,10 @@ Then one random dial and one random direction (`-1` or `+1`) is attempted, skipp
 
 Default multi-seed evaluation config:
 
-- `adaptive_trial_seed_count = 3`
+- `adaptive_trial_seed_count = 2`
+- `adaptive_survival_deadband = 50`
+- `adaptive_near_extinction_predator_floor = 5`
+- `adaptive_near_extinction_prey_floor = 5`
 
 For each selected seed:
 
@@ -68,11 +73,17 @@ Then compute:
 
 - `candidate_score = median(candidate_survivals)`
 - `baseline_score = median(baseline_survivals)`
+- `candidate_pressure = median(candidate_near_extinction_pressure)`
+- `baseline_pressure = median(baseline_near_extinction_pressure)`
 
 Decision rule:
 
-- if `candidate_score < baseline_score` → revert to `previous_values`
-- else (equal or better) → keep trial values
+- if `abs(candidate_score - baseline_score) > adaptive_survival_deadband`:
+  - keep when `candidate_score >= baseline_score`
+  - revert when `candidate_score < baseline_score`
+- else if `candidate_pressure < baseline_pressure` → keep trial values
+- else if `candidate_pressure > baseline_pressure` → revert to `previous_values`
+- else keep when `candidate_score >= baseline_score`, otherwise revert
 
 This is still a bounded one-dial A/B search, but it now uses same-seed median scoring instead of a single follow-up run.
 
@@ -122,10 +133,11 @@ This is now in place.
 Current policy:
 
 - keep your current candidate-generation logic (one dial, one signed step),
-- evaluate candidate on **k = 3** fixed seeds by default,
+- evaluate candidate on **k = 2** fixed seeds by default,
 - compute robust aggregate score with `median`,
 - compare against baseline aggregate on same seed set,
-- keep on ties, revert only when candidate median is lower.
+- use near-extinction pressure only when survival medians are within the deadband,
+- preserve the old keep-on-tie behavior only after the tie-breaker is exhausted.
 
 Config:
 
@@ -138,23 +150,14 @@ Why this helps:
 - reduces false keeps/reverts,
 - makes tuning progress less streaky.
 
-### 2) Add ecological health to the objective (not just survival)
+### 2) Low-risk ecological health tie-breaker (implemented)
 
-You want long, self-sustaining runs without intervention. Time-to-collapse alone can hide fragile states. Add a composite objective with survival + ecology quality.
+The live loop still optimizes `survival_ticks` first. The only ecological health term now used in the accept/revert decision is a bounded tie-breaker:
 
-Suggested additional metrics:
-
-- **Species balance stability**: fraction of time predator/prey ratio stays inside a healthy band (e.g., 20/80 to 80/20).
-- **Population volatility**: rolling stddev of total population (lower is usually healthier than boom-bust spikes).
-- **Near-extinction pressure**: count of ticks where either species is below a floor (e.g., `< 5` individuals).
-- **Food stress proxy**: average famine-severity exposure (or very low-food dwell time).
-- **Collapse-side bias**: whether failures are mostly predator-collapse or prey-collapse (prevents one-sided "successes").
-
-Example normalized score:
-
-`score = 0.55 * survival_norm + 0.20 * balance_norm + 0.15 * (1 - volatility_norm) + 0.10 * (1 - near_extinction_norm)`
-
-Use this score for keep/revert (with margin), while still reporting raw `survival_ticks` in HUD/logs.
+- `near_extinction_pressure = predator_low_ticks + prey_low_ticks`
+- `predator_low_ticks` counts run ticks with predator count below `adaptive_near_extinction_predator_floor`
+- `prey_low_ticks` counts run ticks with prey count below `adaptive_near_extinction_prey_floor`
+- this pressure is only consulted when survival medians are inside `adaptive_survival_deadband`
 
 ### 3) Confirmation before permanent keep
 
@@ -216,6 +219,6 @@ Better labels:
 
 Your current approach is reasonable and safer than naive auto-tuning. With rolling-median comparisons and multi-seed acceptance now in place, the highest-leverage remaining upgrades are:
 
-1. a composite health-aware objective,
-2. occasional interaction-aware multi-dial trials,
+1. occasional interaction-aware multi-dial trials,
+2. richer offline analysis of the new pressure-aware decision logs,
 3. optional smarter dial selection from historical lift once enough logs accumulate.

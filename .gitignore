@@ -32,3 +32,5 @@ build/
 htmlcov/
 /config.toml
 run_logs/
+analysis
+benchmark_outputs
