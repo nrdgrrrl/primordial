@@ -43,6 +43,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         escalation_runs: int = 5,
         escalation_percent: float = 25.0,
         trial_count: int = 2,
+        max_consecutive_retry_trials: int = 2,
         survival_deadband: int = 50,
         predator_floor: int = 5,
         prey_floor: int = 5,
@@ -60,6 +61,9 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         predator_prey["adaptive_step_escalation_runs"] = escalation_runs
         predator_prey["adaptive_step_escalation_percent"] = escalation_percent
         predator_prey["adaptive_trial_seed_count"] = trial_count
+        predator_prey["adaptive_max_consecutive_retry_trials"] = (
+            max_consecutive_retry_trials
+        )
         predator_prey["adaptive_survival_deadband"] = survival_deadband
         predator_prey["adaptive_near_extinction_predator_floor"] = predator_floor
         predator_prey["adaptive_near_extinction_prey_floor"] = prey_floor
@@ -204,7 +208,10 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(simulation.predator_prey_rolling_average, 100.0)
 
     def test_trial_dial_change_applies_and_can_revert(self) -> None:
-        simulation = self._build_simulation(trial_count=1)
+        simulation = self._build_simulation(
+            trial_count=1,
+            max_consecutive_retry_trials=0,
+        )
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
         baseline = simulation._predator_prey_state.adaptive_tuning.current_values[
             "predator_contact_kill_distance_scale"
@@ -264,6 +271,112 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
         self.assertNotEqual(trial_value, baseline)
 
+    def test_failed_trial_can_launch_immediate_retry_without_ordinary_run(self) -> None:
+        simulation = self._build_simulation(
+            trial_count=2,
+            max_consecutive_retry_trials=2,
+            survival_deadband=10,
+        )
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with (
+            patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None),
+            patch.object(
+                simulation,
+                "_generate_predator_prey_seed",
+                side_effect=[111, 222, 333, 444],
+            ),
+        ):
+            simulation._finalize_predator_prey_run(50)
+            self._finalize_run_with_metrics(simulation, survival_ticks=90, predator_low_ticks=1)
+            self._finalize_run_with_metrics(simulation, survival_ticks=160, predator_low_ticks=1)
+            self._finalize_run_with_metrics(simulation, survival_ticks=100, predator_low_ticks=2)
+            self._finalize_run_with_metrics(simulation, survival_ticks=150, predator_low_ticks=2)
+
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertTrue(tuning.trial_active)
+        self.assertEqual(tuning.last_decision, "reverted")
+        self.assertEqual(tuning.post_run_trial_decision, "reverted")
+        self.assertEqual(tuning.trial_id, 2)
+        self.assertEqual(stats["trial_trigger_reason"], "immediate_retry_after_revert")
+        self.assertEqual(tuning.trial_seeds, [333, 444])
+        self.assertEqual(tuning.trial_candidate_results, [])
+        self.assertEqual(tuning.trial_baseline_results, [])
+        self.assertEqual(tuning.trial_candidate_pressures, [])
+        self.assertEqual(tuning.trial_baseline_pressures, [])
+        self.assertEqual(tuning.consecutive_immediate_retry_trials, 1)
+        self.assertFalse(tuning.last_trial_launch_blocked_by_retry_cap)
+        self.assertEqual(len(simulation._predator_prey_state.run_history), 8)
+
+    def test_retry_cap_requires_ordinary_run_before_next_trial(self) -> None:
+        simulation = self._build_simulation(
+            trial_count=1,
+            max_consecutive_retry_trials=2,
+        )
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
+            simulation._finalize_predator_prey_run(50)
+            simulation._finalize_predator_prey_run(80)
+            simulation._finalize_predator_prey_run(90)
+            simulation._finalize_predator_prey_run(70)
+            simulation._finalize_predator_prey_run(100)
+            simulation._finalize_predator_prey_run(60)
+            simulation._finalize_predator_prey_run(110)
+
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        self.assertFalse(tuning.trial_active)
+        self.assertEqual(tuning.last_decision, "reverted")
+        self.assertEqual(tuning.post_run_trial_decision, "reverted")
+        self.assertEqual(tuning.consecutive_immediate_retry_trials, 2)
+        self.assertTrue(tuning.last_trial_launch_blocked_by_retry_cap)
+
+        simulation._finalize_predator_prey_run(40)
+
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertTrue(tuning.trial_active)
+        self.assertEqual(
+            stats["trial_trigger_reason"],
+            "blocked_by_retry_cap_then_waited_for_ordinary_run",
+        )
+        self.assertEqual(tuning.consecutive_immediate_retry_trials, 0)
+        self.assertFalse(tuning.last_trial_launch_blocked_by_retry_cap)
+
+    def test_kept_trial_resets_immediate_retry_counter(self) -> None:
+        simulation = self._build_simulation(
+            trial_count=1,
+            max_consecutive_retry_trials=2,
+        )
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
+            simulation._finalize_predator_prey_run(50)
+            simulation._finalize_predator_prey_run(80)
+            simulation._finalize_predator_prey_run(90)
+            simulation._finalize_predator_prey_run(130)
+            simulation._finalize_predator_prey_run(90)
+
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        self.assertFalse(tuning.trial_active)
+        self.assertEqual(tuning.last_decision, "kept")
+        self.assertEqual(tuning.post_run_trial_decision, "kept")
+        self.assertEqual(tuning.consecutive_immediate_retry_trials, 0)
+        self.assertFalse(tuning.retry_cap_waiting_for_ordinary_run)
+
+    def test_below_rolling_median_trigger_reason_still_starts_trial(self) -> None:
+        simulation = self._build_simulation(trial_count=1)
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
+            simulation._finalize_predator_prey_run(50)
+
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertTrue(simulation._predator_prey_state.adaptive_tuning.trial_active)
+        self.assertEqual(stats["trial_trigger_reason"], "below_rolling_median")
+        self.assertEqual(stats["post_run_trial_decision"], "trial_started")
+
     def test_adjustment_step_multiplier_scales_after_non_improving_streak(self) -> None:
         simulation = self._build_simulation(
             escalation_runs=2,
@@ -295,7 +408,11 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
 
     def test_k2_trial_reuses_same_two_seeds_and_decides_by_medians(self) -> None:
-        simulation = self._build_simulation(trial_count=2, survival_deadband=10)
+        simulation = self._build_simulation(
+            trial_count=2,
+            max_consecutive_retry_trials=0,
+            survival_deadband=10,
+        )
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
 
         with (
@@ -361,7 +478,11 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["trial_last_decision_basis"], "survival")
 
     def test_survival_outside_deadband_reverts_candidate(self) -> None:
-        simulation = self._build_simulation(trial_count=2, survival_deadband=10)
+        simulation = self._build_simulation(
+            trial_count=2,
+            max_consecutive_retry_trials=0,
+            survival_deadband=10,
+        )
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
 
         with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
@@ -379,7 +500,11 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["trial_last_decision_basis"], "survival")
 
     def test_near_extinction_tiebreak_keeps_candidate_inside_deadband(self) -> None:
-        simulation = self._build_simulation(trial_count=2, survival_deadband=50)
+        simulation = self._build_simulation(
+            trial_count=2,
+            max_consecutive_retry_trials=0,
+            survival_deadband=50,
+        )
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
 
         with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
@@ -398,7 +523,11 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["trial_last_near_extinction_baseline"], 11.0)
 
     def test_near_extinction_tiebreak_reverts_candidate_inside_deadband(self) -> None:
-        simulation = self._build_simulation(trial_count=2, survival_deadband=50)
+        simulation = self._build_simulation(
+            trial_count=2,
+            max_consecutive_retry_trials=0,
+            survival_deadband=50,
+        )
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
 
         with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
@@ -417,7 +546,11 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["trial_last_near_extinction_baseline"], 1.0)
 
     def test_exact_tie_reverts_candidate_on_equal_survival_and_pressure(self) -> None:
-        simulation = self._build_simulation(trial_count=2, survival_deadband=50)
+        simulation = self._build_simulation(
+            trial_count=2,
+            max_consecutive_retry_trials=0,
+            survival_deadband=50,
+        )
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
 
         with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):

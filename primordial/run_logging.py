@@ -50,6 +50,7 @@ _BASE_FIELDNAMES = [
     "trial_id",
     "trial_role",
     "run_evaluation_role",
+    "run_trial_trigger_reason",
     "verification_seed",
     "verification_seed_count_configured",
     "candidate_eval_index",
@@ -68,7 +69,11 @@ _BASE_FIELDNAMES = [
     "next_trial_dial",
     "next_trial_direction",
     "next_trial_baseline_average",
+    "next_trial_trigger_reason",
     "non_improving_run_streak",
+    "consecutive_immediate_retry_trials",
+    "immediate_retry_trial_cap",
+    "trial_launch_blocked_by_retry_cap",
     "adjustment_step_multiplier",
     "adjustment_step_increase_percent",
     "predator_actual_speed",
@@ -167,6 +172,11 @@ class PredatorPreyCSVRunLogger:
                 ),
                 "trial_role": trial_role if run_was_trial else "ordinary",
                 "run_evaluation_role": trial_role if run_was_trial else "ordinary",
+                "run_trial_trigger_reason": (
+                    stats.get("collapse_trial_trigger_reason")
+                    if run_was_trial
+                    else None
+                ),
                 "verification_seed": (
                     stats.get("collapse_trial_seed")
                     if run_was_trial
@@ -218,15 +228,29 @@ class PredatorPreyCSVRunLogger:
                     if decision_completed
                     else None
                 ),
-                "post_run_trial_decision": adaptive.get("last_decision"),
+                "post_run_trial_decision": stats.get("post_run_trial_decision"),
                 "next_trial_active": bool(stats.get("trial_active", False)),
                 "next_trial_dial": stats.get("trial_dial"),
                 "next_trial_direction": stats.get("trial_direction"),
                 "next_trial_baseline_average": self._float_or_none(
                     stats.get("trial_baseline_average")
                 ),
+                "next_trial_trigger_reason": (
+                    stats.get("trial_trigger_reason")
+                    if stats.get("trial_active", False)
+                    else None
+                ),
                 "non_improving_run_streak": int(
                     stats.get("non_improving_run_streak", 0)
+                ),
+                "consecutive_immediate_retry_trials": int(
+                    stats.get("consecutive_immediate_retry_trials", 0)
+                ),
+                "immediate_retry_trial_cap": int(
+                    stats.get("adaptive_max_consecutive_retry_trials", 0)
+                ),
+                "trial_launch_blocked_by_retry_cap": bool(
+                    stats.get("trial_launch_blocked_by_retry_cap", False)
                 ),
                 "adjustment_step_multiplier": self._float_or_none(
                     stats.get("adjustment_step_multiplier")
@@ -282,6 +306,7 @@ class PredatorPreyCSVRunLogger:
                 "trial_id": stats.get("trial_last_decision_trial_id"),
                 "trial_role": None,
                 "run_evaluation_role": None,
+                "run_trial_trigger_reason": stats.get("collapse_trial_trigger_reason"),
                 "verification_seed": None,
                 "verification_seed_count_configured": configured_seed_count,
                 "candidate_eval_index": configured_seed_count,
@@ -307,15 +332,29 @@ class PredatorPreyCSVRunLogger:
                 "near_extinction_baseline": self._float_or_none(
                     stats.get("trial_last_near_extinction_baseline")
                 ),
-                "post_run_trial_decision": adaptive.get("last_decision"),
+                "post_run_trial_decision": stats.get("post_run_trial_decision"),
                 "next_trial_active": bool(stats.get("trial_active", False)),
                 "next_trial_dial": stats.get("trial_dial"),
                 "next_trial_direction": stats.get("trial_direction"),
                 "next_trial_baseline_average": self._float_or_none(
                     stats.get("trial_baseline_average")
                 ),
+                "next_trial_trigger_reason": (
+                    stats.get("trial_trigger_reason")
+                    if stats.get("trial_active", False)
+                    else None
+                ),
                 "non_improving_run_streak": int(
                     stats.get("non_improving_run_streak", 0)
+                ),
+                "consecutive_immediate_retry_trials": int(
+                    stats.get("consecutive_immediate_retry_trials", 0)
+                ),
+                "immediate_retry_trial_cap": int(
+                    stats.get("adaptive_max_consecutive_retry_trials", 0)
+                ),
+                "trial_launch_blocked_by_retry_cap": bool(
+                    stats.get("trial_launch_blocked_by_retry_cap", False)
                 ),
                 "adjustment_step_multiplier": self._float_or_none(
                     stats.get("adjustment_step_multiplier")
@@ -366,6 +405,7 @@ class PredatorPreyCSVRunLogger:
                 "trial_id": None,
                 "trial_role": None,
                 "run_evaluation_role": None,
+                "run_trial_trigger_reason": None,
                 "verification_seed": None,
                 "verification_seed_count_configured": None,
                 "candidate_eval_index": None,
@@ -381,15 +421,29 @@ class PredatorPreyCSVRunLogger:
                 "survival_median_baseline": None,
                 "near_extinction_candidate": None,
                 "near_extinction_baseline": None,
-                "post_run_trial_decision": adaptive.get("last_decision"),
+                "post_run_trial_decision": stats.get("post_run_trial_decision"),
                 "next_trial_active": bool(stats.get("trial_active", False)),
                 "next_trial_dial": stats.get("trial_dial"),
                 "next_trial_direction": stats.get("trial_direction"),
                 "next_trial_baseline_average": self._float_or_none(
                     stats.get("trial_baseline_average")
                 ),
+                "next_trial_trigger_reason": (
+                    stats.get("trial_trigger_reason")
+                    if stats.get("trial_active", False)
+                    else None
+                ),
                 "non_improving_run_streak": int(
                     stats.get("non_improving_run_streak", 0)
+                ),
+                "consecutive_immediate_retry_trials": int(
+                    stats.get("consecutive_immediate_retry_trials", 0)
+                ),
+                "immediate_retry_trial_cap": int(
+                    stats.get("adaptive_max_consecutive_retry_trials", 0)
+                ),
+                "trial_launch_blocked_by_retry_cap": bool(
+                    stats.get("trial_launch_blocked_by_retry_cap", False)
                 ),
                 "adjustment_step_multiplier": self._float_or_none(
                     stats.get("adjustment_step_multiplier")

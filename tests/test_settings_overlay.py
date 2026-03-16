@@ -42,6 +42,7 @@ class SettingsOverlayTests(unittest.TestCase):
         self.assertIn("adaptive_step_escalation_runs = 5", serialized)
         self.assertIn("adaptive_step_escalation_percent = 25.0000", serialized)
         self.assertIn("adaptive_trial_seed_count = 2", serialized)
+        self.assertIn("adaptive_max_consecutive_retry_trials = 2", serialized)
         self.assertIn("adaptive_survival_deadband = 50", serialized)
         self.assertIn("adaptive_near_extinction_predator_floor = 5", serialized)
         self.assertIn("adaptive_near_extinction_prey_floor = 5", serialized)

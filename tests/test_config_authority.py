@@ -72,6 +72,7 @@ stability_history_size = 40
 adaptive_step_escalation_runs = 7
 adaptive_step_escalation_percent = 40.0
 adaptive_trial_seed_count = 5
+adaptive_max_consecutive_retry_trials = 3
 adaptive_survival_deadband = 25
 adaptive_near_extinction_predator_floor = 3
 adaptive_near_extinction_prey_floor = 7
@@ -122,6 +123,12 @@ adaptive_near_extinction_prey_floor = 7
         self.assertEqual(
             settings.mode_params["predator_prey"]["adaptive_trial_seed_count"],
             5,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"][
+                "adaptive_max_consecutive_retry_trials"
+            ],
+            3,
         )
         self.assertEqual(
             settings.mode_params["predator_prey"]["adaptive_survival_deadband"],

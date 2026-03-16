@@ -58,6 +58,7 @@ class RunLoggingTests(unittest.TestCase):
         tuning.trial_id = 7
         tuning.trial_seeds = [111]
         tuning.last_decision = "trial_started"
+        tuning.post_run_trial_decision = "trial_started"
         simulation._apply_predator_prey_tuning_values(tuning.current_values)
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -146,6 +147,7 @@ class RunLoggingTests(unittest.TestCase):
         tuning.trial_candidate_results = [110]
         tuning.trial_candidate_pressures = [4]
         tuning.last_decision = "trial_started"
+        tuning.post_run_trial_decision = "trial_started"
         simulation._apply_predator_prey_tuning_values(tuning.current_values)
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -287,6 +289,64 @@ class RunLoggingTests(unittest.TestCase):
         self.assertEqual(decision_row["baseline_eval_index"], "2")
         self.assertEqual(decision_row["decision_basis"], "exact_tie_revert_candidate")
         self.assertEqual(decision_row["keep_revert_outcome"], "revert")
+
+    def test_csv_logger_records_immediate_retry_and_retry_cap_fields(self) -> None:
+        simulation = self._build_simulation(trial_count=1)
+        simulation.settings.mode_params["predator_prey"][
+            "adaptive_max_consecutive_retry_trials"
+        ] = 2
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "run_logs" / "predator_prey_runs.csv"
+            simulation.set_predator_prey_run_logger(PredatorPreyCSVRunLogger(csv_path))
+
+            with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
+                for index, survival_ticks in enumerate((50, 80, 90, 70, 100, 60, 110, 40)):
+                    simulation._predator_prey_state.survival_ticks = survival_ticks
+                    simulation._enter_predator_prey_game_over(
+                        "Predators collapsed",
+                        predator_count=0,
+                        prey_count=3,
+                        now_seconds=10.0 + index,
+                    )
+                    if index < 7:
+                        simulation.restart_predator_prey_run()
+
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+
+        first_retry_revert = rows[2]
+        self.assertEqual(first_retry_revert["trial_role"], "baseline")
+        self.assertEqual(first_retry_revert["post_run_trial_decision"], "reverted")
+        self.assertEqual(first_retry_revert["next_trial_active"], "True")
+        self.assertEqual(
+            first_retry_revert["next_trial_trigger_reason"],
+            "immediate_retry_after_revert",
+        )
+        self.assertEqual(first_retry_revert["consecutive_immediate_retry_trials"], "1")
+        self.assertEqual(first_retry_revert["immediate_retry_trial_cap"], "2")
+        self.assertEqual(first_retry_revert["trial_launch_blocked_by_retry_cap"], "False")
+
+        cap_blocked_revert = rows[8]
+        self.assertEqual(cap_blocked_revert["trial_role"], "baseline")
+        self.assertEqual(cap_blocked_revert["post_run_trial_decision"], "reverted")
+        self.assertEqual(cap_blocked_revert["next_trial_active"], "False")
+        self.assertEqual(cap_blocked_revert["next_trial_trigger_reason"], "")
+        self.assertEqual(cap_blocked_revert["consecutive_immediate_retry_trials"], "2")
+        self.assertEqual(cap_blocked_revert["immediate_retry_trial_cap"], "2")
+        self.assertEqual(cap_blocked_revert["trial_launch_blocked_by_retry_cap"], "True")
+
+        forced_ordinary = rows[10]
+        self.assertEqual(forced_ordinary["trial_role"], "ordinary")
+        self.assertEqual(forced_ordinary["post_run_trial_decision"], "trial_started")
+        self.assertEqual(forced_ordinary["next_trial_active"], "True")
+        self.assertEqual(
+            forced_ordinary["next_trial_trigger_reason"],
+            "blocked_by_retry_cap_then_waited_for_ordinary_run",
+        )
+        self.assertEqual(forced_ordinary["consecutive_immediate_retry_trials"], "0")
+        self.assertEqual(forced_ordinary["immediate_retry_trial_cap"], "2")
 
 
 if __name__ == "__main__":

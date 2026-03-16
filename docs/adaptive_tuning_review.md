@@ -60,6 +60,7 @@ Then one random dial and one random direction (`-1` or `+1`) is attempted, skipp
 Default multi-seed evaluation config:
 
 - `adaptive_trial_seed_count = 2`
+- `adaptive_max_consecutive_retry_trials = 2`
 - `adaptive_survival_deadband = 50`
 - `adaptive_near_extinction_predator_floor = 5`
 - `adaptive_near_extinction_prey_floor = 5`
@@ -86,6 +87,29 @@ Decision rule:
 - else keep when `candidate_score >= baseline_score`, otherwise revert
 
 This is still a bounded one-dial A/B search, but it now uses same-seed median scoring instead of a single follow-up run.
+
+### Failed-trial retry chaining
+
+When a trial ends with `reverted`, the tuner immediately restores the last
+accepted dial values. From that reverted incumbent state it may start a fresh
+candidate/baseline trial immediately, without spending an extra ordinary run on
+the unchanged incumbent first.
+
+That immediate retry chain is bounded:
+
+- `adaptive_max_consecutive_retry_trials` caps how many retry-launched trials
+  may chain directly after failed trials.
+- The counter increments only when a failed trial reverts and a new trial is
+  launched immediately from the reverted incumbent.
+- The counter resets when an ordinary non-trial run occurs, when a trial is
+  kept, or when retry chaining otherwise ends.
+- Once the cap is reached, the tuner blocks further immediate retries and
+  requires at least one ordinary run before another trial can open.
+
+CSV logging exposes this control flow with trial roles, trigger reasons
+(`below_rolling_median`, `immediate_retry_after_revert`,
+`blocked_by_retry_cap_then_waited_for_ordinary_run`), the current consecutive
+retry count, the configured cap, and whether a launch was blocked by the cap.
 
 ### Step escalation
 
