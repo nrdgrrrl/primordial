@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import patch
 
 from primordial.run_logging import PredatorPreyCSVRunLogger
 from primordial.settings import Settings
@@ -13,7 +14,7 @@ from primordial.utils.cli import parse_runtime_args
 
 
 class RunLoggingTests(unittest.TestCase):
-    def _build_settings(self) -> Settings:
+    def _build_settings(self, *, trial_count: int = 1) -> Settings:
         settings = Settings()
         settings.mode_params = deepcopy(settings.DEFAULT_MODE_PARAMS)
         settings.sim_mode = "predator_prey"
@@ -22,11 +23,11 @@ class RunLoggingTests(unittest.TestCase):
         settings.food_max_particles = 32
         settings.zone_count = 0
         settings.mode_params["predator_prey"]["initial_population"] = 0
-        settings.mode_params["predator_prey"]["adaptive_trial_seed_count"] = 1
+        settings.mode_params["predator_prey"]["adaptive_trial_seed_count"] = trial_count
         return settings
 
-    def _build_simulation(self) -> Simulation:
-        simulation = Simulation(1000, 1000, self._build_settings())
+    def _build_simulation(self, *, trial_count: int = 1) -> Simulation:
+        simulation = Simulation(1000, 1000, self._build_settings(trial_count=trial_count))
         simulation.creatures.clear()
         simulation.food_manager.clear()
         simulation.zone_manager.zones = []
@@ -89,8 +90,14 @@ class RunLoggingTests(unittest.TestCase):
         self.assertEqual(completed["run_trial_direction"], "-")
         self.assertEqual(completed["run_trial_delta"], "-0.03")
         self.assertEqual(completed["trial_id"], "7")
+        self.assertEqual(completed["trial_role"], "candidate")
         self.assertEqual(completed["run_evaluation_role"], "candidate")
         self.assertEqual(completed["verification_seed"], "111")
+        self.assertEqual(completed["verification_seed_count_configured"], "1")
+        self.assertEqual(completed["candidate_eval_index"], "1")
+        self.assertEqual(completed["baseline_eval_index"], "")
+        self.assertEqual(completed["total_candidate_evals_expected"], "1")
+        self.assertEqual(completed["total_baseline_evals_expected"], "1")
         self.assertEqual(completed["survival_deadband"], "50.0")
         self.assertEqual(
             completed["run_dial_predator_contact_kill_distance_scale"],
@@ -159,15 +166,127 @@ class RunLoggingTests(unittest.TestCase):
         decision = rows[1]
         self.assertEqual(decision["event_type"], "trial_decision")
         self.assertEqual(decision["event_note"], "adaptive_trial_complete")
+        self.assertEqual(decision["run_was_trial"], "False")
+        self.assertEqual(decision["trial_role"], "")
+        self.assertEqual(decision["run_evaluation_role"], "")
+        self.assertEqual(decision["verification_seed"], "")
+        self.assertEqual(decision["verification_seed_count_configured"], "1")
+        self.assertEqual(decision["candidate_eval_index"], "1")
+        self.assertEqual(decision["baseline_eval_index"], "1")
+        self.assertEqual(decision["total_candidate_evals_expected"], "1")
+        self.assertEqual(decision["total_baseline_evals_expected"], "1")
         self.assertEqual(decision["decision_basis"], "near_extinction_tiebreak")
-        self.assertEqual(decision["keep_revert_outcome"], "kept")
+        self.assertEqual(decision["keep_revert_outcome"], "keep")
         self.assertEqual(decision["trial_id"], "9")
-        self.assertEqual(decision["run_evaluation_role"], "baseline")
-        self.assertEqual(decision["verification_seed"], "111")
         self.assertEqual(decision["survival_median_candidate"], "110.0")
         self.assertEqual(decision["survival_median_baseline"], "100.0")
         self.assertEqual(decision["near_extinction_candidate"], "4.0")
         self.assertEqual(decision["near_extinction_baseline"], "10.0")
+
+    def test_csv_logger_records_k2_trial_structure_and_exact_tie_revert(self) -> None:
+        simulation = self._build_simulation(trial_count=2)
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with (
+            patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None),
+            patch.object(
+                simulation,
+                "_generate_predator_prey_seed",
+                side_effect=[111, 222],
+            ),
+        ):
+            simulation._finalize_predator_prey_run(50)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = Path(temp_dir) / "run_logs" / "predator_prey_runs.csv"
+            simulation.set_predator_prey_run_logger(PredatorPreyCSVRunLogger(csv_path))
+
+            simulation._predator_prey_state.survival_ticks = 120
+            simulation._enter_predator_prey_game_over(
+                "Predators collapsed",
+                predator_count=0,
+                prey_count=3,
+                now_seconds=10.0,
+            )
+            simulation.restart_predator_prey_run()
+
+            simulation._predator_prey_state.survival_ticks = 120
+            simulation._enter_predator_prey_game_over(
+                "Predators collapsed",
+                predator_count=0,
+                prey_count=3,
+                now_seconds=11.0,
+            )
+            simulation.restart_predator_prey_run()
+
+            simulation._predator_prey_state.survival_ticks = 110
+            simulation._enter_predator_prey_game_over(
+                "Predators collapsed",
+                predator_count=0,
+                prey_count=3,
+                now_seconds=12.0,
+            )
+            simulation.restart_predator_prey_run()
+
+            simulation._predator_prey_state.survival_ticks = 110
+            simulation._enter_predator_prey_game_over(
+                "Predators collapsed",
+                predator_count=0,
+                prey_count=3,
+                now_seconds=13.0,
+            )
+
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(len(rows), 5)
+        run_rows = rows[:4]
+        decision_row = rows[4]
+
+        self.assertEqual(
+            [row["trial_role"] for row in run_rows],
+            ["candidate", "baseline", "candidate", "baseline"],
+        )
+        self.assertEqual(
+            [row["verification_seed"] for row in run_rows if row["trial_role"] == "candidate"],
+            ["111", "222"],
+        )
+        self.assertEqual(
+            [row["verification_seed"] for row in run_rows if row["trial_role"] == "baseline"],
+            ["111", "222"],
+        )
+        self.assertEqual(
+            [row["candidate_eval_index"] for row in run_rows if row["trial_role"] == "candidate"],
+            ["1", "2"],
+        )
+        self.assertEqual(
+            [row["baseline_eval_index"] for row in run_rows if row["trial_role"] == "baseline"],
+            ["1", "2"],
+        )
+        self.assertTrue(
+            all(row["verification_seed_count_configured"] == "2" for row in run_rows)
+        )
+        self.assertTrue(
+            all(row["total_candidate_evals_expected"] == "2" for row in run_rows)
+        )
+        self.assertTrue(
+            all(row["total_baseline_evals_expected"] == "2" for row in run_rows)
+        )
+
+        final_baseline = run_rows[-1]
+        self.assertEqual(final_baseline["decision_basis"], "exact_tie_revert_candidate")
+        self.assertEqual(final_baseline["keep_revert_outcome"], "revert")
+        self.assertEqual(final_baseline["survival_median_candidate"], "115.0")
+        self.assertEqual(final_baseline["survival_median_baseline"], "115.0")
+
+        self.assertEqual(decision_row["event_type"], "trial_decision")
+        self.assertEqual(decision_row["run_was_trial"], "False")
+        self.assertEqual(decision_row["verification_seed"], "")
+        self.assertEqual(decision_row["verification_seed_count_configured"], "2")
+        self.assertEqual(decision_row["candidate_eval_index"], "2")
+        self.assertEqual(decision_row["baseline_eval_index"], "2")
+        self.assertEqual(decision_row["decision_basis"], "exact_tie_revert_candidate")
+        self.assertEqual(decision_row["keep_revert_outcome"], "revert")
 
 
 if __name__ == "__main__":

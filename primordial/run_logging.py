@@ -48,8 +48,14 @@ _BASE_FIELDNAMES = [
     "run_trial_value",
     "run_trial_baseline_average",
     "trial_id",
+    "trial_role",
     "run_evaluation_role",
     "verification_seed",
+    "verification_seed_count_configured",
+    "candidate_eval_index",
+    "baseline_eval_index",
+    "total_candidate_evals_expected",
+    "total_baseline_evals_expected",
     "survival_deadband",
     "decision_basis",
     "keep_revert_outcome",
@@ -118,10 +124,19 @@ class PredatorPreyCSVRunLogger:
         baseline_dials = adaptive.get("baseline_values", {}) or {}
         pred_actual_speed, prey_actual_speed = simulation.get_species_avg_actual_speeds()
         predation = simulation.get_recent_predation_stats()
-        run_was_trial = stats.get("collapse_trial_role") in {"candidate", "baseline"}
+        trial_role = self._normalize_trial_role(stats.get("collapse_trial_role"))
+        run_was_trial = trial_role in {"candidate", "baseline"}
+        configured_seed_count = self._configured_seed_count(stats, run_was_trial=run_was_trial)
         decision_completed = (
             run_was_trial
             and adaptive.get("last_decision") in {"kept", "reverted"}
+            and stats.get("trial_last_decision_trial_id") == stats.get("collapse_trial_id")
+        )
+        candidate_eval_index, baseline_eval_index = self._eval_indices_for_run(
+            adaptive=adaptive,
+            trial_role=trial_role,
+            configured_seed_count=configured_seed_count,
+            decision_completed=decision_completed,
         )
         row = self._base_row(
             event_type="run_complete",
@@ -150,16 +165,18 @@ class PredatorPreyCSVRunLogger:
                     if run_was_trial
                     else None
                 ),
-                "run_evaluation_role": (
-                    stats.get("collapse_trial_role")
-                    if run_was_trial
-                    else None
-                ),
+                "trial_role": trial_role if run_was_trial else "ordinary",
+                "run_evaluation_role": trial_role if run_was_trial else "ordinary",
                 "verification_seed": (
                     stats.get("collapse_trial_seed")
                     if run_was_trial
                     else None
                 ),
+                "verification_seed_count_configured": configured_seed_count,
+                "candidate_eval_index": candidate_eval_index,
+                "baseline_eval_index": baseline_eval_index,
+                "total_candidate_evals_expected": configured_seed_count,
+                "total_baseline_evals_expected": configured_seed_count,
                 "survival_deadband": self._float_or_none(
                     stats.get("survival_deadband")
                 ),
@@ -169,7 +186,7 @@ class PredatorPreyCSVRunLogger:
                     else None
                 ),
                 "keep_revert_outcome": (
-                    adaptive.get("last_decision")
+                    self._decision_outcome(adaptive.get("last_decision"))
                     if decision_completed
                     else None
                 ),
@@ -241,6 +258,7 @@ class PredatorPreyCSVRunLogger:
         run_dials = stats.get("collapse_dial_values", {}) or {}
         current_dials = adaptive.get("current_values", {}) or {}
         baseline_dials = adaptive.get("baseline_values", {}) or {}
+        configured_seed_count = self._configured_seed_count(stats, run_was_trial=True)
         row = self._base_row(
             event_type="trial_decision",
             event_note="adaptive_trial_complete",
@@ -249,7 +267,7 @@ class PredatorPreyCSVRunLogger:
         )
         row.update(
             {
-                "run_was_trial": True,
+                "run_was_trial": False,
                 "run_trial_dial": stats.get("collapse_trial_dial"),
                 "run_trial_direction": stats.get("collapse_trial_direction"),
                 "run_trial_delta": self._float_or_none(
@@ -262,13 +280,21 @@ class PredatorPreyCSVRunLogger:
                     stats.get("collapse_rolling_average")
                 ),
                 "trial_id": stats.get("trial_last_decision_trial_id"),
-                "run_evaluation_role": stats.get("collapse_trial_role"),
-                "verification_seed": stats.get("collapse_trial_seed"),
+                "trial_role": None,
+                "run_evaluation_role": None,
+                "verification_seed": None,
+                "verification_seed_count_configured": configured_seed_count,
+                "candidate_eval_index": configured_seed_count,
+                "baseline_eval_index": configured_seed_count,
+                "total_candidate_evals_expected": configured_seed_count,
+                "total_baseline_evals_expected": configured_seed_count,
                 "survival_deadband": self._float_or_none(
                     stats.get("survival_deadband")
                 ),
                 "decision_basis": stats.get("trial_last_decision_basis"),
-                "keep_revert_outcome": adaptive.get("last_decision"),
+                "keep_revert_outcome": self._decision_outcome(
+                    adaptive.get("last_decision")
+                ),
                 "survival_median_candidate": self._float_or_none(
                     stats.get("trial_last_survival_median_candidate")
                 ),
@@ -338,8 +364,14 @@ class PredatorPreyCSVRunLogger:
                 "run_trial_value": None,
                 "run_trial_baseline_average": None,
                 "trial_id": None,
+                "trial_role": None,
                 "run_evaluation_role": None,
                 "verification_seed": None,
+                "verification_seed_count_configured": None,
+                "candidate_eval_index": None,
+                "baseline_eval_index": None,
+                "total_candidate_evals_expected": None,
+                "total_baseline_evals_expected": None,
                 "survival_deadband": self._float_or_none(
                     stats.get("survival_deadband")
                 ),
@@ -462,6 +494,61 @@ class PredatorPreyCSVRunLogger:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _int_or_none(value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _normalize_trial_role(value: Any) -> str | None:
+        if value in {"candidate", "baseline"}:
+            return str(value)
+        return None
+
+    def _configured_seed_count(
+        self,
+        stats: dict[str, Any],
+        *,
+        run_was_trial: bool,
+    ) -> int | None:
+        if not run_was_trial:
+            return None
+        return self._int_or_none(stats.get("verification_seed_count_configured"))
+
+    def _eval_indices_for_run(
+        self,
+        *,
+        adaptive: dict[str, Any],
+        trial_role: str | None,
+        configured_seed_count: int | None,
+        decision_completed: bool,
+    ) -> tuple[int | None, int | None]:
+        if trial_role == "candidate":
+            candidate_results = adaptive.get("trial_candidate_results", [])
+            if isinstance(candidate_results, list) and candidate_results:
+                return (len(candidate_results), None)
+            return (configured_seed_count, None)
+        if trial_role == "baseline":
+            if decision_completed:
+                return (None, configured_seed_count)
+            baseline_results = adaptive.get("trial_baseline_results", [])
+            if isinstance(baseline_results, list) and baseline_results:
+                return (None, len(baseline_results))
+            return (None, configured_seed_count)
+        return (None, None)
+
+    @staticmethod
+    def _decision_outcome(value: Any) -> str | None:
+        if value == "kept":
+            return "keep"
+        if value == "reverted":
+            return "revert"
+        return None
 
     @staticmethod
     def _encode_run_history(simulation: "Simulation") -> str:

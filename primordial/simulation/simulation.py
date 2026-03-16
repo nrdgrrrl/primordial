@@ -1449,13 +1449,15 @@ class Simulation:
     ) -> tuple[bool, str]:
         survival_diff = candidate_score - baseline_score
         if abs(survival_diff) > self._get_predator_prey_survival_deadband():
-            return (candidate_score >= baseline_score, "survival")
+            return (candidate_score > baseline_score, "survival")
         if candidate_pressure < baseline_pressure:
             return (True, "near_extinction_tiebreak")
         if candidate_pressure > baseline_pressure:
             return (False, "near_extinction_tiebreak")
-        if candidate_score >= baseline_score:
-            return (True, "exact_tie_keep_candidate")
+        if candidate_score > baseline_score:
+            return (True, "survival")
+        if candidate_score < baseline_score:
+            return (False, "survival")
         return (False, "exact_tie_revert_candidate")
 
     def _clear_predator_prey_trial_state(
@@ -2632,6 +2634,7 @@ class Simulation:
             "trial_last_near_extinction_baseline": (
                 state.adaptive_tuning.last_decision_near_extinction_baseline
             ),
+            "verification_seed_count_configured": self._get_predator_prey_trial_count(),
             "survival_deadband": self._get_predator_prey_survival_deadband(),
             "non_improving_run_streak": state.adaptive_tuning.non_improving_run_streak,
             "adjustment_step_multiplier": self.predator_prey_adjustment_step_multiplier,

@@ -300,9 +300,23 @@ class PredatorPreyStabilityTests(unittest.TestCase):
 
         with (
             patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None),
-            patch.object(simulation, "_generate_predator_prey_seed", side_effect=[111, 222]),
+            patch.object(
+                simulation,
+                "_generate_predator_prey_seed",
+                side_effect=[111, 222],
+            ) as generate_seed,
         ):
             simulation._finalize_predator_prey_run(50)
+
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        self.assertEqual(generate_seed.call_count, 2)
+        self.assertEqual(tuning.trial_seeds, [111, 222])
+        self.assertEqual(
+            simulation.get_predator_prey_stability_stats()[
+                "verification_seed_count_configured"
+            ],
+            2,
+        )
 
         simulation.restart_predator_prey_run()
         self.assertEqual(simulation.get_predator_prey_stability_stats()["current_seed"], 111)
@@ -322,8 +336,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         simulation._finalize_predator_prey_run(100)
 
         stats = simulation.get_predator_prey_stability_stats()
-        self.assertFalse(simulation._predator_prey_state.adaptive_tuning.trial_active)
-        self.assertEqual(simulation._predator_prey_state.adaptive_tuning.last_decision, "kept")
+        self.assertFalse(tuning.trial_active)
+        self.assertEqual(tuning.last_decision, "kept")
         self.assertEqual(stats["trial_last_survival_median_candidate"], 130.0)
         self.assertEqual(stats["trial_last_survival_median_baseline"], 95.0)
         self.assertEqual(stats["trial_last_decision_basis"], "survival")
@@ -402,7 +416,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["trial_last_near_extinction_candidate"], 11.0)
         self.assertEqual(stats["trial_last_near_extinction_baseline"], 1.0)
 
-    def test_exact_tie_behavior_keeps_candidate_on_equal_survival_and_pressure(self) -> None:
+    def test_exact_tie_reverts_candidate_on_equal_survival_and_pressure(self) -> None:
         simulation = self._build_simulation(trial_count=2, survival_deadband=50)
         simulation._predator_prey_state.run_history.extend([100, 100, 100])
 
@@ -412,29 +426,46 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self._finalize_run_with_metrics(simulation, survival_ticks=120, predator_low_ticks=5)
         self._finalize_run_with_metrics(simulation, survival_ticks=120, predator_low_ticks=5)
         self._finalize_run_with_metrics(simulation, survival_ticks=110, predator_low_ticks=5)
-        self._finalize_run_with_metrics(simulation, survival_ticks=110, predator_low_ticks=5)
-
-        tuning = simulation._predator_prey_state.adaptive_tuning
-        stats = simulation.get_predator_prey_stability_stats()
-        self.assertEqual(tuning.last_decision, "kept")
-        self.assertEqual(stats["trial_last_decision_basis"], "exact_tie_keep_candidate")
-
-    def test_exact_tie_behavior_reverts_candidate_when_survival_is_still_lower(self) -> None:
-        simulation = self._build_simulation(trial_count=2, survival_deadband=50)
-        simulation._predator_prey_state.run_history.extend([100, 100, 100])
-
-        with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
-            simulation._finalize_predator_prey_run(50)
-
-        self._finalize_run_with_metrics(simulation, survival_ticks=110, predator_low_ticks=5)
-        self._finalize_run_with_metrics(simulation, survival_ticks=120, predator_low_ticks=5)
-        self._finalize_run_with_metrics(simulation, survival_ticks=100, predator_low_ticks=5)
         self._finalize_run_with_metrics(simulation, survival_ticks=110, predator_low_ticks=5)
 
         tuning = simulation._predator_prey_state.adaptive_tuning
         stats = simulation.get_predator_prey_stability_stats()
         self.assertEqual(tuning.last_decision, "reverted")
         self.assertEqual(stats["trial_last_decision_basis"], "exact_tie_revert_candidate")
+
+    def test_equal_pressure_inside_deadband_keeps_higher_survival_candidate(self) -> None:
+        simulation = self._build_simulation(trial_count=2, survival_deadband=50)
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
+            simulation._finalize_predator_prey_run(50)
+
+        self._finalize_run_with_metrics(simulation, survival_ticks=120, predator_low_ticks=5)
+        self._finalize_run_with_metrics(simulation, survival_ticks=110, predator_low_ticks=5)
+        self._finalize_run_with_metrics(simulation, survival_ticks=110, predator_low_ticks=5)
+        self._finalize_run_with_metrics(simulation, survival_ticks=100, predator_low_ticks=5)
+
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertEqual(tuning.last_decision, "kept")
+        self.assertEqual(stats["trial_last_decision_basis"], "survival")
+
+    def test_equal_pressure_inside_deadband_reverts_lower_survival_candidate(self) -> None:
+        simulation = self._build_simulation(trial_count=2, survival_deadband=50)
+        simulation._predator_prey_state.run_history.extend([100, 100, 100])
+
+        with patch("primordial.simulation.simulation.random.shuffle", side_effect=lambda seq: None):
+            simulation._finalize_predator_prey_run(50)
+
+        self._finalize_run_with_metrics(simulation, survival_ticks=90, predator_low_ticks=5)
+        self._finalize_run_with_metrics(simulation, survival_ticks=100, predator_low_ticks=5)
+        self._finalize_run_with_metrics(simulation, survival_ticks=80, predator_low_ticks=5)
+        self._finalize_run_with_metrics(simulation, survival_ticks=95, predator_low_ticks=5)
+
+        tuning = simulation._predator_prey_state.adaptive_tuning
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertEqual(tuning.last_decision, "reverted")
+        self.assertEqual(stats["trial_last_decision_basis"], "survival")
 
     def test_non_improving_streak_resets_when_run_beats_average(self) -> None:
         simulation = self._build_simulation()
