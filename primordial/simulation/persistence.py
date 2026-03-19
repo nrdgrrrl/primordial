@@ -16,7 +16,8 @@ from .simulation import Simulation
 from .zones import Zone, ZoneManager
 
 
-SAVE_FORMAT_VERSION = 1
+SAVE_FORMAT_VERSION = 2
+_SUPPORTED_SAVE_FORMAT_VERSIONS = {1, SAVE_FORMAT_VERSION}
 SAVE_KIND = "primordial.world_snapshot"
 
 _SIMULATION_SETTING_FIELDS = (
@@ -162,10 +163,10 @@ def _validate_snapshot_payload(payload: Any) -> None:
     if not isinstance(payload, dict):
         raise SnapshotError("Snapshot root must be an object.")
     version = payload.get("version")
-    if version != SAVE_FORMAT_VERSION:
+    if version not in _SUPPORTED_SAVE_FORMAT_VERSIONS:
         raise SnapshotError(
             f"Unsupported snapshot version: {version!r}. "
-            f"Expected {SAVE_FORMAT_VERSION}."
+            f"Expected one of {sorted(_SUPPORTED_SAVE_FORMAT_VERSIONS)}."
         )
     metadata = payload.get("metadata")
     if not isinstance(metadata, dict):
@@ -210,6 +211,8 @@ def _serialize_creature(creature: Creature) -> dict[str, Any]:
         "age": creature.age,
         "lineage_id": creature.lineage_id,
         "species": creature.species,
+        "recent_animal_energy": creature.recent_animal_energy,
+        "satiety_ticks_remaining": creature.satiety_ticks_remaining,
         "depth_band": creature.depth_band,
         "genome": _serialize_genome(creature.genome),
         "motion_state": {
@@ -233,6 +236,8 @@ def _deserialize_creature(payload: dict[str, Any]) -> Creature:
         age=int(payload["age"]),
         lineage_id=int(payload["lineage_id"]),
         species=str(payload.get("species", "none")),
+        recent_animal_energy=float(payload.get("recent_animal_energy", 0.0)),
+        satiety_ticks_remaining=int(payload.get("satiety_ticks_remaining", 0)),
         depth_band=clamp_depth_band(
             int(payload.get("depth_band", depth_band_from_preference(genome.depth_preference)))
         ),

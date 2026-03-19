@@ -54,6 +54,18 @@ _DEFAULT_PREDATOR_PREY_MAX_CONSECUTIVE_RETRY_TRIALS = 2
 _DEFAULT_PREDATOR_PREY_SURVIVAL_DEADBAND = 50
 _DEFAULT_PREDATOR_NEAR_EXTINCTION_FLOOR = 5
 _DEFAULT_PREY_NEAR_EXTINCTION_FLOOR = 5
+_DEFAULT_PREDATOR_FOOD_EFFICIENCY_MULTIPLIER = 0.85
+_DEFAULT_PREDATOR_FORAGE_COST_MULTIPLIER = 0.72
+_DEFAULT_PREDATOR_RECENT_ANIMAL_ENERGY_REQUIRED = 0.04
+_DEFAULT_PREDATOR_RECENT_ANIMAL_ENERGY_DECAY_PER_TICK = 0.0001
+_DEFAULT_PREDATOR_SATIETY_TICKS = 120
+_DEFAULT_PREDATOR_INTERFERENCE_STRENGTH = 0.12
+_DEFAULT_PREDATOR_TARGET_PREY_PER_PREDATOR = 4.0
+_DEFAULT_PREDATOR_LOW_PREY_HUNT_FLOOR = 0.35
+_DEFAULT_PREY_TO_PREDATOR_AGGRESSION_THRESHOLD = 0.30
+_DEFAULT_PREDATOR_TO_PREY_AGGRESSION_THRESHOLD = 0.20
+_DEFAULT_EXTINCTION_GRACE_TICKS = 7200
+_PREDATOR_INTERFERENCE_RADIUS = 150.0
 
 
 @dataclass(frozen=True)
@@ -107,6 +119,8 @@ class PredatorPreyStabilityState:
     survival_ticks: int = 0
     predator_low_ticks: int = 0
     prey_low_ticks: int = 0
+    predator_zero_ticks: int = 0
+    prey_zero_ticks: int = 0
     run_history: deque[int] = field(
         default_factory=lambda: deque(maxlen=_DEFAULT_PREDATOR_PREY_HISTORY_SIZE)
     )
@@ -210,7 +224,9 @@ class Simulation:
         self.height = height
         self.settings = settings
         self._predator_prey_run_logger: Any = None
-        self._predator_prey_adaptive_tuning_enabled = True
+        self._predator_prey_adaptive_tuning_enabled = bool(
+            self._get_mode_param("adaptive_tuning_enabled", True)
+        )
         if seed is not None and self.settings.sim_mode == "predator_prey":
             random.seed(seed)
 
@@ -351,6 +367,148 @@ class Simulation:
     def _get_food_cycle_amplitude(self) -> float:
         """Resolve food-cycle amplitude, allowing predator-prey-only tuning."""
         return float(self._get_mode_param("food_cycle_amplitude", 1.0))
+
+    def _get_predator_food_efficiency_multiplier(self) -> float:
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    self._get_mode_param(
+                        "predator_food_efficiency_multiplier",
+                        _DEFAULT_PREDATOR_FOOD_EFFICIENCY_MULTIPLIER,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_forage_cost_multiplier(self) -> float:
+        return max(
+            0.1,
+            min(
+                1.0,
+                float(
+                    self._get_mode_param(
+                        "predator_forage_cost_multiplier",
+                        _DEFAULT_PREDATOR_FORAGE_COST_MULTIPLIER,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_recent_animal_energy_required(self) -> float:
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    self._get_mode_param(
+                        "predator_recent_animal_energy_required",
+                        _DEFAULT_PREDATOR_RECENT_ANIMAL_ENERGY_REQUIRED,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_recent_animal_energy_decay_per_tick(self) -> float:
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    self._get_mode_param(
+                        "predator_recent_animal_energy_decay_per_tick",
+                        _DEFAULT_PREDATOR_RECENT_ANIMAL_ENERGY_DECAY_PER_TICK,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_satiety_ticks(self) -> int:
+        return max(
+            0,
+            int(
+                self._get_mode_param(
+                    "predator_satiety_ticks",
+                    _DEFAULT_PREDATOR_SATIETY_TICKS,
+                )
+            ),
+        )
+
+    def _get_predator_interference_strength(self) -> float:
+        return max(
+            0.0,
+            float(
+                self._get_mode_param(
+                    "predator_interference_strength",
+                    _DEFAULT_PREDATOR_INTERFERENCE_STRENGTH,
+                )
+            ),
+        )
+
+    def _get_predator_target_prey_per_predator(self) -> float:
+        return max(
+            0.1,
+            float(
+                self._get_mode_param(
+                    "predator_target_prey_per_predator",
+                    _DEFAULT_PREDATOR_TARGET_PREY_PER_PREDATOR,
+                )
+            ),
+        )
+
+    def _get_predator_low_prey_hunt_floor(self) -> float:
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    self._get_mode_param(
+                        "predator_low_prey_hunt_floor",
+                        _DEFAULT_PREDATOR_LOW_PREY_HUNT_FLOOR,
+                    )
+                ),
+            ),
+        )
+
+    def _get_prey_to_predator_aggression_threshold(self) -> float:
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    self._get_mode_param(
+                        "prey_to_predator_aggression_threshold",
+                        _DEFAULT_PREY_TO_PREDATOR_AGGRESSION_THRESHOLD,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_to_prey_aggression_threshold(self) -> float:
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    self._get_mode_param(
+                        "predator_to_prey_aggression_threshold",
+                        _DEFAULT_PREDATOR_TO_PREY_AGGRESSION_THRESHOLD,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_prey_extinction_grace_ticks(self) -> int:
+        return max(
+            0,
+            int(
+                self._get_mode_param(
+                    "extinction_grace_ticks",
+                    _DEFAULT_EXTINCTION_GRACE_TICKS,
+                )
+            ),
+        )
 
     def _get_predator_prey_history_size(self) -> int:
         return max(
@@ -514,6 +672,21 @@ class Simulation:
             for spec in _PREDATOR_PREY_ADAPTIVE_DIALS
         }
 
+    def _resolve_predator_prey_species(
+        self,
+        current_species: str,
+        aggression: float,
+    ) -> str:
+        if current_species == "predator":
+            if aggression < self._get_predator_to_prey_aggression_threshold():
+                return "prey"
+            return "predator"
+        if current_species == "prey":
+            if aggression >= self._get_prey_to_predator_aggression_threshold():
+                return "predator"
+            return "prey"
+        return "predator" if aggression >= 0.5 else "prey"
+
     # ------------------------------------------------------------------
     # Setup helpers
     # ------------------------------------------------------------------
@@ -669,6 +842,9 @@ class Simulation:
     ) -> None:
         """Reset the simulation to initial state."""
         if self.settings.sim_mode == "predator_prey":
+            self._predator_prey_adaptive_tuning_enabled = bool(
+                self._get_mode_param("adaptive_tuning_enabled", True)
+            )
             if preserve_predator_prey_state:
                 self._prepare_predator_prey_run_restart(new_seed)
             else:
@@ -716,6 +892,8 @@ class Simulation:
         state.survival_ticks = 0
         state.predator_low_ticks = 0
         state.prey_low_ticks = 0
+        state.predator_zero_ticks = 0
+        state.prey_zero_ticks = 0
         state.game_over_active = False
         state.collapse_cause = None
         state.collapse_predator_count = 0
@@ -790,8 +968,18 @@ class Simulation:
             creature.rotation_angle = 0.0
             creature._glyph_phase = creature.genome.hue * 6.28
             creature.clamp_depth_band()
+            creature.recent_animal_energy = max(
+                0.0,
+                min(1.0, creature.recent_animal_energy),
+            )
+            creature.satiety_ticks_remaining = max(0, creature.satiety_ticks_remaining)
             if self.settings.sim_mode != "boids":
                 creature.flock_id = -1
+            if self.settings.sim_mode == "predator_prey":
+                creature.species = self._resolve_predator_prey_species(
+                    creature.species,
+                    creature.genome.aggression,
+                )
             if self.settings.sim_mode == "predator_prey" and creature.species == "predator":
                 self._register_predator_life(creature, origin="restored")
 
@@ -923,6 +1111,10 @@ class Simulation:
         total = max(1, len(self.creatures))
         pred_fraction = pred_count / total
         prey_fraction = prey_count / total
+        hunt_balance_factor = self._get_predator_hunt_balance_factor(
+            pred_count=pred_count,
+            prey_count=prey_count,
+        )
 
         # If > 60% predators: increase their reproduction threshold
         pred_repro_penalty = 0.20 if pred_fraction > 0.60 else 0.0
@@ -934,7 +1126,10 @@ class Simulation:
 
         for creature in self.creatures:
             if creature.species not in {"predator", "prey"}:
-                creature.species = "predator" if creature.genome.aggression >= 0.5 else "prey"
+                creature.species = self._resolve_predator_prey_species(
+                    creature.species,
+                    creature.genome.aggression,
+                )
             self._update_predator_prey_depth_band(
                 creature,
                 creature.get_preferred_depth_band(),
@@ -942,20 +1137,45 @@ class Simulation:
             )
 
             if creature.species == "predator":
+                self._tick_predator_state(creature)
                 repro_threshold = self._get_reproduction_threshold(creature) * (
                     1.0 + pred_repro_penalty
                 )
-                self._predator_hunt_prey(
+                engaged, _killed = self._predator_hunt_prey(
                     creature,
                     creature_bucket,
                     repro_threshold=repro_threshold,
+                    hunt_balance_factor=hunt_balance_factor,
+                    close_range_only=creature.satiety_ticks_remaining > 0,
                 )
+                if not engaged:
+                    self._creature_seek_food(
+                        creature,
+                        sense_override=(
+                            creature.get_sense_radius()
+                            * (1.0 + self._get_predator_food_efficiency_multiplier())
+                        ),
+                    )
                 creature.update_position(1.0, self.width, self.height)
 
-                # Predators pay 1.4× movement cost; prey scarcity doubles it
-                energy_cost = creature.get_movement_cost() * 1.4
+                # Broad omnivory softens the legacy predator metabolic premium.
+                predator_cost_multiplier = 1.0 + (
+                    0.4 * (1.0 - self._get_predator_food_efficiency_multiplier())
+                )
+                energy_cost = creature.get_movement_cost() * predator_cost_multiplier
                 if prey_scarce:
-                    energy_cost *= self._get_predator_prey_scarcity_penalty_multiplier()
+                    scarcity_multiplier = self._get_predator_prey_scarcity_penalty_multiplier()
+                    omnivore_buffer = max(
+                        1.0,
+                        1.0
+                        + (
+                            (scarcity_multiplier - 1.0)
+                            * (1.0 - self._get_predator_food_efficiency_multiplier())
+                        ),
+                    )
+                    energy_cost *= omnivore_buffer
+                if not engaged:
+                    energy_cost *= self._get_predator_forage_cost_multiplier()
                 energy_cost += creature.genome.longevity * 0.0004
                 energy_cost += self._get_sensing_upkeep_cost(creature)
                 energy_cost *= 1.0 + overcrowding_penalty
@@ -966,7 +1186,11 @@ class Simulation:
                     repro_threshold=repro_threshold,
                     prey_scarce=prey_scarce,
                 )
-                if creature.energy >= repro_threshold:
+                if (
+                    creature.energy >= repro_threshold
+                    and creature.recent_animal_energy
+                    >= self._get_predator_recent_animal_energy_required()
+                ):
                     offspring = self._reproduce_pp(creature, mutation_rate)
                     if offspring:
                         new_creatures.append(offspring)
@@ -1010,20 +1234,87 @@ class Simulation:
         self._process_deaths(dead_creatures, dead_causes)
         self._check_predator_prey_collapse()
 
+    def _tick_predator_state(self, predator: Creature) -> None:
+        predator.recent_animal_energy = max(
+            0.0,
+            predator.recent_animal_energy
+            - self._get_predator_recent_animal_energy_decay_per_tick(),
+        )
+        predator.satiety_ticks_remaining = max(0, predator.satiety_ticks_remaining - 1)
+
+    def _predator_interference_factor(
+        self,
+        predator: Creature,
+        bucket: dict,
+    ) -> float:
+        strength = self._get_predator_interference_strength()
+        if strength <= 0.0:
+            return 1.0
+        nearby_predators = 0
+        for other in self._nearby_creatures(
+            predator.x,
+            predator.y,
+            _PREDATOR_INTERFERENCE_RADIUS,
+            bucket,
+        ):
+            if other is predator or other.species != "predator" or other.energy <= 0.0:
+                continue
+            if (
+                predator.distance_to(other.x, other.y, self.width, self.height)
+                <= _PREDATOR_INTERFERENCE_RADIUS
+            ):
+                nearby_predators += 1
+        effective_nearby_predators = max(0, nearby_predators - 1)
+        return 1.0 / (1.0 + (effective_nearby_predators * strength))
+
+    def _get_predator_hunt_balance_factor(
+        self,
+        *,
+        pred_count: int,
+        prey_count: int,
+    ) -> float:
+        if pred_count <= 0:
+            return 1.0
+        prey_per_predator = prey_count / max(1, pred_count)
+        target_ratio = self._get_predator_target_prey_per_predator()
+        scarcity_scale = prey_per_predator / target_ratio
+        return max(
+            self._get_predator_low_prey_hunt_floor(),
+            min(1.0, scarcity_scale),
+        )
+
     def _predator_hunt_prey(
         self,
         predator: Creature,
         bucket: dict,
         *,
         repro_threshold: float | None = None,
-    ) -> None:
+        hunt_balance_factor: float = 1.0,
+        close_range_only: bool = False,
+    ) -> tuple[bool, bool]:
         """Predator seeks nearest prey; kills on contact."""
         if repro_threshold is None:
             repro_threshold = self._get_reproduction_threshold(predator)
-        sense_multiplier = self._get_predator_hunt_sense_multiplier()
-        speed_multiplier = self._get_predator_hunt_speed_multiplier()
-        contact_scale = self._get_predator_contact_kill_distance_scale()
+        interference_factor = self._predator_interference_factor(predator, bucket)
+        sense_multiplier = (
+            self._get_predator_hunt_sense_multiplier()
+            * interference_factor
+            * hunt_balance_factor
+        )
+        speed_multiplier = (
+            self._get_predator_hunt_speed_multiplier()
+            * interference_factor
+            * hunt_balance_factor
+        )
+        contact_scale = (
+            self._get_predator_contact_kill_distance_scale()
+            * interference_factor
+            * hunt_balance_factor
+        )
         sense = self._get_effective_sensing_range(predator, multiplier=sense_multiplier)
+        if close_range_only:
+            close_range = max(24.0, predator.get_radius() * 3.0)
+            sense = min(sense, close_range)
         best_prey: Creature | None = None
         best_dist_sq = sense * sense
 
@@ -1036,8 +1327,7 @@ class Simulation:
                 best_prey = other
 
         if best_prey is None:
-            predator.wander(self.settings.creature_speed_base)
-            return
+            return False, False
 
         self._record_predator_prey_sighting(predator)
 
@@ -1055,8 +1345,7 @@ class Simulation:
             target_depth_band=best_prey.depth_band,
         )
         if sensed_prey is None:
-            predator.wander(self.settings.creature_speed_base)
-            return
+            return False, False
 
         predator.steer_toward(
             sensed_prey[0], sensed_prey[1],
@@ -1078,6 +1367,11 @@ class Simulation:
             pre_kill_energy = predator.energy
             energy_gain = min(self._get_predator_kill_energy_gain_cap(), best_prey.energy)
             predator.energy = min(1.0, predator.energy + energy_gain)
+            predator.recent_animal_energy = min(
+                1.0,
+                predator.recent_animal_energy + energy_gain,
+            )
+            predator.satiety_ticks_remaining = self._get_predator_satiety_ticks()
             best_prey.energy = 0.0
             self.predation_kill_count += 1
             self._predation_victims_this_frame.add(id(best_prey))
@@ -1093,9 +1387,11 @@ class Simulation:
                 best_prey.x, best_prey.y,
                 predator.genome.hue,
             ))
+            return True, True
         elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
             self._recent_cross_band_miss_frames.append(self._frame)
             self._record_predator_cross_band_miss(predator)
+        return True, False
 
     def _prey_flee(self, prey: Creature, bucket: dict) -> bool:
         """Prey flees from nearest predator within a tuned sensing range.
@@ -1161,7 +1457,7 @@ class Simulation:
         creature.vy *= scale
 
     def _apply_cosmic_ray_pp(self, creature: Creature) -> None:
-        """Cosmic ray in predator_prey mode — can flip species on aggression crossing 0.5."""
+        """Cosmic ray in predator_prey mode — may flip species via hysteresis thresholds."""
         new_genome, mutated_trait = creature.genome.mutate_one(std=0.15)
 
         if self._should_branch_lineage(creature.genome, new_genome, hue_threshold=0.2):
@@ -1169,10 +1465,13 @@ class Simulation:
 
         # Species flip if aggression crosses 0.5 boundary
         if mutated_trait == "aggression":
-            was_predator = creature.genome.aggression >= 0.5
-            is_predator = new_genome.aggression >= 0.5
-            if was_predator != is_predator:
-                if was_predator:
+            previous_species = creature.species
+            next_species = self._resolve_predator_prey_species(
+                creature.species,
+                new_genome.aggression,
+            )
+            if previous_species != next_species:
+                if previous_species == "predator":
                     self._finalize_predator_life(
                         creature,
                         end_reason="species_flip_to_prey",
@@ -1182,9 +1481,11 @@ class Simulation:
                         "frame": self._frame,
                         "lineage_id": creature.lineage_id,
                     })
-                creature.species = "predator" if is_predator else "prey"
+                creature.species = next_species
                 creature.lineage_id = self._alloc_lineage_id()
-                if is_predator:
+                creature.recent_animal_energy = 0.0
+                creature.satiety_ticks_remaining = 0
+                if next_species == "predator":
                     self._predator_diag_events["cosmic_flips_to_predator"].append({
                         "frame": self._frame,
                         "lineage_id": creature.lineage_id,
@@ -1197,17 +1498,22 @@ class Simulation:
         self.cosmic_ray_events.append((creature.x, creature.y))
 
     def _reproduce_pp(self, creature: Creature, mutation_rate: float) -> Creature | None:
-        """Reproduce in predator_prey mode — offspring inherits species."""
+        """Reproduce in predator_prey mode with hysteresis-based offspring role."""
         max_pop = self._get_mode_param("max_population", self.settings.max_population)
         if len(self.creatures) >= max_pop:
             return None
 
         creature.energy /= 2
+        creature.recent_animal_energy *= 0.5
         offspring_genome = creature.genome.mutate(mutation_rate)
         offspring_lineage = self._branch_lineage_id(
             creature.lineage_id,
             creature.genome,
             offspring_genome,
+        )
+        offspring_species = self._resolve_predator_prey_species(
+            creature.species,
+            offspring_genome.aggression,
         )
 
         offspring = Creature(
@@ -1218,7 +1524,9 @@ class Simulation:
             vy=random.uniform(-1, 1),
             energy=creature.energy,
             lineage_id=offspring_lineage,
-            species=creature.species,
+            species=offspring_species,
+            recent_animal_energy=0.0,
+            satiety_ticks_remaining=0,
             _glyph_phase=offspring_genome.hue * 6.28,
         )
 
@@ -1227,17 +1535,19 @@ class Simulation:
         if creature.species == "predator":
             life = self._ensure_predator_life(creature)
             life["births_produced"] += 1
-            self._predator_diag_events["births"].append({
-                "frame": self._frame,
-                "parent_life_id": life["life_id"],
-                "parent_lineage_id": creature.lineage_id,
-                "offspring_lineage_id": offspring.lineage_id,
-            })
+            if offspring.species == "predator":
+                self._predator_diag_events["births"].append({
+                    "frame": self._frame,
+                    "parent_life_id": life["life_id"],
+                    "parent_lineage_id": creature.lineage_id,
+                    "offspring_lineage_id": offspring.lineage_id,
+                })
+        if offspring.species == "predator":
             self._register_predator_life(offspring, origin="birth")
         return offspring
 
     def _check_predator_prey_collapse(self, now_seconds: float | None = None) -> None:
-        """Freeze predator-prey runs once either species collapses to zero."""
+        """Freeze predator-prey runs only after sustained zero-count grace windows."""
         if self.predator_prey_game_over_active:
             return
 
@@ -1247,7 +1557,16 @@ class Simulation:
             state.predator_low_ticks += 1
         if prey_count < self._get_prey_near_extinction_floor():
             state.prey_low_ticks += 1
+        state.predator_zero_ticks = state.predator_zero_ticks + 1 if pred_count == 0 else 0
+        state.prey_zero_ticks = state.prey_zero_ticks + 1 if prey_count == 0 else 0
         if pred_count > 0 and prey_count > 0:
+            return
+
+        grace_ticks = self._get_predator_prey_extinction_grace_ticks()
+        if (
+            state.predator_zero_ticks < grace_ticks
+            and state.prey_zero_ticks < grace_ticks
+        ):
             return
 
         if pred_count == 0 and prey_count == 0:
@@ -1612,6 +1931,8 @@ class Simulation:
         state.highest_survival_ticks = 0
         state.predator_low_ticks = 0
         state.prey_low_ticks = 0
+        state.predator_zero_ticks = 0
+        state.prey_zero_ticks = 0
         state.collapse_dial_values = {}
         state.collapse_trial_dial = None
         state.collapse_trial_phase = None
@@ -2146,7 +2467,16 @@ class Simulation:
 
             if dist < eat_distance:
                 eff_bonus = 1.20 if creature.genome.aggression < 0.4 else 1.0
-                energy_gain = nearest_food.energy * (0.5 + creature.genome.efficiency * 0.5) * eff_bonus
+                energy_gain = (
+                    nearest_food.energy
+                    * (0.5 + creature.genome.efficiency * 0.5)
+                    * eff_bonus
+                )
+                if (
+                    self.settings.sim_mode == "predator_prey"
+                    and creature.species == "predator"
+                ):
+                    energy_gain *= self._get_predator_food_efficiency_multiplier()
                 creature.energy = min(1.0, creature.energy + energy_gain)
                 self.food_manager.remove(nearest_food)
         else:
@@ -2158,10 +2488,7 @@ class Simulation:
         sense_radius: float,
     ):
         """Find food, keeping predator-prey access bounded by the creature's band."""
-        if not (
-            self.settings.sim_mode == "predator_prey"
-            and creature.species == "prey"
-        ):
+        if self.settings.sim_mode != "predator_prey":
             return self.food_manager.find_nearest(creature.x, creature.y, sense_radius)
 
         nearest_food = self.food_manager.find_nearest(
@@ -2670,6 +2997,7 @@ class Simulation:
     def get_predator_prey_stability_stats(self) -> dict[str, Any]:
         """Return predator-prey run stability telemetry for HUD and persistence."""
         state = self._predator_prey_state
+        grace_ticks = self._get_predator_prey_extinction_grace_ticks()
         trial_direction = ""
         if state.adaptive_tuning.trial_direction > 0:
             trial_direction = "+"
@@ -2680,12 +3008,36 @@ class Simulation:
             collapse_trial_direction = "+"
         elif state.collapse_trial_delta < 0:
             collapse_trial_direction = "-"
+        predator_grace_remaining = max(0, grace_ticks - state.predator_zero_ticks)
+        prey_grace_remaining = max(0, grace_ticks - state.prey_zero_ticks)
+        grace_active = (
+            not state.game_over_active
+            and (
+                state.predator_zero_ticks > 0
+                or state.prey_zero_ticks > 0
+            )
+        )
+        if state.predator_zero_ticks > 0 and state.prey_zero_ticks > 0:
+            grace_role = "both"
+        elif state.predator_zero_ticks > 0:
+            grace_role = "predators"
+        elif state.prey_zero_ticks > 0:
+            grace_role = "prey"
+        else:
+            grace_role = "none"
         return {
             "current_seed": state.current_seed,
             "sim_ticks": state.sim_ticks,
             "survival_ticks": state.survival_ticks,
             "predator_low_ticks": state.predator_low_ticks,
             "prey_low_ticks": state.prey_low_ticks,
+            "predator_zero_ticks": state.predator_zero_ticks,
+            "prey_zero_ticks": state.prey_zero_ticks,
+            "extinction_grace_ticks": grace_ticks,
+            "extinction_grace_active": grace_active,
+            "extinction_grace_role": grace_role,
+            "predator_grace_remaining_ticks": predator_grace_remaining,
+            "prey_grace_remaining_ticks": prey_grace_remaining,
             "near_extinction_pressure": state.predator_low_ticks + state.prey_low_ticks,
             "rolling_average_survival_ticks": self.predator_prey_rolling_average,
             "best_recent_survival_ticks": self.predator_prey_best_recent_ticks,
@@ -2764,6 +3116,8 @@ class Simulation:
             "survival_ticks": state.survival_ticks,
             "predator_low_ticks": state.predator_low_ticks,
             "prey_low_ticks": state.prey_low_ticks,
+            "predator_zero_ticks": state.predator_zero_ticks,
+            "prey_zero_ticks": state.prey_zero_ticks,
             "run_history": list(state.run_history),
             "highest_survival_ticks": state.highest_survival_ticks,
             "game_over": {
@@ -2897,6 +3251,8 @@ class Simulation:
         state.survival_ticks = int(payload.get("survival_ticks", state.sim_ticks))
         state.predator_low_ticks = int(payload.get("predator_low_ticks", 0))
         state.prey_low_ticks = int(payload.get("prey_low_ticks", 0))
+        state.predator_zero_ticks = int(payload.get("predator_zero_ticks", 0))
+        state.prey_zero_ticks = int(payload.get("prey_zero_ticks", 0))
         history = payload.get("run_history", [])
         state.run_history = self._build_predator_prey_run_history(history)
         state.highest_survival_ticks = int(

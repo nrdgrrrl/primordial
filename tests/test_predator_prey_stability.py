@@ -47,6 +47,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         survival_deadband: int = 50,
         predator_floor: int = 5,
         prey_floor: int = 5,
+        adaptive_tuning_enabled: bool = True,
+        extinction_grace_ticks: int = 1800,
     ) -> Settings:
         settings = Settings()
         settings.mode_params = deepcopy(settings.DEFAULT_MODE_PARAMS)
@@ -67,9 +69,11 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         predator_prey["adaptive_survival_deadband"] = survival_deadband
         predator_prey["adaptive_near_extinction_predator_floor"] = predator_floor
         predator_prey["adaptive_near_extinction_prey_floor"] = prey_floor
+        predator_prey["adaptive_tuning_enabled"] = adaptive_tuning_enabled
+        predator_prey["extinction_grace_ticks"] = extinction_grace_ticks
         return settings
 
-    def _build_simulation(self, **settings_kwargs: float | int) -> Simulation:
+    def _build_simulation(self, **settings_kwargs: float | int | bool) -> Simulation:
         simulation = Simulation(1000, 1000, self._build_settings(**settings_kwargs))
         simulation.creatures.clear()
         simulation.food_manager.clear()
@@ -142,10 +146,25 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["sim_ticks"], 2)
         self.assertEqual(stats["survival_ticks"], 2)
 
-    def test_extinction_triggers_game_over(self) -> None:
-        simulation = self._build_simulation()
+    def test_extinction_enters_grace_window_before_game_over(self) -> None:
+        simulation = self._build_simulation(extinction_grace_ticks=3)
         simulation.creatures = [self._creature("prey", x=200.0, y=200.0)]
 
+        simulation.step()
+
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertFalse(simulation.predator_prey_game_over_active)
+        self.assertTrue(stats["extinction_grace_active"])
+        self.assertEqual(stats["extinction_grace_role"], "predators")
+        self.assertEqual(stats["predator_zero_ticks"], 1)
+        self.assertEqual(stats["predator_grace_remaining_ticks"], 2)
+
+    def test_sustained_extinction_after_grace_window_triggers_game_over(self) -> None:
+        simulation = self._build_simulation(extinction_grace_ticks=3)
+        simulation.creatures = [self._creature("prey", x=200.0, y=200.0)]
+
+        simulation.step()
+        simulation.step()
         simulation.step()
 
         stats = simulation.get_predator_prey_stability_stats()
@@ -153,6 +172,69 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(stats["collapse_cause"], "Predators collapsed")
         self.assertEqual(stats["collapse_predators"], 0)
         self.assertEqual(stats["collapse_prey"], 1)
+
+    def test_recovery_inside_grace_window_clears_zero_tick_counter(self) -> None:
+        simulation = self._build_simulation(extinction_grace_ticks=5)
+        simulation.creatures = [self._creature("prey", x=200.0, y=200.0)]
+
+        simulation.step()
+        predator = self._creature("predator", x=220.0, y=220.0, energy=0.4)
+        simulation.creatures.append(predator)
+
+        simulation.step()
+
+        stats = simulation.get_predator_prey_stability_stats()
+        self.assertFalse(stats["extinction_grace_active"])
+        self.assertEqual(stats["predator_zero_ticks"], 0)
+
+    def test_predator_prey_adaptive_tuning_is_disabled_by_default(self) -> None:
+        settings = Settings()
+        settings.mode_params = deepcopy(settings.DEFAULT_MODE_PARAMS)
+        settings.sim_mode = "predator_prey"
+        simulation = Simulation(400, 300, settings)
+
+        self.assertFalse(
+            settings.mode_params["predator_prey"]["adaptive_tuning_enabled"]
+        )
+        self.assertFalse(simulation._predator_prey_adaptive_tuning_enabled)
+
+    def test_predator_can_eat_food_without_unlocking_reproduction(self) -> None:
+        simulation = self._build_simulation(extinction_grace_ticks=10)
+        simulation.settings.mode_params["predator_prey"]["predator_food_efficiency_multiplier"] = 1.0
+        simulation.settings.mode_params["predator_prey"]["predator_energy_to_reproduce"] = 0.55
+        simulation.settings.mode_params["predator_prey"][
+            "predator_recent_animal_energy_required"
+        ] = 0.35
+        simulation.settings.mode_params["predator_prey"]["food_spawn_rate"] = 0.0
+        predator = self._creature("predator", x=200.0, y=200.0, energy=0.54)
+        predator.depth_band = 1
+        simulation.creatures = [predator]
+        food = simulation.food_manager.spawn(x=200.0, y=200.0, depth_band=1)
+
+        simulation.step()
+
+        predator_count, prey_count = simulation.get_species_counts()
+        self.assertEqual(predator_count, 1)
+        self.assertEqual(prey_count, 0)
+        self.assertGreater(predator.energy, 0.55)
+        self.assertEqual(predator.recent_animal_energy, 0.0)
+        self.assertLess(
+            predator.recent_animal_energy,
+            simulation.settings.mode_params["predator_prey"][
+                "predator_recent_animal_energy_required"
+            ],
+        )
+        self.assertNotIn(food, simulation.food_manager.particles)
+
+    def test_lone_predator_gets_no_hunt_bonus_from_interference_logic(self) -> None:
+        simulation = self._build_simulation()
+        predator = self._creature("predator", x=200.0, y=200.0)
+        bucket = simulation._build_creature_bucket()
+
+        self.assertEqual(
+            simulation._predator_interference_factor(predator, bucket),
+            1.0,
+        )
 
     def test_game_over_auto_restart_after_ten_seconds(self) -> None:
         simulation = self._build_simulation()
@@ -399,7 +481,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(tuning.non_improving_run_streak, 4)
         self.assertAlmostEqual(
             tuning.current_values["predator_contact_kill_distance_scale"],
-            baseline - 0.075,
+            max(0.80, baseline - 0.075),
             places=4,
         )
         self.assertAlmostEqual(
@@ -762,6 +844,15 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         joined = "\n".join(lines)
         self.assertIn("Med40:", joined)
         self.assertIn("Best40:", joined)
+
+    def test_hud_shows_extinction_grace_warning(self) -> None:
+        simulation = self._build_simulation(extinction_grace_ticks=5)
+        simulation._predator_prey_state.predator_zero_ticks = 2
+        hud = HUD()
+
+        lines = hud._lines_predator_prey(simulation)
+
+        self.assertIn("Danger: predators zero (3t grace)", "\n".join(lines))
 
     def test_game_over_summary_lines_include_adjustment_modifier(self) -> None:
         simulation = self._build_simulation()

@@ -101,6 +101,21 @@ class HUD:
             trial_line = (
                 f"Trial: {stability['trial_dial']} {stability['trial_direction']}"
             )
+        danger_line = "Danger: none"
+        if stability["extinction_grace_active"]:
+            if stability["extinction_grace_role"] == "both":
+                remaining = min(
+                    stability["predator_grace_remaining_ticks"],
+                    stability["prey_grace_remaining_ticks"],
+                )
+            elif stability["extinction_grace_role"] == "predators":
+                remaining = stability["predator_grace_remaining_ticks"]
+            else:
+                remaining = stability["prey_grace_remaining_ticks"]
+            danger_line = (
+                f"Danger: {stability['extinction_grace_role']} zero "
+                f"({remaining}t grace)"
+            )
         history_window = stability["history_window_size"]
 
         return [
@@ -116,6 +131,7 @@ class HUD:
                     best=stability["best_recent_survival_ticks"],
                 )
             ),
+            danger_line,
             trial_line,
             f"Zone: {dom_zone}",
             f"Mode: predator_prey",

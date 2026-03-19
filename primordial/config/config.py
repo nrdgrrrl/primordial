@@ -73,6 +73,7 @@ _CANONICAL_MODE_KEYS: dict[str, tuple[str, ...]] = {
         "predator_fraction",
         "food_spawn_rate",
         "mutation_rate",
+        "adaptive_tuning_enabled",
         "energy_to_reproduce",
         "prey_energy_to_reproduce",
         "predator_energy_to_reproduce",
@@ -83,6 +84,17 @@ _CANONICAL_MODE_KEYS: dict[str, tuple[str, ...]] = {
         "prey_flee_sense_multiplier",
         "predator_prey_scarcity_penalty_multiplier",
         "food_cycle_amplitude",
+        "predator_food_efficiency_multiplier",
+        "predator_forage_cost_multiplier",
+        "predator_recent_animal_energy_required",
+        "predator_recent_animal_energy_decay_per_tick",
+        "predator_satiety_ticks",
+        "predator_interference_strength",
+        "predator_target_prey_per_predator",
+        "predator_low_prey_hunt_floor",
+        "prey_to_predator_aggression_threshold",
+        "predator_to_prey_aggression_threshold",
+        "extinction_grace_ticks",
         "stability_history_size",
         "adaptive_step_escalation_runs",
         "adaptive_step_escalation_percent",
@@ -118,6 +130,7 @@ _MODE_PARAM_RULES: dict[str, tuple[str, float | int | None, float | int | None]]
     "predator_fraction": ("float", 0.0, 1.0),
     "food_spawn_rate": ("float", 0.0, None),
     "mutation_rate": ("float", 0.0, 1.0),
+    "adaptive_tuning_enabled": ("bool", None, None),
     "energy_to_reproduce": ("float", 0.05, 1.0),
     "prey_energy_to_reproduce": ("float", 0.05, 1.0),
     "predator_energy_to_reproduce": ("float", 0.05, 1.0),
@@ -128,6 +141,17 @@ _MODE_PARAM_RULES: dict[str, tuple[str, float | int | None, float | int | None]]
     "prey_flee_sense_multiplier": ("float", 0.1, 5.0),
     "predator_prey_scarcity_penalty_multiplier": ("float", 0.1, 5.0),
     "food_cycle_amplitude": ("float", 0.0, 1.0),
+    "predator_food_efficiency_multiplier": ("float", 0.0, 1.0),
+    "predator_forage_cost_multiplier": ("float", 0.1, 1.0),
+    "predator_recent_animal_energy_required": ("float", 0.0, 1.0),
+    "predator_recent_animal_energy_decay_per_tick": ("float", 0.0, 1.0),
+    "predator_satiety_ticks": ("int", 0, None),
+    "predator_interference_strength": ("float", 0.0, 5.0),
+    "predator_target_prey_per_predator": ("float", 0.1, None),
+    "predator_low_prey_hunt_floor": ("float", 0.0, 1.0),
+    "prey_to_predator_aggression_threshold": ("float", 0.0, 1.0),
+    "predator_to_prey_aggression_threshold": ("float", 0.0, 1.0),
+    "extinction_grace_ticks": ("int", 0, None),
     "stability_history_size": ("int", 1, None),
     "adaptive_step_escalation_runs": ("int", 1, None),
     "adaptive_step_escalation_percent": ("float", 0.0, None),
@@ -146,6 +170,29 @@ _BASE_ATTRS = tuple(
     attr_name
     for section_fields in _SECTION_FIELDS.values()
     for attr_name, _kind in section_fields.values()
+)
+
+_LEGACY_PREDATOR_PREY_RESET_KEYS = frozenset(
+    {
+        "adaptive_tuning_enabled",
+        "predator_food_efficiency_multiplier",
+        "predator_forage_cost_multiplier",
+        "predator_recent_animal_energy_required",
+        "predator_recent_animal_energy_decay_per_tick",
+        "predator_satiety_ticks",
+        "predator_interference_strength",
+        "predator_target_prey_per_predator",
+        "predator_low_prey_hunt_floor",
+        "prey_to_predator_aggression_threshold",
+        "predator_to_prey_aggression_threshold",
+        "extinction_grace_ticks",
+    }
+)
+
+_IGNORED_LEGACY_MODE_KEYS = frozenset(
+    {
+        ("predator_prey", "predator_solitude_hunt_bonus"),
+    }
 )
 
 
@@ -171,6 +218,7 @@ class Config:
             setattr(self, attr_name, _MISSING)
         self.mode_params = {mode_name: {} for mode_name in _CANONICAL_MODE_KEYS}
         self.default_mode_params = deepcopy(self.mode_params)
+        self._config_migrated = False
 
     def _load_canonical_defaults(self) -> None:
         defaults_path = get_canonical_defaults_path()
@@ -230,6 +278,8 @@ class Config:
 
         self._merge_from_dict(data)
         self._validate()
+        if self._config_migrated:
+            self.save()
 
     def _merge_from_dict(self, data: dict[str, Any]) -> None:
         if not isinstance(data, dict):
@@ -494,8 +544,24 @@ predator_highlight_pulse_seconds = {self.predator_highlight_pulse_seconds:.2f}
             if not isinstance(raw_mode_data, dict):
                 logger.warning("Section [modes.%s] must be a table; ignored.", mode_name)
                 continue
+            if (
+                mode_name == "predator_prey"
+                and self._is_legacy_predator_prey_block(raw_mode_data)
+            ):
+                logger.warning(
+                    "Legacy [modes.predator_prey] block detected; "
+                    "resetting to canonical predator-prey defaults."
+                )
+                self.mode_params[mode_name] = deepcopy(
+                    self.default_mode_params[mode_name]
+                )
+                self._config_migrated = True
+                continue
 
             for key, value in raw_mode_data.items():
+                if (mode_name, key) in _IGNORED_LEGACY_MODE_KEYS:
+                    self._config_migrated = True
+                    continue
                 if key not in _MODE_PARAM_RULES:
                     logger.warning(
                         "Unknown config key [modes.%s].%s ignored.", mode_name, key
@@ -519,6 +585,12 @@ predator_highlight_pulse_seconds = {self.predator_highlight_pulse_seconds:.2f}
                         parsed = min(float(max_value), parsed)
 
                 self.mode_params[mode_name][key] = parsed
+
+    def _is_legacy_predator_prey_block(self, raw_mode_data: dict[str, Any]) -> bool:
+        return bool(
+            raw_mode_data
+            and _LEGACY_PREDATOR_PREY_RESET_KEYS.difference(raw_mode_data)
+        )
 
     def _validate_mode_params(self) -> None:
         mode_params = deepcopy(self.default_mode_params)

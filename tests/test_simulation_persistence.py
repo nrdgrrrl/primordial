@@ -103,6 +103,14 @@ class SimulationPersistenceTests(unittest.TestCase):
             loaded_payload = build_snapshot(loaded)
             self.assertEqual(saved_payload, loaded_payload)
             if saved_payload["world"]["creatures"]:
+                self.assertIn(
+                    "recent_animal_energy",
+                    saved_payload["world"]["creatures"][0],
+                )
+                self.assertIn(
+                    "satiety_ticks_remaining",
+                    saved_payload["world"]["creatures"][0],
+                )
                 self.assertIn("depth_band", saved_payload["world"]["creatures"][0])
                 self.assertIn(
                     "depth_preference",
@@ -123,6 +131,27 @@ class SimulationPersistenceTests(unittest.TestCase):
             advanced_loaded = build_snapshot(loaded)
 
             self.assertEqual(advanced_original, advanced_loaded)
+
+    def test_load_snapshot_version_1_defaults_new_predator_runtime_fields(self) -> None:
+        settings = self._build_settings("predator_prey")
+        settings.mode_params["predator_prey"]["initial_population"] = 6
+        random.seed(112233)
+        simulation = Simulation(320, 180, settings)
+        for creature in simulation.creatures:
+            creature.recent_animal_energy = 0.4
+            creature.satiety_ticks_remaining = 12
+
+        snapshot = build_snapshot(simulation)
+        snapshot["version"] = 1
+        for creature in snapshot["world"]["creatures"]:
+            creature.pop("recent_animal_energy", None)
+            creature.pop("satiety_ticks_remaining", None)
+
+        loaded = load_snapshot_payload(snapshot, settings=self._build_settings("predator_prey"))
+
+        self.assertTrue(loaded.creatures)
+        self.assertTrue(all(c.recent_animal_energy == 0.0 for c in loaded.creatures))
+        self.assertTrue(all(c.satiety_ticks_remaining == 0 for c in loaded.creatures))
 
     def test_load_rebuilds_boids_flock_state_without_persisting_it(self) -> None:
         settings = self._build_settings("boids")

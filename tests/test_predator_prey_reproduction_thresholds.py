@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import unittest
+from unittest.mock import patch
 
 from primordial.settings import Settings
 from primordial.simulation import Simulation
@@ -46,6 +47,7 @@ class PredatorPreyReproductionThresholdTests(unittest.TestCase):
 
         predator = self._build_creature("predator", longevity=0.0)
         predator.energy = 0.72
+        predator.recent_animal_energy = 0.5
         predator.age = 0
         predator.vx = 0.0
         predator.vy = 0.0
@@ -135,6 +137,40 @@ class PredatorPreyReproductionThresholdTests(unittest.TestCase):
         creature = self._build_creature("prey")
 
         self.assertEqual(simulation._get_reproduction_threshold(creature), 0.84)
+
+    def test_predator_prey_offspring_can_flip_species_at_birth(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"][
+            "prey_to_predator_aggression_threshold"
+        ] = 0.58
+
+        prey = self._build_creature("prey", longevity=0.0)
+        prey.energy = 0.90
+        prey.genome = Genome(aggression=0.20, longevity=0.0)
+
+        with patch(
+            "primordial.simulation.simulation.Genome.mutate",
+            return_value=Genome(aggression=0.70, longevity=0.0),
+        ):
+            offspring = simulation._reproduce_pp(prey, mutation_rate=0.0)
+
+        self.assertIsNotNone(offspring)
+        self.assertEqual(offspring.species, "predator")
+
+    def test_cosmic_ray_uses_hysteresis_thresholds_for_species_flip(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = self._build_creature("predator", longevity=0.0)
+        predator.genome = Genome(aggression=0.60, longevity=0.0)
+        simulation.creatures = [predator]
+        simulation._register_predator_life(predator, origin="initial")
+
+        with patch(
+            "primordial.simulation.simulation.Genome.mutate_one",
+            return_value=(Genome(aggression=0.10, longevity=0.0), "aggression"),
+        ):
+            simulation._apply_cosmic_ray_pp(predator)
+
+        self.assertEqual(predator.species, "prey")
 
 
 if __name__ == "__main__":

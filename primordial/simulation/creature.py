@@ -41,6 +41,10 @@ class Creature:
     # Species (predator_prey mode: "prey" | "predator"; "none" in other modes)
     species: str = field(default="none")
 
+    # Predator-prey trophic runtime state.
+    recent_animal_energy: float = field(default=0.0)
+    satiety_ticks_remaining: int = field(default=0)
+
     # Bounded ecological depth band. Kept orthogonal to x/y world position.
     depth_band: int = field(default=DEPTH_MID)
 
@@ -400,6 +404,8 @@ class Creature:
         energy: float = 0.5,
         species: str = "none",
         depth_band: int | None = None,
+        recent_animal_energy: float = 0.0,
+        satiety_ticks_remaining: int = 0,
     ) -> "Creature":
         """
         Spawn a new creature at a random position.
@@ -425,6 +431,8 @@ class Creature:
             energy=energy,
             lineage_id=lineage_id,
             species=species,
+            recent_animal_energy=max(0.0, min(1.0, recent_animal_energy)),
+            satiety_ticks_remaining=max(0, int(satiety_ticks_remaining)),
             depth_band=(
                 depth_band_from_preference(g.depth_preference)
                 if depth_band is None
