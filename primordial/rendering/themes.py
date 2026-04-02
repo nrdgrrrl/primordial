@@ -34,6 +34,15 @@ class AmbientParticle:
     surface: Any = field(default=None, repr=False)  # pre-rendered surface
 
 
+@dataclass
+class RotatedGlyphCacheEntry:
+    """One-entry steady-state rotation cache for a creature glyph."""
+
+    glyph_id: int
+    angle_bucket: int
+    surface: pygame.Surface
+
+
 class Theme(ABC):
     """
     Abstract base class for visual themes.
@@ -127,6 +136,7 @@ class OceanTheme(Theme):
         """Initialize the ocean theme."""
         self._glow_cache: dict[tuple[int, int, int, int], pygame.Surface] = {}
         self._age_overlay_cache: dict[tuple[int, int], pygame.Surface] = {}
+        self._rotated_glyph_cache: dict[int, RotatedGlyphCacheEntry] = {}
 
         # Pre-rendered food surfaces at 16 alpha levels (avoid per-frame alloc)
         # Food: radius=3, color=(200,255,255), alpha range [60, 150]
@@ -141,6 +151,39 @@ class OceanTheme(Theme):
 
         # Shared trail surface (lazy-init to screen size on first use)
         self._trail_surf: pygame.Surface | None = None
+
+    def invalidate_runtime_caches(self) -> None:
+        """Drop transient caches tied to live creature and surface state."""
+        self._trail_surf = None
+        self._rotated_glyph_cache.clear()
+
+    def _get_rotated_glyph(
+        self,
+        creature: Creature,
+        glyph: pygame.Surface,
+        angle_degrees: float,
+    ) -> pygame.Surface:
+        """Return a cached steady-state rotated glyph surface."""
+        angle_bucket = int(round(angle_degrees / 3.0)) % 120
+        creature_id = id(creature)
+        cached = self._rotated_glyph_cache.get(creature_id)
+        glyph_id = id(glyph)
+        if (
+            cached is not None
+            and cached.glyph_id == glyph_id
+            and cached.angle_bucket == angle_bucket
+        ):
+            return cached.surface
+
+        rotated = pygame.transform.rotate(glyph, angle_bucket * 3.0)
+        if len(self._rotated_glyph_cache) >= 2048:
+            self._rotated_glyph_cache.clear()
+        self._rotated_glyph_cache[creature_id] = RotatedGlyphCacheEntry(
+            glyph_id=glyph_id,
+            angle_bucket=angle_bucket,
+            surface=rotated,
+        )
+        return rotated
 
     def _get_age_overlay(self, radius: int, alpha: int) -> pygame.Surface:
         """Cached grey age-wash overlay by radius and alpha."""
@@ -302,7 +345,7 @@ class OceanTheme(Theme):
 
         # Rotate by creature's rotation_angle
         try:
-            rotated = pygame.transform.rotate(glyph, creature.rotation_angle)
+            rotated = self._get_rotated_glyph(creature, glyph, creature.rotation_angle)
             # Apply birth scale
             if scale != 1.0 and scale < 0.99:
                 new_w = max(4, int(rotated.get_width() * scale))

@@ -151,8 +151,12 @@ class Renderer:
             (self.width, self.height), pygame.SRCALPHA
         )
 
-        # Cached zone background (zones never move; render once)
+        # Cached static composition layers.
         self._zone_surf_cached: pygame.Surface | None = None
+        self._zone_label_surf_cached: pygame.Surface | None = None
+        self._frozen_link_surf_cached: pygame.Surface | None = None
+        self._game_over_overlay_cache_key: tuple[object, ...] | None = None
+        self._game_over_overlay_cache: pygame.Surface | None = None
         self.show_predator_highlight = False
 
         self.settings_overlay = SettingsOverlay(settings)
@@ -168,13 +172,13 @@ class Renderer:
             self.width, self.height, 30
         )
         self._is_stub_theme = theme_name != "ocean"
+        self._invalidate_static_caches()
 
     def set_mode(self, mode_name: str) -> None:
         """Update stub detection when sim mode changes."""
         _IMPLEMENTED_MODES = {"energy", "predator_prey", "boids", "drift"}
         self._is_stub_mode = mode_name not in _IMPLEMENTED_MODES
-        # Invalidate zone cache — new sim will have different zones
-        self._zone_surf_cached = None
+        self._invalidate_static_caches()
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         """Attach outer-loop timing metrics for debug and summary consumers."""
@@ -198,15 +202,14 @@ class Renderer:
         self._predator_highlight_surf = pygame.Surface(
             (self.width, self.height), pygame.SRCALPHA
         )
-        self._zone_surf_cached = None
         self._shimmer_states.clear()
+        self._invalidate_static_caches()
         self.ambient_particles = self.theme.create_ambient_particles(
             self.width, self.height, 30
         )
         if isinstance(self.theme, OceanTheme):
-            self.theme._trail_surf = pygame.Surface(
-                (self.width, self.height), pygame.SRCALPHA
-            )
+            self.theme.invalidate_runtime_caches()
+            self.theme._trail_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
     def reset_runtime_state(self) -> None:
         """Clear renderer-only transient state after an in-process world swap."""
@@ -214,16 +217,23 @@ class Renderer:
             num_particles=self.settings.death_particle_count
         )
         self._shimmer_states.clear()
-        self._zone_surf_cached = None
         self.frame_times.clear()
         self.fps = 0.0
         self._fps_history.clear()
         self._population_history.clear()
         self._external_debug_metrics = {}
+        self._invalidate_static_caches()
         if isinstance(self.theme, OceanTheme):
-            self.theme._trail_surf = pygame.Surface(
-                (self.width, self.height), pygame.SRCALPHA
-            )
+            self.theme.invalidate_runtime_caches()
+            self.theme._trail_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+    def _invalidate_static_caches(self) -> None:
+        """Clear cached surfaces tied to world geometry or presentation state."""
+        self._zone_surf_cached = None
+        self._zone_label_surf_cached = None
+        self._frozen_link_surf_cached = None
+        self._game_over_overlay_cache_key = None
+        self._game_over_overlay_cache = None
 
     def blit_presentation_overlay(self, overlay: pygame.Surface) -> None:
         """Composite a logical-space overlay onto the active display surface."""
@@ -257,6 +267,9 @@ class Renderer:
         dt_real = self._update_fps(current_time)
         self._fps_history.append(self.fps)
         self._population_history.append(simulation.population)
+        is_frozen_world = simulation.paused or simulation.predator_prey_game_over_active
+        if not is_frozen_world:
+            self._frozen_link_surf_cached = None
 
         # --- Process simulation events → create animations ---
         t0 = time.perf_counter()
@@ -314,9 +327,9 @@ class Renderer:
         t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
             if simulation.settings.sim_mode == "boids":
-                self._draw_flock_lines(simulation)
+                self._draw_flock_lines(simulation, use_cached=is_frozen_world)
             else:
-                self._draw_kin_lines(simulation)
+                self._draw_kin_lines(simulation, use_cached=is_frozen_world)
         timings["links_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Creature trails (batched onto shared surface, then blitted once) ---
@@ -398,6 +411,7 @@ class Renderer:
         """Toggle HUD visibility."""
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
+        self._zone_label_surf_cached = None
 
     def toggle_settings_overlay(self) -> None:
         """Open/close settings overlay."""
@@ -413,21 +427,59 @@ class Renderer:
     def _draw_predator_prey_game_over_overlay(self, simulation: "Simulation") -> None:
         """Tint the screen red and present restart details after ecological collapse."""
         if not simulation.predator_prey_game_over_active:
+            self._game_over_overlay_cache_key = None
+            self._game_over_overlay_cache = None
             return
 
         stats = simulation.get_predator_prey_stability_stats()
+        lines = self._build_predator_prey_game_over_summary_lines(stats)
+        dial_values = stats["collapse_dial_values"] or {}
+        changed_key = stats["collapse_trial_dial"]
+        changed_delta = float(stats["collapse_trial_delta"])
+        keys = [key for key in _PREDATOR_PREY_DIAL_LABELS if key in dial_values]
+        dial_lines = []
+        for key in keys:
+            value = float(dial_values[key])
+            label = _PREDATOR_PREY_DIAL_LABELS.get(key, key)
+            line = f"{label}: {value:.2f}"
+            color = (255, 228, 228)
+            if key == changed_key and not math.isclose(changed_delta, 0.0, abs_tol=1e-9):
+                line = f"{line}  ({changed_delta:+.2f} this run)"
+                color = (255, 242, 176)
+            dial_lines.append((line, color))
+
+        cache_key = (
+            self.width,
+            self.height,
+            tuple(lines),
+            tuple(dial_lines),
+        )
+        if cache_key != self._game_over_overlay_cache_key:
+            self._game_over_overlay_cache_key = cache_key
+            self._game_over_overlay_cache = self._build_predator_prey_game_over_overlay_surface(
+                lines=lines,
+                dial_lines=dial_lines,
+            )
+
+        if self._game_over_overlay_cache is not None:
+            self._target_surface.blit(self._game_over_overlay_cache, (0, 0))
+
+    def _build_predator_prey_game_over_overlay_surface(
+        self,
+        *,
+        lines: list[tuple[str, tuple[int, int, int]]],
+        dial_lines: list[tuple[str, tuple[int, int, int]]],
+    ) -> pygame.Surface:
+        """Build the cached game-over overlay for the current collapse snapshot."""
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         overlay.fill((160, 12, 18, 120))
-        self._target_surface.blit(overlay, (0, 0))
 
         title = self._overlay_title_font.render("GAME OVER", True, (255, 236, 236))
         title_pos = (
             (self.width - title.get_width()) // 2,
             max(40, self.height // 5),
         )
-        self._target_surface.blit(title, title_pos)
-
-        lines = self._build_predator_prey_game_over_summary_lines(stats)
+        overlay.blit(title, title_pos)
 
         y = title_pos[1] + title.get_height() + 20
         summary_font = self._overlay_small_font
@@ -441,12 +493,11 @@ class Renderer:
             panel.fill((24, 4, 6, 150))
             text_x = max(12, (panel_width - text.get_width()) // 2)
             panel.blit(text, (text_x, 5))
-            self._target_surface.blit(panel, ((self.width - panel_width) // 2, y - 5))
+            overlay.blit(panel, ((self.width - panel_width) // 2, y - 5))
             y += text.get_height() + 12
 
-        dial_values = stats["collapse_dial_values"] or {}
-        if not dial_values:
-            return
+        if not dial_lines:
+            return overlay
 
         dial_title = self._overlay_small_font.render(
             "Run dials",
@@ -454,36 +505,22 @@ class Renderer:
             (255, 236, 236),
         )
         dial_title_y = y + 4
-        self._target_surface.blit(
+        overlay.blit(
             dial_title,
             ((self.width - dial_title.get_width()) // 2, dial_title_y),
         )
 
-        changed_key = stats["collapse_trial_dial"]
-        changed_delta = float(stats["collapse_trial_delta"])
-        keys = [key for key in _PREDATOR_PREY_DIAL_LABELS if key in dial_values]
-        if not keys:
-            return
         columns = 2
-        rows = math.ceil(len(keys) / columns)
+        rows = math.ceil(len(dial_lines) / columns)
         cell_width = min(320, max(220, (self.width - 120) // columns))
         start_x = (self.width - (cell_width * columns)) // 2
         start_y = dial_title_y + dial_title.get_height() + 12
-        highlight_color = (255, 242, 176)
-        default_color = (255, 228, 228)
 
-        for index, key in enumerate(keys):
+        for index, (line, color) in enumerate(dial_lines):
             row = index % rows
             col = index // rows
             x = start_x + (col * cell_width)
             y = start_y + (row * 28)
-            value = float(dial_values[key])
-            label = _PREDATOR_PREY_DIAL_LABELS.get(key, key)
-            line = f"{label}: {value:.2f}"
-            color = default_color
-            if key == changed_key and not math.isclose(changed_delta, 0.0, abs_tol=1e-9):
-                line = f"{line}  ({changed_delta:+.2f} this run)"
-                color = highlight_color
             text = self._overlay_small_font.render(line, True, color)
             panel = pygame.Surface(
                 (cell_width - 10, text.get_height() + 8),
@@ -491,7 +528,9 @@ class Renderer:
             )
             panel.fill((24, 4, 6, 150))
             panel.blit(text, (8, 4))
-            self._target_surface.blit(panel, (x, y))
+            overlay.blit(panel, (x, y))
+
+        return overlay
 
     def _build_predator_prey_game_over_summary_lines(
         self,
@@ -667,22 +706,27 @@ class Renderer:
 
     def _draw_zone_labels(self, simulation: "Simulation") -> None:
         """Draw subtle zone labels to support ecological review."""
-        for zone in simulation.zone_manager.zones:
-            label = _ZONE_LABELS.get(zone.zone_type)
-            if not label:
-                continue
-            text_surface = self._debug_font.render(label, True, (220, 235, 245))
-            panel = pygame.Surface(
-                (text_surface.get_width() + 10, text_surface.get_height() + 6),
-                pygame.SRCALPHA,
+        if self._zone_label_surf_cached is None:
+            self._zone_label_surf_cached = pygame.Surface(
+                (self.width, self.height), pygame.SRCALPHA
             )
-            panel.fill((8, 16, 26, 120))
-            panel.blit(text_surface, (5, 3))
-            pos = (
-                int(zone.x - panel.get_width() / 2),
-                int(zone.y - panel.get_height() / 2),
-            )
-            self._target_surface.blit(panel, pos)
+            for zone in simulation.zone_manager.zones:
+                label = _ZONE_LABELS.get(zone.zone_type)
+                if not label:
+                    continue
+                text_surface = self._debug_font.render(label, True, (220, 235, 245))
+                panel = pygame.Surface(
+                    (text_surface.get_width() + 10, text_surface.get_height() + 6),
+                    pygame.SRCALPHA,
+                )
+                panel.fill((8, 16, 26, 120))
+                panel.blit(text_surface, (5, 3))
+                pos = (
+                    int(zone.x - panel.get_width() / 2),
+                    int(zone.y - panel.get_height() / 2),
+                )
+                self._zone_label_surf_cached.blit(panel, pos)
+        self._target_surface.blit(self._zone_label_surf_cached, (0, 0))
 
     # ------------------------------------------------------------------
     # Attack lines
@@ -717,7 +761,7 @@ class Renderer:
     # Kin connection lines
     # ------------------------------------------------------------------
 
-    def _draw_kin_lines(self, simulation: Simulation) -> None:
+    def _draw_kin_lines(self, simulation: Simulation, *, use_cached: bool = False) -> None:
         """
         Draw faint connection lines between creatures of the same lineage.
 
@@ -726,6 +770,10 @@ class Renderer:
         Only draws if lineage has 3+ members on screen.
         Alpha is inversely proportional to distance.
         """
+        if use_cached and self._frozen_link_surf_cached is not None:
+            self._target_surface.blit(self._frozen_link_surf_cached, (0, 0))
+            return
+
         settings = self.settings
         max_dist = settings.kin_line_max_distance
 
@@ -736,10 +784,12 @@ class Renderer:
 
         # Clear the pre-allocated line surface
         self._line_surf.fill((0, 0, 0, 0))
+        has_lines = False
 
         for lineage_id, members in lineage_buckets.items():
             if len(members) < settings.kin_line_min_group:
                 continue
+            has_lines = True
 
             # Compute representative hue from first member
             hue = members[0].genome.hue
@@ -755,19 +805,29 @@ class Renderer:
                 alpha_max=30,
             )
 
+        if not has_lines:
+            self._frozen_link_surf_cached = None
+            return
+
+        if use_cached:
+            self._frozen_link_surf_cached = self._line_surf.copy()
         self._target_surface.blit(self._line_surf, (0, 0))
 
     # ------------------------------------------------------------------
     # Flock connection lines (boids mode)
     # ------------------------------------------------------------------
 
-    def _draw_flock_lines(self, simulation: "Simulation") -> None:
+    def _draw_flock_lines(self, simulation: "Simulation", *, use_cached: bool = False) -> None:
         """
         Draw faint lines between creatures in the same flock (boids mode).
 
         Same visual treatment as kin lines but grouped by flock_id.
         Lone creatures outside any flock are not connected.
         """
+        if use_cached and self._frozen_link_surf_cached is not None:
+            self._target_surface.blit(self._frozen_link_surf_cached, (0, 0))
+            return
+
         settings = self.settings
         max_dist = settings.kin_line_max_distance * 1.5
 
@@ -778,10 +838,12 @@ class Renderer:
                 flock_buckets[c.flock_id].append(c)
 
         self._line_surf.fill((0, 0, 0, 0))
+        has_lines = False
 
         for flock_id, members in flock_buckets.items():
             if len(members) < 2:
                 continue
+            has_lines = True
 
             hue = members[0].genome.hue
             if isinstance(self.theme, OceanTheme):
@@ -796,6 +858,12 @@ class Renderer:
                 alpha_max=25,
             )
 
+        if not has_lines:
+            self._frozen_link_surf_cached = None
+            return
+
+        if use_cached:
+            self._frozen_link_surf_cached = self._line_surf.copy()
         self._target_surface.blit(self._line_surf, (0, 0))
 
     def _draw_connection_group(
@@ -832,12 +900,10 @@ class Renderer:
                 alpha_min=alpha_min,
                 alpha_max=alpha_max,
             )
-            seen_neighbors: set[tuple[int, int]] = set()
             for off_x, off_y in ((1, -1), (1, 0), (1, 1), (0, 1)):
                 neighbor_key = ((key[0] + off_x) % grid_w, (key[1] + off_y) % grid_h)
-                if neighbor_key == key or neighbor_key in seen_neighbors:
+                if neighbor_key == key:
                     continue
-                seen_neighbors.add(neighbor_key)
                 neighbor_members = cell_buckets.get(neighbor_key)
                 if not neighbor_members:
                     continue
@@ -907,32 +973,44 @@ class Renderer:
         lerp = settings.territory_shimmer_lerp
         fade_frames = settings.territory_fade_seconds * 60
 
-        # Get lineage counts and find top-N
-        lineage_counts = simulation.get_lineage_counts()
-        top_ids = set(
-            sorted(lineage_counts.keys(), key=lambda lid: -lineage_counts[lid])[:top_n]
-        )
+        lineage_stats: dict[int, dict[str, float]] = {}
+        for creature in simulation.creatures:
+            stats = lineage_stats.get(creature.lineage_id)
+            if stats is None:
+                stats = {
+                    "count": 0.0,
+                    "sum_x": 0.0,
+                    "sum_y": 0.0,
+                    "sum_x2": 0.0,
+                    "sum_y2": 0.0,
+                    "hue": creature.genome.hue,
+                }
+                lineage_stats[creature.lineage_id] = stats
+            stats["count"] += 1.0
+            stats["sum_x"] += creature.x
+            stats["sum_y"] += creature.y
+            stats["sum_x2"] += creature.x * creature.x
+            stats["sum_y2"] += creature.y * creature.y
 
-        # Bucket creatures by lineage
-        lineage_creatures: dict[int, list] = defaultdict(list)
-        for c in simulation.creatures:
-            lineage_creatures[c.lineage_id].append(c)
+        top_ids = set(
+            sorted(
+                lineage_stats.keys(),
+                key=lambda lid: -lineage_stats[lid]["count"],
+            )[:top_n]
+        )
 
         # Update or create shimmer states for dominant lineages
         for lid in top_ids:
-            members = lineage_creatures.get(lid, [])
-            if not members:
+            stats = lineage_stats.get(lid)
+            if not stats:
                 continue
 
-            xs = [c.x for c in members]
-            ys = [c.y for c in members]
-            cx = sum(xs) / len(xs)
-            cy = sum(ys) / len(ys)
-
-            # Spread = std-dev of positions
-            sx = math.sqrt(sum((x - cx) ** 2 for x in xs) / len(xs)) + 30
-            sy = math.sqrt(sum((y - cy) ** 2 for y in ys) / len(ys)) + 30
-            hue = members[0].genome.hue
+            count = max(1.0, stats["count"])
+            cx = stats["sum_x"] / count
+            cy = stats["sum_y"] / count
+            sx = math.sqrt(max(0.0, (stats["sum_x2"] / count) - (cx * cx))) + 30
+            sy = math.sqrt(max(0.0, (stats["sum_y2"] / count) - (cy * cy))) + 30
+            hue = stats["hue"]
 
             if lid in self._shimmer_states:
                 state = self._shimmer_states[lid]
@@ -990,11 +1068,12 @@ class Renderer:
             else:
                 color = (150, 150, 220)
 
-            # Draw a soft radial gradient ellipse using concentric scaled rects
             rx = int(state.spread_x * 2.5)
             ry = int(state.spread_y * 2.5)
             cx = int(state.centroid_x)
             cy = int(state.centroid_y)
+            if rx < 2 or ry < 2:
+                continue
 
             layers = 5
             for i in range(layers, 0, -1):
@@ -1004,8 +1083,12 @@ class Renderer:
                 layer_ry = int(ry * (layers - i + 1) / layers)
                 if layer_rx < 2 or layer_ry < 2:
                     continue
-                rect = pygame.Rect(cx - layer_rx, cy - layer_ry,
-                                   layer_rx * 2, layer_ry * 2)
+                rect = pygame.Rect(
+                    cx - layer_rx,
+                    cy - layer_ry,
+                    layer_rx * 2,
+                    layer_ry * 2,
+                )
                 pygame.draw.ellipse(self._shimmer_surf, (*color, layer_alpha), rect)
 
         self._target_surface.blit(self._shimmer_surf, (0, 0))
