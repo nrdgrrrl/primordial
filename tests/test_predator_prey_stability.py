@@ -759,11 +759,12 @@ class PredatorPreyStabilityTests(unittest.TestCase):
     def test_reset_predator_prey_adaptive_tuning_restores_baseline_and_clears_history(self) -> None:
         simulation = self._build_simulation()
         state = simulation._predator_prey_state
-        baseline = dict(state.adaptive_tuning.baseline_values)
+        accepted_incumbent = dict(state.adaptive_tuning.baseline_values)
         state.run_history.extend([50, 75, 100])
         state.highest_survival_ticks = 100
         state.adaptive_tuning.current_values["predator_hunt_sense_multiplier"] = 2.15
         state.adaptive_tuning.previous_values["predator_hunt_sense_multiplier"] = 2.10
+        accepted_incumbent["predator_hunt_sense_multiplier"] = 2.10
         state.adaptive_tuning.trial_candidate_values = dict(
             state.adaptive_tuning.current_values
         )
@@ -781,8 +782,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
 
         simulation.reset_predator_prey_adaptive_tuning()
 
-        self.assertEqual(state.adaptive_tuning.current_values, baseline)
-        self.assertEqual(state.adaptive_tuning.previous_values, baseline)
+        self.assertEqual(state.adaptive_tuning.current_values, accepted_incumbent)
+        self.assertEqual(state.adaptive_tuning.previous_values, accepted_incumbent)
         self.assertEqual(state.adaptive_tuning.trial_candidate_values, {})
         self.assertFalse(state.adaptive_tuning.trial_active)
         self.assertEqual(state.adaptive_tuning.last_decision, "reset_to_baseline")

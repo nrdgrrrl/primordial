@@ -294,7 +294,7 @@ class Simulation:
         self._predator_prey_run_logger = run_logger
 
     def set_predator_prey_adaptive_tuning_enabled(self, enabled: bool) -> None:
-        """Enable or freeze predator-prey adaptive tuning updates."""
+        """Enable or disable predator-prey adaptive tuning updates."""
         self._predator_prey_adaptive_tuning_enabled = bool(enabled)
 
     # ------------------------------------------------------------------
@@ -1115,6 +1115,7 @@ class Simulation:
             pred_count=pred_count,
             prey_count=prey_count,
         )
+        self._check_ecosystem_balance(pred_count=pred_count, prey_count=prey_count)
 
         # If > 60% predators: increase their reproduction threshold
         pred_repro_penalty = 0.20 if pred_fraction > 0.60 else 0.0
@@ -1327,6 +1328,7 @@ class Simulation:
                 best_prey = other
 
         if best_prey is None:
+            predator.wander(self.settings.creature_speed_base)
             return False, False
 
         self._record_predator_prey_sighting(predator)
@@ -1345,6 +1347,7 @@ class Simulation:
             target_depth_band=best_prey.depth_band,
         )
         if sensed_prey is None:
+            predator.wander(self.settings.creature_speed_base)
             return False, False
 
         predator.steer_toward(
@@ -1639,7 +1642,7 @@ class Simulation:
         state.collapse_was_new_highest = survival_ticks > state.highest_survival_ticks
         state.highest_survival_ticks = max(state.highest_survival_ticks, survival_ticks)
 
-        if was_trial and self._predator_prey_adaptive_tuning_enabled:
+        if was_trial:
             completed_trial_decision = self._advance_predator_prey_trial(survival_ticks)
             if completed_trial_decision is not None:
                 post_run_trial_decision = completed_trial_decision
@@ -1660,29 +1663,33 @@ class Simulation:
             tuning.consecutive_immediate_retry_trials = 0
             tuning.retry_cap_waiting_for_ordinary_run = False
         elif was_trial and completed_trial_decision == "reverted":
-            retry_cap = self._get_predator_prey_max_consecutive_retry_trials()
-            if tuning.consecutive_immediate_retry_trials < retry_cap:
-                launch_result = self._start_predator_prey_trial(
-                    self.predator_prey_rolling_average,
-                    trigger_reason="immediate_retry_after_revert",
-                    preserve_completed_decision=True,
-                )
-                if launch_result == "trial_started":
-                    tuning.consecutive_immediate_retry_trials += 1
-                    tuning.retry_cap_waiting_for_ordinary_run = False
-                else:
-                    tuning.consecutive_immediate_retry_trials = 0
-                    tuning.retry_cap_waiting_for_ordinary_run = False
+            if not self._adaptive_trial_launches_allowed():
+                tuning.consecutive_immediate_retry_trials = 0
+                tuning.retry_cap_waiting_for_ordinary_run = False
             else:
-                tuning.retry_cap_waiting_for_ordinary_run = True
-                tuning.last_trial_launch_blocked_by_retry_cap = True
+                retry_cap = self._get_predator_prey_max_consecutive_retry_trials()
+                if tuning.consecutive_immediate_retry_trials < retry_cap:
+                    launch_result = self._start_predator_prey_trial(
+                        self.predator_prey_rolling_average,
+                        trigger_reason="immediate_retry_after_revert",
+                        preserve_completed_decision=True,
+                    )
+                    if launch_result == "trial_started":
+                        tuning.consecutive_immediate_retry_trials += 1
+                        tuning.retry_cap_waiting_for_ordinary_run = False
+                    else:
+                        tuning.consecutive_immediate_retry_trials = 0
+                        tuning.retry_cap_waiting_for_ordinary_run = False
+                else:
+                    tuning.retry_cap_waiting_for_ordinary_run = True
+                    tuning.last_trial_launch_blocked_by_retry_cap = True
         elif not was_trial:
             trigger_reason = "below_rolling_median"
             if tuning.retry_cap_waiting_for_ordinary_run:
                 trigger_reason = "blocked_by_retry_cap_then_waited_for_ordinary_run"
             tuning.consecutive_immediate_retry_trials = 0
             if (
-                self._predator_prey_adaptive_tuning_enabled
+                self._adaptive_trial_launches_allowed()
                 and prior_average > 0
                 and survival_ticks < prior_average
             ):
@@ -1699,6 +1706,19 @@ class Simulation:
             if tuning.last_decision_pending_log:
                 self._predator_prey_run_logger.log_trial_decision(self)
                 tuning.last_decision_pending_log = False
+
+    def _check_ecosystem_balance(
+        self,
+        *,
+        pred_count: int,
+        prey_count: int,
+    ) -> None:
+        """Compatibility seam for predator-prey balance hooks and tests."""
+        _ = pred_count, prey_count
+
+    def _adaptive_trial_launches_allowed(self) -> bool:
+        """Return whether the dormant adaptive-trial system is currently enabled."""
+        return self._predator_prey_adaptive_tuning_enabled
 
     def _start_predator_prey_trial(
         self,
@@ -1894,10 +1914,16 @@ class Simulation:
         """Restore adaptive dials to their baseline values and clear stability history."""
         state = self._predator_prey_state
         tuning = state.adaptive_tuning
-        baseline_values = dict(tuning.baseline_values)
+        if (
+            tuning.trial_active
+            and tuning.previous_values
+        ):
+            baseline_values = dict(tuning.previous_values)
+        else:
+            baseline_values = dict(tuning.baseline_values)
         if not baseline_values:
             baseline_values = self._default_predator_prey_dial_values()
-            tuning.baseline_values = dict(baseline_values)
+        tuning.baseline_values = dict(baseline_values)
         tuning.current_values = dict(baseline_values)
         tuning.previous_values = dict(baseline_values)
         tuning.trial_candidate_values = {}

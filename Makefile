@@ -1,6 +1,6 @@
 PYTHON ?= .venv/bin/python
 
-.PHONY: run debug profile build clean
+.PHONY: run debug profile test build clean
 
 run:
 	$(PYTHON) main.py
@@ -10,6 +10,9 @@ debug:
 
 profile:
 	$(PYTHON) main.py --profile
+
+test:
+	$(PYTHON) -m pytest -q
 
 build:
 	$(PYTHON) build.py

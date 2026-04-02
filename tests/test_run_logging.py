@@ -23,6 +23,7 @@ class RunLoggingTests(unittest.TestCase):
         settings.food_max_particles = 32
         settings.zone_count = 0
         settings.mode_params["predator_prey"]["initial_population"] = 0
+        settings.mode_params["predator_prey"]["adaptive_tuning_enabled"] = True
         settings.mode_params["predator_prey"]["adaptive_trial_seed_count"] = trial_count
         return settings
 

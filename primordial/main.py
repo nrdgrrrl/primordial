@@ -317,8 +317,8 @@ def _simulation_timing_is_suppressed(
 ) -> bool:
     """Return whether fixed-step debt should be frozen for the current frame."""
     return (
-        simulation.paused
-        or simulation.predator_prey_game_over_active
+        bool(getattr(simulation, "paused", False))
+        or bool(getattr(simulation, "predator_prey_game_over_active", False))
         or transition_dir != 0
     )
 
