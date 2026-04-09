@@ -28,7 +28,7 @@ from .zones import ZoneManager
 if TYPE_CHECKING:
     from ..settings import Settings
 
-AttackRenderEvent = tuple[float, float, float, float, float]
+AttackRenderEvent = tuple[float, float, float, float, str, float, float]
 
 _DEPTH_SENSING_FACTORS = {
     0: 1.0,
@@ -205,10 +205,10 @@ class Simulation:
     updates state and exposes it for the renderer to read.
 
     Event queues (cleared by renderer each frame):
-    - death_events: list of dicts with position/genome info for dead creatures
+    - death_events: list of dicts with position/genome/species info for dead creatures
     - birth_events: list of newly created offspring creatures
     - cosmic_ray_events: list of (x, y) positions where cosmic rays hit
-    - active_attacks: list of (ax, ay, tx, ty, hue) for attack line rendering
+    - active_attacks: list of (ax, ay, tx, ty, species, hue, saturation) attack visuals
     """
 
     def __init__(
@@ -1388,7 +1388,9 @@ class Simulation:
             self.active_attacks.append((
                 predator.x, predator.y,
                 best_prey.x, best_prey.y,
+                predator.species,
                 predator.genome.hue,
+                predator.genome.saturation,
             ))
             return True, True
         elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
@@ -2725,7 +2727,9 @@ class Simulation:
                 self.active_attacks.append((
                     creature.x, creature.y,
                     best_prey.x, best_prey.y,
+                    creature.species,
                     creature.genome.hue,
+                    creature.genome.saturation,
                 ))
 
         return True
@@ -2755,7 +2759,9 @@ class Simulation:
                     self.active_attacks.append((
                         creature.x, creature.y,
                         other.x, other.y,
+                        creature.species,
                         creature.genome.hue,
+                        creature.genome.saturation,
                     ))
                     break
 
@@ -2949,6 +2955,7 @@ class Simulation:
                 "x": creature.x,
                 "y": creature.y,
                 "genome": creature.genome,
+                "species": creature.species,
                 "glyph_surface": creature.glyph_surface,
                 "lineage_id": creature.lineage_id,
                 "cause": cause,

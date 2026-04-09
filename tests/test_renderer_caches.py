@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -88,6 +89,19 @@ class RendererCacheTests(unittest.TestCase):
 
         self.assertEqual(rotate_mock.call_count, 1)
 
+    def test_ocean_theme_applies_predator_tint_even_for_cool_hues(self) -> None:
+        theme = OceanTheme()
+        genome = Genome(hue=0.08, saturation=0.95)
+        prey = Creature(x=40.0, y=40.0, genome=genome, species="prey")
+        predator = Creature(x=40.0, y=40.0, genome=genome, species="predator")
+
+        prey_color = theme.resolve_color_for_creature(prey)
+        predator_color = theme.resolve_color_for_creature(predator)
+
+        self.assertNotEqual(predator_color, prey_color)
+        self.assertLess(prey_color[0], prey_color[2])
+        self.assertGreater(predator_color[0], predator_color[2])
+
     def test_game_over_overlay_cache_reuses_surface_until_countdown_changes(self) -> None:
         settings = self._build_settings()
         screen = pygame.display.set_mode((320, 180))
@@ -163,6 +177,26 @@ class RendererCacheTests(unittest.TestCase):
 
         draw_group.assert_not_called()
         self.assertIsNone(renderer._frozen_link_surf_cached)
+
+    def test_attack_lines_use_species_aware_predator_tint(self) -> None:
+        settings = self._build_settings()
+        screen = pygame.display.set_mode((320, 180))
+        renderer = Renderer(screen, settings)
+        simulation = SimpleNamespace(
+            active_attacks=[
+                (20.0, 20.0, 80.0, 80.0, "predator", 0.05, 0.95),
+            ]
+        )
+
+        with patch(
+            "primordial.rendering.renderer.pygame.draw.line",
+            wraps=pygame.draw.line,
+        ) as draw_line:
+            renderer._draw_attack_lines(simulation)
+
+        _surface, color, _start, _end, _width = draw_line.call_args.args
+        self.assertEqual(color[3], 40)
+        self.assertGreater(color[0], color[2])
 
     def test_disabled_territory_rendering_skips_shimmer_and_keeps_translucent_zones(self) -> None:
         settings = self._build_settings()

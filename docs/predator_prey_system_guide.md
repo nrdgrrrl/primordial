@@ -103,7 +103,7 @@ Food has a hard cap (default 300 particles). During famine, food drains faster t
 
 At startup, the population splits into 25% predators and 75% prey (configurable). Predators get warm-hued genomes (hue 0.48–0.88: magentas, purples), high aggression (0.62–0.95), and depth preference biased mid-to-deep (0.4–1.0). Prey get cool-hued genomes (hue 0.05–0.45: cyans, turquoise, blue), low aggression (0.0–0.38), and depth preference biased surface-to-mid (0.0–0.75).
 
-This initial hue assignment creates the visual separation: warm creatures are predators, cool creatures are prey. This relationship is reinforced by inheritance — offspring inherit species from parent — but is not absolute, because cosmic ray mutations can flip species identity.
+This initial hue assignment seeds the visual separation, but the renderer now reinforces species identity directly: predators get a persistent warm predator tint layered over their genome color, while prey render directly from their genome palette. Species can still flip under cosmic ray aggression changes, so the color cue is species-driven rather than locked to inherited hue bands.
 
 ### How prey seek food
 
@@ -191,7 +191,7 @@ The genome has 16 traits, all float 0.0–1.0:
 - `depth_preference` — preferred depth band (surface/mid/deep)
 
 **Visual traits** (affect glyph appearance, no direct survival effect):
-- `hue` — base color; warm = predator, cool = prey (by init convention)
+- `hue` — base color; prey track it directly, while predator rendering adds a warm species tint on top of it
 - `saturation` — color intensity
 - `complexity` — number of glyph strokes (2–7)
 - `symmetry` — asymmetric / bilateral / 3-fold / 4-fold radial
@@ -308,7 +308,7 @@ This is appropriate for a screensaver — the goal is a living, shifting display
 ### What the user sees on screen
 
 The screen shows a dark deep-blue background with:
-- **Creatures**: glowing procedural glyphs, each a small constellation of strokes. Warm hues (magenta, purple) are predators; cool hues (cyan, turquoise, blue) are prey.
+- **Creatures**: glowing procedural glyphs, each a small constellation of strokes. Predators carry a persistent warm coral/amber tint, while prey stay in the cooler cyan/turquoise/blue side of the palette unless neutral hue drift takes them elsewhere.
 - **Food particles**: small twinkling cyan dots scattered across the world.
 - **Kin connection lines**: faint thin lines connecting creatures of the same lineage when 3+ kin are within 120px.
 - **Territory shimmer**: soft pulsing elliptical glow at the centroid of the top 3 most populous lineages.
@@ -405,10 +405,10 @@ the max survival tick record, and starts a fresh run.
 
 ### How predator/prey interactions are visualized
 
-- **Color convention**: warm = predator, cool = prey. This is reliable at startup but can drift as hue mutates over generations.
+- **Color convention**: predators keep a species-driven warm tint, while prey reflect their genome hue directly. Predator color remains reliable even after long-run hue drift.
 - **Attack lines**: when a predator kills a prey, a 1px line appears between them for one frame. These are extremely faint (alpha 40) and easy to miss at full speed.
 - **Death animation**: the prey flashes white and dissolves with scatter particles. This is visible but doesn't indicate *cause* of death — energy depletion from starvation looks identical.
-- **Hold P**: the predator highlight overlay draws pulsing accent-colored rings around all predators. This is the most reliable way to identify predators at a glance. Prey have no equivalent highlight.
+- **Hold P**: the predator highlight overlay draws pulsing accent-colored rings around all predators. Predators are already color-biased by species, but this remains the fastest locator when the screen is crowded. Prey have no equivalent highlight.
 
 ### How traits or evolution are visualized
 
@@ -422,7 +422,7 @@ Several important dynamics are hard or impossible to perceive:
 
 1. **Depth bands are invisible**. The user cannot tell what band a creature is in. The brightness/scale cue (±8%/±12%) is too subtle to read reliably. Cross-band misses — where a predator reaches a prey but can't kill it because they're in different bands — happen silently. The HUD shows "Cross-miss: N" but gives no spatial context.
 
-2. **Species identity is unreliable by color**. After many generations of hue drift, predators may no longer look warm and prey may no longer look cool. The only reliable species indicator is the Hold-P highlight.
+2. **Species identity is more legible than before, but crowding still matters**. Predators retain a warm species tint, yet dense swarms and overlapping glow can still make the Hold-P locator useful when scanning quickly.
 
 3. **Evolution is invisible**. There is no per-trait time series, no population trait histogram, no fitness graph. Trait distributions change silently. The user sees creatures moving and dying but cannot see *why* the population is shifting.
 
@@ -442,13 +442,13 @@ The following screenshots were captured from headless runs of predator_prey mode
 
 ![Predator/prey overview](assets/pp_overview.png)
 
-Shows the simulation shortly after startup. Note the faint radial zone tints (amber hunting grounds bottom-left, blue open water upper-right, green kelp forest, indigo deep trench). Creatures are scattered across the world — cool-hued (cyan/turquoise) prey and warm-hued (magenta/purple) predators. The HUD shows predator/prey counts, kill stats, food cycle bar, and zone info. Kin connection lines are visible as faint threads between related creatures. Territory shimmer glows softly around dominant lineage clusters.
+Shows the simulation shortly after startup. Note the faint radial zone tints (amber hunting grounds bottom-left, blue open water upper-right, green kelp forest, indigo deep trench). Creatures are scattered across the world — prey remain mostly cool-hued, while predators carry a warmer species tint on top of their inherited glyph palette. The HUD shows predator/prey counts, kill stats, food cycle bar, and zone info. Kin connection lines are visible as faint threads between related creatures. Territory shimmer glows softly around dominant lineage clusters.
 
 ### Predator highlight (Hold P)
 
 ![Predator highlight overlay](assets/pp_predator_highlight.png)
 
-Same frame with the predator highlight active (Hold P key). Predators are marked with pulsing accent-colored rings and crosshair tick marks. This is the only reliable way to distinguish predators from prey once hue has drifted from the initial warm/cool convention. Note that without this overlay, predators and prey are visually similar — the color difference is present but not always obvious at a glance.
+Same frame with the predator highlight active (Hold P key). Predators are marked with pulsing accent-colored rings and crosshair tick marks. The species tint already keeps them warmer than prey, but the overlay makes fast scanning much easier when the world is dense or multiple glow halos overlap.
 
 ### After further evolution (~900 frames)
 
@@ -540,7 +540,7 @@ Death dissolution (white flash, shrink, scatter particles) and birth budding (po
 
 ### Predator highlight overlay (Hold P)
 
-The pulsing accent rings with crosshair ticks are the only reliable way to visually distinguish predators from prey after initial hue drift. This is a deliberate "tool" rather than always-on visualization — it requires the user to actively hold a key, preserving the clean aesthetic by default.
+The pulsing accent rings with crosshair ticks are an on-demand predator locator layered on top of the always-on species tint. This is still a deliberate "tool" rather than a permanent overlay — it requires the user to actively hold a key, preserving the clean aesthetic by default while making crowded scenes easier to read.
 
 ---
 
@@ -563,7 +563,7 @@ The combination of procedural glyphs, trails, bloom glow, kin lines, and death/b
 - **Evolution is invisible**: this is the biggest gap. The system has genuine selection pressure producing genuine adaptation, but the user has no way to perceive it. Trait distributions change silently. The glyph system shows *visual drift* (neutral) but not *adaptive change* (the interesting part).
 - **Kills are invisible**: the defining interaction of predator_prey mode — a predator killing a prey — is almost impossible to see at normal speed. The attack line is too faint and too brief.
 - **Depth bands are invisible**: the most interesting mechanic for prey survival (depth-band escape) has no visual representation. The user cannot see the vertical chase happening.
-- **Species identity drifts**: after a few hundred generations, the warm/cool hue convention breaks down. Predators may look cyan; prey may look magenta. Without Hold-P, the user loses track of who is what.
+- **Species identity is better but still not perfect at a glance**: the persistent predator tint fixes the old warm/cool drift problem, but very dense clusters can still benefit from the Hold-P locator.
 - **The food cycle feels abstract**: the HUD bar shows feast/famine, but the *consequences* (which creatures die, which survive, why) are not legible.
 
 ### Does it read as ecology, animation, or evolution?
@@ -579,7 +579,7 @@ It reads very weakly as **evolution**. The evolutionary mechanics are present an
 1. **No evolution dashboard**: the user needs some way to see trait distributions changing over time. A simple rolling average of key traits (speed, sense_radius, efficiency) would make adaptation visible.
 2. **Kill visibility**: predator_prey mode's central event — a kill — needs to be more visible. Not necessarily louder, but more sustained (e.g., a brief glow or mark at the kill location).
 3. **Depth band representation**: the depth band system is the most mechanically interesting part of predator_prey mode, and it is completely invisible. Some visual cue — even a simple indicator ring color, or a subtle "layer" effect — would make the vertical ecology legible.
-4. **Species identity**: the hue convention needs reinforcement. Either constrain hue mutation to stay within warm/cool bands by species, or provide a persistent subtle visual distinction (e.g., predators always have a warm-tinted glow ring regardless of hue).
+4. **Species identity under crowding**: the persistent predator tint fixes the old drift failure, but dense overlapping glow still makes a stronger on-demand locator valuable.
 
 ---
 

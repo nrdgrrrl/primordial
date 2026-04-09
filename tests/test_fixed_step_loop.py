@@ -34,22 +34,30 @@ class FakeSimulation:
         self.step_calls = 0
         self.width = 1280
         self.height = 720
-        self._pending_attacks: list[tuple[float, float, float, float, float]] = []
-        self.restored_attacks: list[tuple[float, float, float, float, float]] = []
+        self._pending_attacks: list[
+            tuple[float, float, float, float, str, float, float]
+        ] = []
+        self.restored_attacks: list[
+            tuple[float, float, float, float, str, float, float]
+        ] = []
 
     def step(self) -> None:
         self.step_calls += 1
         marker = float(self.step_calls)
-        self._pending_attacks = [(marker, marker, marker, marker, marker)]
+        self._pending_attacks = [
+            (marker, marker, marker, marker, "predator", marker, marker)
+        ]
 
-    def drain_active_attacks(self) -> list[tuple[float, float, float, float, float]]:
+    def drain_active_attacks(
+        self,
+    ) -> list[tuple[float, float, float, float, str, float, float]]:
         attacks = self._pending_attacks
         self._pending_attacks = []
         return attacks
 
     def restore_active_attacks(
         self,
-        attacks: list[tuple[float, float, float, float, float]],
+        attacks: list[tuple[float, float, float, float, str, float, float]],
     ) -> None:
         self.restored_attacks.extend(attacks)
 

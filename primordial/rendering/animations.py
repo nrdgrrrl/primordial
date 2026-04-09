@@ -368,7 +368,7 @@ class AnimationManager:
         self,
         death_events: list[dict],
         birth_events: list,
-        get_color,  # callable(genome) -> (r,g,b)
+        get_color,  # callable(event) -> (r,g,b)
     ) -> None:
         """
         Ingest simulation event queues and create animations.
@@ -377,10 +377,10 @@ class AnimationManager:
             death_events: simulation.death_events (will NOT be cleared here;
                           caller should clear after calling this).
             birth_events: simulation.birth_events list of Creature objects.
-            get_color: Callable mapping a Genome to an RGB tuple.
+            get_color: Callable mapping a death-event dict to an RGB tuple.
         """
         for event in death_events:
-            color = get_color(event["genome"])
+            color = get_color(event)
             self.add_death(
                 event["x"],
                 event["y"],

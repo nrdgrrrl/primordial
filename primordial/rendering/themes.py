@@ -64,6 +64,24 @@ class Theme(ABC):
         pass
 
     @abstractmethod
+    def resolve_color_for_species(
+        self,
+        species: str,
+        hue: float,
+        saturation: float,
+    ) -> tuple[int, int, int]:
+        """Return the rendered RGB color for a species/genome combination."""
+        pass
+
+    def resolve_color_for_creature(self, creature: Creature) -> tuple[int, int, int]:
+        """Resolve the rendered color for one creature instance."""
+        return self.resolve_color_for_species(
+            creature.species,
+            creature.genome.hue,
+            creature.genome.saturation,
+        )
+
+    @abstractmethod
     def render_creature(
         self,
         surface: pygame.Surface,
@@ -234,6 +252,34 @@ class OceanTheme(Theme):
 
         return (min(255, r), min(255, g), min(255, b))
 
+    def resolve_color_for_species(
+        self,
+        species: str,
+        hue: float,
+        saturation: float,
+    ) -> tuple[int, int, int]:
+        """Bias predators into a distinctive warm family while keeping variation."""
+        base_color = self.get_creature_color(hue, saturation)
+        if species != "predator":
+            return base_color
+
+        warm_anchor_a = (255, 120, 84)
+        warm_anchor_b = (255, 196, 92)
+        anchor_blend = 0.5 + 0.5 * math.sin(hue * math.pi)
+        anchor = tuple(
+            int((left * (1.0 - anchor_blend)) + (right * anchor_blend))
+            for left, right in zip(warm_anchor_a, warm_anchor_b)
+        )
+        tint_strength = 0.64 + (0.16 * saturation)
+        red = int(base_color[0] * (1.0 - tint_strength) + anchor[0] * tint_strength)
+        green = int(base_color[1] * (1.0 - tint_strength) + anchor[1] * tint_strength)
+        blue = int(base_color[2] * (1.0 - tint_strength * 0.92) + anchor[2] * tint_strength * 0.32)
+        return (
+            min(255, max(red, green + 16, blue + 36)),
+            min(255, green),
+            min(255, blue),
+        )
+
     def _create_glow_surface(
         self, radius: int, color: tuple[int, int, int], max_alpha: int
     ) -> pygame.Surface:
@@ -292,7 +338,7 @@ class OceanTheme(Theme):
         if not creature.trail or self._trail_surf is None:
             return
 
-        color = self.get_creature_color(creature.genome.hue, creature.genome.saturation)
+        color = self.resolve_color_for_creature(creature)
         depth_scale, depth_brightness = self._get_depth_render_style(creature)
         color = tuple(min(255, int(channel * depth_brightness)) for channel in color)
         pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature._glyph_phase)
@@ -317,9 +363,7 @@ class OceanTheme(Theme):
         scale: float = 1.0,
     ) -> None:
         """Render a creature with bloom glow halo and symbolic glyph (no trail)."""
-        color = self.get_creature_color(
-            creature.genome.hue, creature.genome.saturation
-        )
+        color = self.resolve_color_for_creature(creature)
         depth_scale, depth_brightness = self._get_depth_render_style(creature)
         color = tuple(min(255, int(channel * depth_brightness)) for channel in color)
 
@@ -445,6 +489,17 @@ class StubTheme(Theme):
     def background_color(self) -> tuple[int, int, int]:
         return (20, 20, 30)
 
+    def resolve_color_for_species(
+        self,
+        species: str,
+        hue: float,
+        saturation: float,
+    ) -> tuple[int, int, int]:
+        _ = hue, saturation
+        if species == "predator":
+            return (255, 128, 96)
+        return (100, 150, 200)
+
     def render_creature(
         self,
         surface: pygame.Surface,
@@ -454,7 +509,7 @@ class StubTheme(Theme):
     ) -> None:
         """Basic creature rendering."""
         radius = max(2, int(creature.get_radius() * scale))
-        color = (100, 150, 200)
+        color = self.resolve_color_for_creature(creature)
         pygame.draw.circle(surface, color, (int(creature.x), int(creature.y)), radius)
 
     def render_food(

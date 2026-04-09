@@ -78,7 +78,9 @@ class FixedStepLoopState:
     last_tick_seconds: float | None = None
     dropped_seconds_total: float = 0.0
     dropped_frame_count: int = 0
-    buffered_active_attacks: list[tuple[float, float, float, float, float]] = field(
+    buffered_active_attacks: list[
+        tuple[float, float, float, float, str, float, float]
+    ] = field(
         default_factory=list
     )
 

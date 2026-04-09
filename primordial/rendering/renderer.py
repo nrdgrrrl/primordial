@@ -273,10 +273,11 @@ class Renderer:
 
         # --- Process simulation events → create animations ---
         t0 = time.perf_counter()
-        if isinstance(self.theme, OceanTheme):
-            get_color = lambda g: self.theme.get_creature_color(g.hue, g.saturation)
-        else:
-            get_color = lambda g: (150, 150, 200)
+        get_color = lambda event: self.theme.resolve_color_for_species(
+            str(event.get("species", "none")),
+            float(event["genome"].hue),
+            float(event["genome"].saturation),
+        )
 
         self.animation_manager.process_events(
             simulation.death_events,
@@ -637,9 +638,7 @@ class Renderer:
 
         for creature in predators:
             if isinstance(self.theme, OceanTheme):
-                base_color = self.theme.get_creature_color(
-                    creature.genome.hue, creature.genome.saturation
-                )
+                base_color = self.theme.resolve_color_for_creature(creature)
             else:
                 base_color = (255, 220, 180)
             accent_color = tuple(
@@ -741,11 +740,8 @@ class Renderer:
 
         self._attack_surf.fill((0, 0, 0, 0))
 
-        for ax, ay, tx, ty, hue in simulation.active_attacks:
-            if isinstance(self.theme, OceanTheme):
-                color = self.theme.get_creature_color(hue, 0.8)
-            else:
-                color = (200, 200, 200)
+        for ax, ay, tx, ty, species, hue, saturation in simulation.active_attacks:
+            color = self.theme.resolve_color_for_species(species, hue, saturation)
 
             pygame.draw.line(
                 self._attack_surf,
@@ -797,7 +793,11 @@ class Renderer:
             # Compute representative hue from first member
             hue = members[0].genome.hue
             if isinstance(self.theme, OceanTheme):
-                base_color = self.theme.get_creature_color(hue, members[0].genome.saturation)
+                base_color = self.theme.resolve_color_for_species(
+                    members[0].species,
+                    hue,
+                    members[0].genome.saturation,
+                )
             else:
                 base_color = (200, 200, 200)
             self._draw_connection_group(
@@ -853,7 +853,11 @@ class Renderer:
 
             hue = members[0].genome.hue
             if isinstance(self.theme, OceanTheme):
-                base_color = self.theme.get_creature_color(hue, 0.6)
+                base_color = self.theme.resolve_color_for_species(
+                    members[0].species,
+                    hue,
+                    0.6,
+                )
             else:
                 base_color = (200, 200, 200)
             self._draw_connection_group(
@@ -1073,7 +1077,7 @@ class Renderer:
 
             # Color from lineage hue
             if isinstance(self.theme, OceanTheme):
-                color = self.theme.get_creature_color(state.hue, 0.8)
+                color = self.theme.resolve_color_for_species("none", state.hue, 0.8)
             else:
                 color = (150, 150, 220)
 

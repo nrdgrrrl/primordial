@@ -85,7 +85,7 @@ make clean     # remove build/dist and __pycache__ dirs
 | `R` | Reset simulation (new population) |
 | `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
 | `D` | In the settings overlay, reset predator-prey adaptive dials to baseline and clear the max tick record |
-| Hold `P` | Highlight predators while held in `predator_prey` mode |
+| Hold `P` | Add a stronger locator highlight to predators while held in `predator_prey` mode |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
 
@@ -119,7 +119,7 @@ Each creature has a **genome** — a set of 15 heritable traits that determine i
 | **aggression** | 0–1 | Feeding strategy: <0.4 = grazer (+20% food efficiency, ignores prey), >0.6 = hunter (seeks and drains nearby creatures), 0.4–0.6 = opportunist |
 | **efficiency** | 0–1 | Energy extraction rate from food |
 | **longevity** | 0–1 | Maximum lifespan: 0 = ~3000 frames (~50s), 1 = ~10000 frames (~2.8min); high longevity costs energy each frame |
-| **hue** | 0–1 | Base color hue (heritable; hue drift > 0.15 triggers speciation) |
+| **hue** | 0–1 | Base color hue (heritable; hue drift > 0.15 triggers speciation; predator rendering may add a species tint) |
 | **saturation** | 0–1 | Color saturation |
 
 #### Glyph Traits — What You See
@@ -230,7 +230,7 @@ A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%)
 - A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-median collapses. That comparison is against the rolling median, not the all-time high. Each candidate is then evaluated against the unchanged baseline on the same seed set, using the median survival from those runs. The seed-pair count defaults to `2` and can be overridden with `adaptive_trial_seed_count`. Survival remains the primary objective. If the candidate and baseline survival medians are within `adaptive_survival_deadband` ticks (`50` by default), the decision falls back to lower near-extinction pressure, defined as `predator_low_ticks + prey_low_ticks` over the run. If both survival and pressure are still tied, the existing keep-on-tie behavior is preserved when candidate survival meets baseline; otherwise the candidate is reverted.
 - If runs keep failing to beat the rolling median for `adaptive_step_escalation_runs` completed runs in a row (5 by default), the next dial trial increases its step size by `adaptive_step_escalation_percent` (25% by default) for each full streak block.
 - If you launch with `--log=csv`, predator-prey appends one `run_complete` row per completed run and one `trial_decision` row per completed adaptive trial to `run_logs/predator_prey_runs.csv`. The rows include seed, `sim_ticks`, `survival_ticks`, `predator_low_ticks`, `prey_low_ticks`, `near_extinction_pressure`, trial role (`candidate` or `baseline`), verification seed, trial id, survival deadband, decision basis, keep/revert outcome, and the dial values used for that run. Manual dial resets still append a `dial_reset` marker row so later analysis can segment the data.
-- Predators render in warm hues (high hue), prey in cool hues (low hue).
+- Predators keep a persistent warm predator tint layered over their genome color, so they stay legible even after hue drift. Prey continue to render directly from their genome palette.
 
 **Best for:** watching whether predator/prey coexistence remains stable across many seeded runs.
 
