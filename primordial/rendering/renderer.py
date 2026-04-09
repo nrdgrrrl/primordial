@@ -776,6 +776,9 @@ class Renderer:
 
         settings = self.settings
         max_dist = settings.kin_line_max_distance
+        if max_dist <= 0.0:
+            self._frozen_link_surf_cached = None
+            return
 
         # Bucket creatures by lineage_id
         lineage_buckets: dict[int, list] = defaultdict(list)
@@ -830,6 +833,9 @@ class Renderer:
 
         settings = self.settings
         max_dist = settings.kin_line_max_distance * 1.5
+        if settings.kin_line_max_distance <= 0.0:
+            self._frozen_link_surf_cached = None
+            return
 
         # Bucket by flock_id
         flock_buckets: dict[int, list] = defaultdict(list)
@@ -970,6 +976,9 @@ class Renderer:
         """
         settings = self.settings
         top_n = settings.territory_top_n
+        if top_n <= 0:
+            self._shimmer_states.clear()
+            return
         lerp = settings.territory_shimmer_lerp
         fade_frames = settings.territory_fade_seconds * 60
 

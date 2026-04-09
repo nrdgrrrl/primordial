@@ -195,6 +195,11 @@ _IGNORED_LEGACY_MODE_KEYS = frozenset(
     }
 )
 
+_LEGACY_RENDER_DEFAULT_MIGRATIONS: dict[str, tuple[int | float, int | float]] = {
+    "kin_line_max_distance": (120.0, 0.0),
+    "territory_top_n": (3, 0),
+}
+
 
 class Config:
     """Typed runtime configuration with load/save/reset support."""
@@ -304,6 +309,7 @@ class Config:
         self._warn_unknown_keys("display", display, set(_SECTION_FIELDS["display"]))
         self._warn_unknown_keys("evolution", evolution, set(_EVOLUTION_COMPAT_FIELDS))
         self._warn_unknown_keys("rendering", rendering, set(_SECTION_FIELDS["rendering"]))
+        self._migrate_legacy_render_defaults(rendering)
 
         self._merge_section_values(simulation, _SECTION_FIELDS["simulation"])
         self._merge_section_values(display, _SECTION_FIELDS["display"])
@@ -313,6 +319,14 @@ class Config:
         self._merge_section_values(evolution, _EVOLUTION_COMPAT_FIELDS)
 
         self._merge_mode_params(data.get("modes", {}))
+
+    def _migrate_legacy_render_defaults(self, rendering: dict[str, Any]) -> None:
+        """Replace persisted old shipped render defaults with new defaults."""
+        for key, (legacy_value, migrated_value) in _LEGACY_RENDER_DEFAULT_MIGRATIONS.items():
+            if rendering.get(key) != legacy_value:
+                continue
+            rendering[key] = migrated_value
+            self._config_migrated = True
 
     def _merge_section_values(
         self,
@@ -352,9 +366,9 @@ class Config:
         self.target_fps = max(1, self.target_fps)
         self.food_max_particles = max(1, self.food_max_particles)
         self.glyph_size_base = max(8, self.glyph_size_base)
-        self.kin_line_max_distance = max(1.0, self.kin_line_max_distance)
+        self.kin_line_max_distance = max(0.0, self.kin_line_max_distance)
         self.kin_line_min_group = max(2, self.kin_line_min_group)
-        self.territory_top_n = max(1, self.territory_top_n)
+        self.territory_top_n = max(0, self.territory_top_n)
         self.territory_shimmer_lerp = max(0.001, min(1.0, self.territory_shimmer_lerp))
         self.territory_fade_seconds = max(0.1, self.territory_fade_seconds)
         self.death_animation_frames = max(1, self.death_animation_frames)

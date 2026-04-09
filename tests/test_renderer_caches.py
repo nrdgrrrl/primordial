@@ -131,6 +131,7 @@ class RendererCacheTests(unittest.TestCase):
 
     def test_frozen_link_cache_is_built_and_reused_for_paused_world(self) -> None:
         settings = self._build_settings()
+        settings.kin_line_max_distance = 120.0
         screen = pygame.display.set_mode((320, 180))
         simulation = Simulation(320, 180, settings, seed=12345)
         renderer = Renderer(screen, settings)
@@ -148,6 +149,38 @@ class RendererCacheTests(unittest.TestCase):
 
         renderer.draw(simulation)
         self.assertIs(renderer._frozen_link_surf_cached, frozen_surface)
+
+    def test_disabled_link_rendering_skips_kin_lines_and_clears_frozen_cache(self) -> None:
+        settings = self._build_settings()
+        settings.kin_line_max_distance = 0.0
+        screen = pygame.display.set_mode((320, 180))
+        simulation = Simulation(320, 180, settings, seed=12345)
+        renderer = Renderer(screen, settings)
+        renderer._frozen_link_surf_cached = pygame.Surface((320, 180), pygame.SRCALPHA)
+
+        with patch.object(renderer, "_draw_connection_group") as draw_group:
+            renderer._draw_kin_lines(simulation)
+
+        draw_group.assert_not_called()
+        self.assertIsNone(renderer._frozen_link_surf_cached)
+
+    def test_disabled_territory_rendering_skips_shimmer_and_keeps_translucent_zones(self) -> None:
+        settings = self._build_settings()
+        settings.territory_top_n = 0
+        screen = pygame.display.set_mode((320, 180))
+        simulation = Simulation(320, 180, settings, seed=12345)
+        renderer = Renderer(screen, settings)
+        renderer._shimmer_states[123] = object()  # type: ignore[assignment]
+
+        renderer.draw(simulation)
+
+        self.assertEqual(renderer._shimmer_states, {})
+        self.assertIsNotNone(renderer._zone_surf_cached)
+        translucent_pixels = [
+            renderer._zone_surf_cached.get_at((int(zone.x), int(zone.y))).a
+            for zone in simulation.zone_manager.zones
+        ]
+        self.assertTrue(any(0 < alpha < 255 for alpha in translucent_pixels))
 
 
 if __name__ == "__main__":

@@ -109,6 +109,45 @@ class SettingsOverlayTests(unittest.TestCase):
             self.assertIsNone(first_press)
             self.assertEqual(second_press, "reset_predator_prey_dials")
 
+    def test_starting_predators_field_only_appears_for_predator_prey_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+
+            self.assertNotIn(
+                "Starting Predators",
+                [field.label for field in overlay._visible_fields()],
+            )
+
+            overlay.pending["sim_mode"] = "predator_prey"
+
+            self.assertIn(
+                "Starting Predators",
+                [field.label for field in overlay._visible_fields()],
+            )
+
+    def test_settings_overlay_apply_saves_predator_fraction_mode_param(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            settings.sim_mode = "predator_prey"
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.pending["mode_param:predator_prey:predator_fraction"] = 0.11
+
+            action = overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN))
+
+            self.assertEqual(action, "apply")
+            self.assertEqual(settings.mode_params["predator_prey"]["predator_fraction"], 0.11)
+            saved = config_path.read_text(encoding="utf-8")
+            self.assertIn("predator_fraction = 0.1100", saved)
+
     def test_food_cycle_length_field_uses_clear_label_and_seconds_display(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"

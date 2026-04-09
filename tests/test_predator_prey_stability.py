@@ -132,6 +132,17 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(predator_count, 2)
         self.assertEqual(prey_count, 1)
 
+    def test_initial_spawn_uses_configured_predator_fraction(self) -> None:
+        settings = self._build_settings()
+        settings.mode_params["predator_prey"]["initial_population"] = 20
+        settings.mode_params["predator_prey"]["predator_fraction"] = 0.10
+
+        simulation = Simulation(320, 180, settings)
+
+        predator_count, prey_count = simulation.get_species_counts()
+        self.assertEqual(predator_count, 2)
+        self.assertEqual(prey_count, 18)
+
     def test_sim_ticks_increment_once_per_simulation_step(self) -> None:
         simulation = self._build_simulation()
         simulation.creatures = [

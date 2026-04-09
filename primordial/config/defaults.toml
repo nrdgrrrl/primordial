@@ -24,9 +24,9 @@ show_hud = true
 
 [rendering]
 glyph_size_base = 48
-kin_line_max_distance = 120.0
+kin_line_max_distance = 0.0
 kin_line_min_group = 3
-territory_top_n = 3
+territory_top_n = 0
 territory_shimmer_lerp = 0.0500
 territory_fade_seconds = 2.00
 death_animation_frames = 40

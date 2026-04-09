@@ -20,6 +20,9 @@ class Field:
     options: list[str] | None = None
     section: str = ""
     requires_reset: bool = False
+    mode_param_mode: str | None = None
+    mode_param_key: str | None = None
+    visible_modes: list[str] | None = None
 
 
 class SettingsOverlay:
@@ -39,6 +42,19 @@ class SettingsOverlay:
         self.fields = [
             Field("Mode", "sim_mode", "enum", options=["energy", "predator_prey", "boids", "drift"], section="Simulation", requires_reset=True),
             Field("Initial Population", "initial_population", "int", 0, 500, 5, section="Simulation", requires_reset=True),
+            Field(
+                "Starting Predators",
+                "",
+                "float",
+                0.0,
+                1.0,
+                0.01,
+                section="Simulation",
+                requires_reset=True,
+                mode_param_mode="predator_prey",
+                mode_param_key="predator_fraction",
+                visible_modes=["predator_prey"],
+            ),
             Field("Max Population", "max_population", "int", 1, 600, 5, section="Simulation"),
             Field("Food Spawn Rate", "food_spawn_rate", "float", 0.0, 2.0, 0.05, section="Simulation"),
             Field("Creature Speed", "creature_speed_base", "float", 0.5, 3.0, 0.05, section="Simulation"),
@@ -53,7 +69,7 @@ class SettingsOverlay:
             Field("Zone Count", "zone_count", "int", 0, 12, 1, section="Evolution"),
             Field("Zone Strength", "zone_strength", "float", 0.0, 1.0, 0.05, section="Evolution"),
         ]
-        self._panel = pygame.Surface((600, 620), pygame.SRCALPHA)
+        self._panel = pygame.Surface((600, 650), pygame.SRCALPHA)
         self._shade: pygame.Surface | None = None
         self._font = pygame.font.Font(None, 26)
         self._small = pygame.font.Font(None, 22)
@@ -71,9 +87,13 @@ class SettingsOverlay:
         self.snapshot_status_is_error = False
 
     def sync_from_settings(self) -> None:
-        self.pending = {f.attr: getattr(self.settings, f.attr) for f in self.fields}
+        self.pending = {
+            self._pending_key(f): self._get_field_value(f)
+            for f in self.fields
+        }
         self.confirm_reset = False
         self.confirm_reset_predator_prey_dials = False
+        self._clamp_selected()
 
     def set_snapshot_path(self, path: str) -> None:
         self.snapshot_path = path
@@ -107,17 +127,20 @@ class SettingsOverlay:
                 return "reset_predator_prey_dials"
             self.confirm_reset_predator_prey_dials = True
             return None
+        visible_fields = self._visible_fields()
+        if not visible_fields:
+            return None
         if event.key == pygame.K_UP:
-            self.selected = (self.selected - 1) % len(self.fields)
+            self.selected = (self.selected - 1) % len(visible_fields)
         elif event.key == pygame.K_DOWN:
-            self.selected = (self.selected + 1) % len(self.fields)
+            self.selected = (self.selected + 1) % len(visible_fields)
         elif event.key == pygame.K_LEFT:
             self._adjust(-1)
         elif event.key == pygame.K_RIGHT:
             self._adjust(1)
         elif event.key == pygame.K_RETURN:
-            for k, v in self.pending.items():
-                setattr(self.settings, k, v)
+            for field in self.fields:
+                self._set_field_value(field, self.pending[self._pending_key(field)])
             self.settings.save()
             self.close()
             return "apply"
@@ -125,29 +148,36 @@ class SettingsOverlay:
             self.confirm_reset_predator_prey_dials = False
             if self.confirm_reset:
                 self.settings.reset_to_defaults()
-                self.pending = {f.attr: getattr(self.settings, f.attr) for f in self.fields}
+                self.sync_from_settings()
                 self.confirm_reset = False
                 return "reset"
             self.confirm_reset = True
         return None
 
     def _adjust(self, direction: int) -> None:
-        field = self.fields[self.selected]
-        value = self.pending[field.attr]
+        field = self._selected_field()
+        if field is None:
+            return
+        pending_key = self._pending_key(field)
+        value = self.pending[pending_key]
         self.confirm_reset = False
         self.confirm_reset_predator_prey_dials = False
         if field.kind == "bool":
-            self.pending[field.attr] = not bool(value)
+            self.pending[pending_key] = not bool(value)
         elif field.kind == "enum" and field.options:
             idx = field.options.index(str(value))
-            self.pending[field.attr] = field.options[(idx + direction) % len(field.options)]
+            self.pending[pending_key] = field.options[(idx + direction) % len(field.options)]
         elif field.kind == "int":
             new_val = int(value) + int(field.step) * direction
-            self.pending[field.attr] = max(int(field.min_value), min(int(field.max_value), new_val))
+            self.pending[pending_key] = max(
+                int(field.min_value),
+                min(int(field.max_value), new_val),
+            )
         else:
             new_val = float(value) + float(field.step) * direction
             bounded = max(float(field.min_value), min(float(field.max_value), new_val))
-            self.pending[field.attr] = round(bounded, 4)
+            self.pending[pending_key] = round(bounded, 4)
+        self._clamp_selected()
 
     def update(self) -> None:
         if self.fade_dir > 0:
@@ -174,7 +204,9 @@ class SettingsOverlay:
 
         y = 56
         last_section = ""
-        for idx, field in enumerate(self.fields):
+        visible_fields = self._visible_fields()
+        self._clamp_selected()
+        for idx, field in enumerate(visible_fields):
             if field.section != last_section:
                 sec = self._small.render(field.section, True, (120, 165, 220))
                 self._panel.blit(sec, (20, y))
@@ -218,18 +250,21 @@ class SettingsOverlay:
             hint = "Press R again to confirm reset"
         elif self.confirm_reset_predator_prey_dials:
             hint = "Press D again to reset predator-prey dials"
-        self._panel.blit(self._small.render(hint, True, (180, 205, 230)), (20, 590))
+        hint_y = self._panel.get_height() - 30
+        self._panel.blit(self._small.render(hint, True, (180, 205, 230)), (20, hint_y))
 
         x = screen.get_width() // 2 - self._panel.get_width() // 2
         y = screen.get_height() // 2 - self._panel.get_height() // 2
         screen.blit(self._panel, (x, y))
 
     def _format_value(self, field: Field) -> str:
-        value = self.pending[field.attr]
+        value = self.pending[self._pending_key(field)]
         if field.kind == "bool":
             return "[ ON ]" if value else "[ OFF ]"
         if field.kind == "enum":
             return f"< {value} >"
+        if field.mode_param_mode == "predator_prey" and field.mode_param_key == "predator_fraction":
+            return f"< {int(round(float(value) * 100.0))}% >"
         if field.attr == "food_cycle_period":
             frames = int(value)
             seconds = frames / _SIMULATION_FRAMES_PER_SECOND
@@ -237,3 +272,44 @@ class SettingsOverlay:
         if field.kind == "int":
             return f"< {int(value)} >"
         return f"{float(value):.3f}"
+
+    def _pending_key(self, field: Field) -> str:
+        if field.mode_param_mode is not None and field.mode_param_key is not None:
+            return f"mode_param:{field.mode_param_mode}:{field.mode_param_key}"
+        return field.attr
+
+    def _get_field_value(self, field: Field) -> object:
+        if field.mode_param_mode is not None and field.mode_param_key is not None:
+            return self.settings.mode_params[field.mode_param_mode][field.mode_param_key]
+        return getattr(self.settings, field.attr)
+
+    def _set_field_value(self, field: Field, value: object) -> None:
+        if field.mode_param_mode is not None and field.mode_param_key is not None:
+            self.settings.mode_params[field.mode_param_mode][field.mode_param_key] = value
+            return
+        setattr(self.settings, field.attr, value)
+
+    def _current_mode_for_visibility(self) -> str:
+        return str(self.pending.get("sim_mode", self.settings.sim_mode))
+
+    def _visible_fields(self) -> list[Field]:
+        active_mode = self._current_mode_for_visibility()
+        return [
+            field
+            for field in self.fields
+            if field.visible_modes is None or active_mode in field.visible_modes
+        ]
+
+    def _clamp_selected(self) -> None:
+        visible_count = len(self._visible_fields())
+        if visible_count == 0:
+            self.selected = 0
+            return
+        self.selected %= visible_count
+
+    def _selected_field(self) -> Field | None:
+        visible_fields = self._visible_fields()
+        if not visible_fields:
+            return None
+        self._clamp_selected()
+        return visible_fields[self.selected]

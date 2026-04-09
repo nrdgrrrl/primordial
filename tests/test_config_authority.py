@@ -256,6 +256,48 @@ predator_energy_to_reproduce = 0.7100
             user_data["modes"]["predator_prey"],
         )
 
+    def test_render_effect_zero_values_are_preserved_as_disable_switches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                """
+[rendering]
+kin_line_max_distance = 0.0
+territory_top_n = 0
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Config()
+
+        self.assertEqual(settings.kin_line_max_distance, 0.0)
+        self.assertEqual(settings.territory_top_n, 0)
+
+    def test_legacy_render_defaults_are_migrated_to_disabled_effects(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                """
+[rendering]
+kin_line_max_distance = 120.0
+territory_top_n = 3
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Config()
+
+            migrated = tomllib.loads(config_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(settings.kin_line_max_distance, 0.0)
+        self.assertEqual(settings.territory_top_n, 0)
+        self.assertEqual(migrated["rendering"]["kin_line_max_distance"], 0.0)
+        self.assertEqual(migrated["rendering"]["territory_top_n"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
