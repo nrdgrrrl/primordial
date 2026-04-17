@@ -89,6 +89,9 @@ class GraphicalBenchmarkingTests(unittest.TestCase):
             self.assertGreaterEqual(run_result["performance"]["frames_rendered"], 1)
             self.assertTrue(Path(run_result["frame_samples_file"]).exists())
             self.assertTrue((suite_paths.per_run / f"{run_result['run_id']}.json").exists())
+            self.assertIn("draw_total_ms", run_result["performance"]["render_breakdown_mean_ms"])
+            self.assertIn("draw_total_ms", run_result["performance"]["render_breakdown_ms"])
+            self.assertIn("p95", run_result["performance"]["render_breakdown_ms"]["draw_total_ms"])
             self.assertGreaterEqual(len(run_result["checkpoints"]), 1)
             for checkpoint in run_result["checkpoints"]:
                 self.assertTrue(Path(checkpoint["screenshot"]).exists())

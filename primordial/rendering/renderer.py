@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pygame
@@ -68,6 +68,78 @@ class ShimmerState:
     fading_out: bool = False  # True when lineage left top-N
 
 
+@dataclass(frozen=True)
+class CreatureRenderState:
+    """Per-frame creature render values reused by trail and glyph passes."""
+
+    birth_scale: float
+    color: tuple[int, int, int]
+    depth_scale: float
+    depth_brightness: float
+    pulse: float
+    radius: int
+    base_radius: float
+
+
+class TrailLayer:
+    """Tiled alpha layer for creature trails, clearing only tiles used this frame."""
+
+    def __init__(self, width: int, height: int, *, tile_size: int = 256) -> None:
+        self.width = width
+        self.height = height
+        self.tile_size = tile_size
+        self.cols = max(1, math.ceil(width / tile_size))
+        self.rows = max(1, math.ceil(height / tile_size))
+        self._tiles: list[pygame.Surface] = []
+        self._touched: list[int] = []
+        self._touched_set: set[int] = set()
+        for row in range(self.rows):
+            tile_h = min(tile_size, height - row * tile_size)
+            for col in range(self.cols):
+                tile_w = min(tile_size, width - col * tile_size)
+                self._tiles.append(pygame.Surface((tile_w, tile_h), pygame.SRCALPHA))
+
+    def clear_touched(self) -> None:
+        for index in self._touched:
+            self._tiles[index].fill((0, 0, 0, 0))
+        self._touched.clear()
+        self._touched_set.clear()
+
+    def draw_circle(
+        self,
+        color: tuple[int, int, int, int],
+        center: tuple[int, int],
+        radius: int,
+    ) -> None:
+        cx, cy = center
+        if radius <= 0:
+            return
+        min_col = max(0, (cx - radius) // self.tile_size)
+        max_col = min(self.cols - 1, (cx + radius) // self.tile_size)
+        min_row = max(0, (cy - radius) // self.tile_size)
+        max_row = min(self.rows - 1, (cy + radius) // self.tile_size)
+        for row in range(min_row, max_row + 1):
+            tile_top = row * self.tile_size
+            for col in range(min_col, max_col + 1):
+                tile_left = col * self.tile_size
+                index = row * self.cols + col
+                if index not in self._touched_set:
+                    self._tiles[index].fill((0, 0, 0, 0))
+                    self._touched_set.add(index)
+                    self._touched.append(index)
+                pygame.draw.circle(
+                    self._tiles[index],
+                    color,
+                    (cx - tile_left, cy - tile_top),
+                    radius,
+                )
+
+    def blit_to(self, target: pygame.Surface) -> None:
+        for index in self._touched:
+            row, col = divmod(index, self.cols)
+            target.blit(self._tiles[index], (col * self.tile_size, row * self.tile_size))
+
+
 # ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
@@ -101,7 +173,7 @@ class Renderer:
         self.width = self.display_width
         self.height = self.display_height
         self._frame_surf = pygame.Surface((self.width, self.height))
-        self._target_surface = self._frame_surf
+        self._target_surface = self.screen if self._can_render_direct_to_screen() else self._frame_surf
 
         # Initialize theme
         self.theme: Theme = get_theme(settings.visual_theme)
@@ -150,8 +222,11 @@ class Renderer:
         self._predator_highlight_surf = pygame.Surface(
             (self.width, self.height), pygame.SRCALPHA
         )
+        self._trail_layer = TrailLayer(self.width, self.height)
 
         # Cached static composition layers.
+        self._static_background_surf_cached: pygame.Surface | None = None
+        self._static_background_cache_key: tuple[object, ...] | None = None
         self._zone_surf_cached: pygame.Surface | None = None
         self._zone_label_surf_cached: pygame.Surface | None = None
         self._frozen_link_surf_cached: pygame.Surface | None = None
@@ -194,7 +269,7 @@ class Renderer:
             self.screen = screen
         self.display_width, self.display_height = self.screen.get_size()
         self._frame_surf = pygame.Surface((self.width, self.height))
-        self._target_surface = self._frame_surf
+        self._target_surface = self.screen if self._can_render_direct_to_screen() else self._frame_surf
 
         self._line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._attack_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -202,6 +277,7 @@ class Renderer:
         self._predator_highlight_surf = pygame.Surface(
             (self.width, self.height), pygame.SRCALPHA
         )
+        self._trail_layer = TrailLayer(self.width, self.height)
         self._shimmer_states.clear()
         self._invalidate_static_caches()
         self.ambient_particles = self.theme.create_ambient_particles(
@@ -229,11 +305,27 @@ class Renderer:
 
     def _invalidate_static_caches(self) -> None:
         """Clear cached surfaces tied to world geometry or presentation state."""
+        self._static_background_surf_cached = None
+        self._static_background_cache_key = None
         self._zone_surf_cached = None
         self._zone_label_surf_cached = None
         self._frozen_link_surf_cached = None
         self._game_over_overlay_cache_key = None
         self._game_over_overlay_cache = None
+
+    def _can_render_direct_to_screen(self) -> bool:
+        """Return whether the logical render target exactly matches presentation."""
+        return (
+            self.screen.get_size() == (self.width, self.height)
+            and self.display_width == self.width
+            and self.display_height == self.height
+        )
+
+    def _select_frame_target(self) -> tuple[pygame.Surface, bool]:
+        direct_to_screen = self._can_render_direct_to_screen()
+        target = self.screen if direct_to_screen else self._frame_surf
+        self._target_surface = target
+        return target, direct_to_screen
 
     def blit_presentation_overlay(self, overlay: pygame.Surface) -> None:
         """Composite a logical-space overlay onto the active display surface."""
@@ -259,8 +351,7 @@ class Renderer:
         """
         frame_t0 = time.perf_counter()
         timings: dict[str, float] = {}
-        target = self._frame_surf
-        self._target_surface = target
+        target, direct_to_screen = self._select_frame_target()
 
         current_time = time.time()
         anim_time = current_time - self.start_time
@@ -294,9 +385,12 @@ class Renderer:
         simulation.birth_events.clear()
         timings["events_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        # --- Clear screen ---
+        # --- Static background ---
         t0 = time.perf_counter()
-        target.fill(self.theme.background_color)
+        if isinstance(self.theme, OceanTheme):
+            self._draw_static_background(simulation)
+        else:
+            target.fill(self.theme.background_color)
         timings["clear_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Ambient particles ---
@@ -304,13 +398,7 @@ class Renderer:
         self.theme.render_ambient(target, self.ambient_particles, anim_time)
         timings["ambient_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        # --- Zone backgrounds (very faint atmospheric gradient circles) ---
-        t0 = time.perf_counter()
-        if isinstance(self.theme, OceanTheme):
-            self._draw_zone_backgrounds(simulation)
-            if self.hud.visible:
-                self._draw_zone_labels(simulation)
-        timings["zones_ms"] = (time.perf_counter() - t0) * 1000.0
+        timings["zones_ms"] = 0.0
 
         # --- Territory shimmer (beneath creatures) ---
         t0 = time.perf_counter()
@@ -336,17 +424,7 @@ class Renderer:
         # --- Creature trails (batched onto shared surface, then blitted once) ---
         t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
-            if (self.theme._trail_surf is None or
-                    self.theme._trail_surf.get_size() != (self.width, self.height)):
-                self.theme._trail_surf = pygame.Surface(
-                    (self.width, self.height), pygame.SRCALPHA
-                )
-            self.theme._trail_surf.fill((0, 0, 0, 0))
-            for creature in simulation.creatures:
-                birth_scale = self.animation_manager.get_birth_scale(creature)
-                scale = birth_scale if birth_scale is not None else 1.0
-                self.theme.render_creature_trail(creature, anim_time, scale=scale)
-            target.blit(self.theme._trail_surf, (0, 0))
+            self._draw_creature_trails(simulation, anim_time)
         timings["trails_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Creatures ---
@@ -394,18 +472,19 @@ class Renderer:
             self.settings_overlay.draw(target)
         timings["settings_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        timings["draw_total_ms"] = (time.perf_counter() - frame_t0) * 1000.0
+        timings["render_core_ms"] = (time.perf_counter() - frame_t0) * 1000.0
         if self.debug_enabled:
             self._debug_timing = timings
             self._draw_debug_graph_overlay(simulation)
-        if (self.display_width, self.display_height) == (self.width, self.height):
-            self.screen.blit(target, (0, 0))
-        else:
+        t0 = time.perf_counter()
+        if not direct_to_screen:
             pygame.transform.scale(
                 target,
                 (self.display_width, self.display_height),
                 self.screen,
             )
+        timings["presentation_copy_ms"] = (time.perf_counter() - t0) * 1000.0
+        timings["draw_total_ms"] = (time.perf_counter() - frame_t0) * 1000.0
         return dict(timings)
 
     def toggle_hud(self) -> None:
@@ -413,6 +492,8 @@ class Renderer:
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
         self._zone_label_surf_cached = None
+        self._static_background_surf_cached = None
+        self._static_background_cache_key = None
 
     def toggle_settings_overlay(self) -> None:
         """Open/close settings overlay."""
@@ -584,12 +665,50 @@ class Renderer:
     # Zone backgrounds
     # ------------------------------------------------------------------
 
+    def _draw_static_background(self, simulation: "Simulation") -> None:
+        """Blit cached opaque background plus static zone atmosphere."""
+        cache_key = (
+            self.width,
+            self.height,
+            self.theme.background_color,
+            self.settings.zone_background_intensity,
+            self.hud.visible,
+            tuple(
+                (
+                    zone.zone_type,
+                    int(zone.x),
+                    int(zone.y),
+                    int(zone.radius),
+                )
+                for zone in simulation.zone_manager.zones
+            ),
+        )
+        if (
+            self._static_background_surf_cached is None
+            or self._static_background_cache_key != cache_key
+        ):
+            self._static_background_cache_key = cache_key
+            surface = pygame.Surface((self.width, self.height))
+            surface.fill(self.theme.background_color)
+            zone_surface = self._ensure_zone_background_surface(simulation)
+            surface.blit(zone_surface, (0, 0))
+            if self.hud.visible:
+                label_surface = self._ensure_zone_label_surface(simulation)
+                surface.blit(label_surface, (0, 0))
+            self._static_background_surf_cached = surface
+
+        self._target_surface.blit(self._static_background_surf_cached, (0, 0))
+
     def _draw_zone_backgrounds(self, simulation: "Simulation") -> None:
         """
         Draw atmospheric radial gradient circles for each environmental zone.
 
         Zones never move, so the surface is rendered once and cached.
         """
+        self._target_surface.blit(self._ensure_zone_background_surface(simulation), (0, 0))
+
+    def _ensure_zone_background_surface(self, simulation: "Simulation") -> pygame.Surface:
+        """Return the cached translucent zone-atmosphere layer."""
         if self._zone_surf_cached is None:
             self._zone_surf_cached = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
             for zone in simulation.zone_manager.zones:
@@ -613,7 +732,50 @@ class Renderer:
                         layer_radius,
                     )
 
-        self._target_surface.blit(self._zone_surf_cached, (0, 0))
+        return self._zone_surf_cached
+
+    def _draw_creature_trails(self, simulation: "Simulation", anim_time: float) -> None:
+        """Render all creature trails through the tiled trail layer."""
+        self._trail_layer.clear_touched()
+        for creature in simulation.creatures:
+            trail = creature.trail
+            if not trail:
+                continue
+            state = self._build_creature_render_state(creature, anim_time)
+            trail_len = len(trail)
+            for i, (tx, ty) in enumerate(trail):
+                trail_alpha = int(25 * (i + 1) / trail_len)
+                trail_radius = max(1, int(state.radius * 0.4 * (i + 1) / trail_len))
+                self._trail_layer.draw_circle(
+                    (*state.color, trail_alpha),
+                    (int(tx), int(ty)),
+                    trail_radius,
+                )
+        self._trail_layer.blit_to(self._target_surface)
+
+    def _build_creature_render_state(
+        self,
+        creature: object,
+        anim_time: float,
+    ) -> CreatureRenderState:
+        """Compute one creature's shared render values for this frame."""
+        birth_scale = self.animation_manager.get_birth_scale(creature)
+        scale = birth_scale if birth_scale is not None else 1.0
+        color = self.theme.resolve_color_for_creature(creature)
+        depth_scale, depth_brightness = self.theme._get_depth_render_style(creature)
+        color = tuple(min(255, int(channel * depth_brightness)) for channel in color)
+        pulse = 1.0 + 0.1 * math.sin(anim_time * 3.14 + creature._glyph_phase)
+        base_radius = creature.get_radius()
+        radius = max(4, int(base_radius * pulse * scale * depth_scale))
+        return CreatureRenderState(
+            birth_scale=scale,
+            color=color,
+            depth_scale=depth_scale,
+            depth_brightness=depth_brightness,
+            pulse=pulse,
+            radius=radius,
+            base_radius=base_radius,
+        )
 
     def _draw_predator_highlights(
         self, simulation: "Simulation", anim_time: float
@@ -705,6 +867,10 @@ class Renderer:
 
     def _draw_zone_labels(self, simulation: "Simulation") -> None:
         """Draw subtle zone labels to support ecological review."""
+        self._target_surface.blit(self._ensure_zone_label_surface(simulation), (0, 0))
+
+    def _ensure_zone_label_surface(self, simulation: "Simulation") -> pygame.Surface:
+        """Return the cached static zone-label layer."""
         if self._zone_label_surf_cached is None:
             self._zone_label_surf_cached = pygame.Surface(
                 (self.width, self.height), pygame.SRCALPHA
@@ -725,7 +891,7 @@ class Renderer:
                     int(zone.y - panel.get_height() / 2),
                 )
                 self._zone_label_surf_cached.blit(panel, pos)
-        self._target_surface.blit(self._zone_label_surf_cached, (0, 0))
+        return self._zone_label_surf_cached
 
     # ------------------------------------------------------------------
     # Attack lines

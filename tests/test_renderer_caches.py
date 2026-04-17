@@ -62,14 +62,17 @@ class RendererCacheTests(unittest.TestCase):
 
         self.assertIsNotNone(renderer._zone_surf_cached)
         self.assertIsNotNone(renderer._zone_label_surf_cached)
+        self.assertIsNotNone(renderer._static_background_surf_cached)
 
         renderer.toggle_hud()
         self.assertIsNone(renderer._zone_label_surf_cached)
+        self.assertIsNone(renderer._static_background_surf_cached)
 
         resized_screen = pygame.display.set_mode((400, 240))
         renderer.resize(400, 240, screen=resized_screen)
         self.assertIsNone(renderer._zone_surf_cached)
         self.assertIsNone(renderer._zone_label_surf_cached)
+        self.assertIsNone(renderer._static_background_surf_cached)
 
     def test_rotated_glyph_cache_reuses_steady_state_rotation(self) -> None:
         theme = OceanTheme()
@@ -215,6 +218,55 @@ class RendererCacheTests(unittest.TestCase):
             for zone in simulation.zone_manager.zones
         ]
         self.assertTrue(any(0 < alpha < 255 for alpha in translucent_pixels))
+
+    def test_direct_screen_path_skips_presentation_copy_for_matching_size(self) -> None:
+        settings = self._build_settings()
+        settings.show_hud = False
+        screen = pygame.display.set_mode((320, 180))
+        simulation = Simulation(320, 180, settings, seed=12345)
+        renderer = Renderer(screen, settings)
+
+        with patch(
+            "primordial.rendering.renderer.pygame.transform.scale",
+            wraps=pygame.transform.scale,
+        ) as scale_mock:
+            timings = renderer.draw(simulation)
+
+        scale_mock.assert_not_called()
+        self.assertIs(renderer._target_surface, renderer.screen)
+        self.assertIn("presentation_copy_ms", timings)
+
+    def test_tiled_trail_layer_matches_full_surface_trail_rendering(self) -> None:
+        settings = self._build_settings()
+        settings.show_hud = False
+        screen = pygame.display.set_mode((320, 180))
+        renderer = Renderer(screen, settings)
+        theme = renderer.theme
+        self.assertIsInstance(theme, OceanTheme)
+        creature = Creature(x=120.0, y=90.0, genome=Genome.random())
+        creature.trail = [
+            (248.0, 84.0),
+            (255.0, 90.0),
+            (262.0, 96.0),
+        ]
+        anim_time = 1.25
+
+        full_surface = pygame.Surface((320, 180), pygame.SRCALPHA)
+        theme._trail_surf = full_surface
+        theme._trail_surf.fill((0, 0, 0, 0))
+        theme.render_creature_trail(creature, anim_time)
+
+        tiled_surface = pygame.Surface((320, 180), pygame.SRCALPHA)
+        renderer._target_surface = tiled_surface
+        renderer._draw_creature_trails(
+            SimpleNamespace(creatures=[creature]),
+            anim_time,
+        )
+
+        self.assertEqual(
+            pygame.image.tostring(tiled_surface, "RGBA"),
+            pygame.image.tostring(full_surface, "RGBA"),
+        )
 
 
 if __name__ == "__main__":

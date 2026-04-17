@@ -472,6 +472,7 @@ def _run_single_graphical_benchmark(
     observability_samples: list[dict[str, Any]] = []
     render_breakdown_sums: dict[str, float] = {}
     render_breakdown_counts: dict[str, int] = {}
+    render_breakdown_samples: dict[str, list[float]] = {}
     population_samples: list[int] = []
     food_samples: list[int] = []
     predator_samples: list[int] = []
@@ -606,6 +607,7 @@ def _run_single_graphical_benchmark(
                     continue
                 render_breakdown_sums[key] = render_breakdown_sums.get(key, 0.0) + float(value)
                 render_breakdown_counts[key] = render_breakdown_counts.get(key, 0) + 1
+                render_breakdown_samples.setdefault(key, []).append(float(value))
 
             predator_count, prey_count = (0, 0)
             sim_ticks = timing_collector.total_sim_steps
@@ -766,6 +768,7 @@ def _run_single_graphical_benchmark(
             prey_samples=prey_samples,
             render_breakdown_sums=render_breakdown_sums,
             render_breakdown_counts=render_breakdown_counts,
+            render_breakdown_samples=render_breakdown_samples,
             frame_samples_path=suite_paths.frame_samples / f"{spec.run_id}.frames.csv.gz",
             restart_seed_changes=restart_seed_changes,
             toggles_completed=toggles_completed,
@@ -803,6 +806,7 @@ def _build_run_result(
     prey_samples: list[int],
     render_breakdown_sums: dict[str, float],
     render_breakdown_counts: dict[str, int],
+    render_breakdown_samples: dict[str, list[float]],
     frame_samples_path: Path,
     restart_seed_changes: int,
     toggles_completed: int,
@@ -819,6 +823,11 @@ def _build_run_result(
         key: (render_breakdown_sums[key] / render_breakdown_counts[key])
         for key in sorted(render_breakdown_sums)
         if render_breakdown_counts.get(key)
+    }
+    render_breakdown_ms = {
+        key: _summarize_numeric(values)
+        for key, values in sorted(render_breakdown_samples.items())
+        if values
     }
     current_display_size = [renderer.display_width, renderer.display_height]
     run_result = {
@@ -855,6 +864,7 @@ def _build_run_result(
             "sim_steps_per_render_frame": timing_summary["sim_steps_per_render_frame"],
             "clamp_drop": timing_summary["clamp_drop"],
             "render_breakdown_mean_ms": render_breakdown_mean_ms,
+            "render_breakdown_ms": render_breakdown_ms,
         },
         "population_summary": {
             "population": _summarize_numeric(population_samples),
