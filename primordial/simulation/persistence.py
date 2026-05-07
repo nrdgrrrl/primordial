@@ -24,6 +24,7 @@ _SIMULATION_SETTING_FIELDS = (
     "sim_mode",
     "initial_population",
     "max_population",
+    "population_safety_limit",
     "food_spawn_rate",
     "food_max_particles",
     "food_cycle_enabled",
@@ -249,6 +250,7 @@ def _deserialize_creature(payload: dict[str, Any]) -> Creature:
     creature.trail = []
     creature.rotation_angle = 0.0
     creature.glyph_surface = None
+    creature.glyph_surface_cache_key = None
     return creature
 
 

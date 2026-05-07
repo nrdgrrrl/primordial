@@ -4,7 +4,8 @@
 [simulation]
 mode = "energy"           # energy | predator_prey | boids | drift
 initial_population = 80
-max_population = 220
+max_population = 220      # soft carrying capacity for ecology pressure
+population_safety_limit = 2000
 food_spawn_rate = 0.8000
 food_max_particles = 300
 food_cycle_enabled = true

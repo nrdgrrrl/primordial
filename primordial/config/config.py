@@ -24,6 +24,7 @@ _SECTION_FIELDS: dict[str, dict[str, tuple[str, str]]] = {
         "mode": ("sim_mode", "str"),
         "initial_population": ("initial_population", "int"),
         "max_population": ("max_population", "int"),
+        "population_safety_limit": ("population_safety_limit", "int"),
         "food_spawn_rate": ("food_spawn_rate", "float"),
         "food_max_particles": ("food_max_particles", "int"),
         "food_cycle_enabled": ("food_cycle_enabled", "bool"),
@@ -353,8 +354,11 @@ class Config:
             logger.warning("Invalid visual_theme '%s'; falling back to ocean.", self.visual_theme)
             self.visual_theme = "ocean"
 
+        self._validate_mode_params()
+
         self.initial_population = max(0, self.initial_population)
         self.max_population = max(1, self.max_population)
+        self.population_safety_limit = max(1, self.population_safety_limit)
         self.food_spawn_rate = max(0.0, self.food_spawn_rate)
         self.food_cycle_period = max(1, self.food_cycle_period)
         self.mutation_rate = max(0.0, min(1.0, self.mutation_rate))
@@ -382,7 +386,16 @@ class Config:
         self.predator_highlight_pulse_seconds = max(
             0.1, self.predator_highlight_pulse_seconds
         )
-        self._validate_mode_params()
+        mode_capacities = [
+            int(values["max_population"])
+            for values in self.mode_params.values()
+            if "max_population" in values
+        ]
+        self.population_safety_limit = max(
+            self.population_safety_limit,
+            self.max_population,
+            *(mode_capacities or [0]),
+        )
 
     def reset_to_defaults(self) -> None:
         self._load_canonical_defaults()
@@ -407,7 +420,8 @@ class Config:
 [simulation]
 mode = "{self.sim_mode}"           # energy | predator_prey | boids | drift
 initial_population = {self.initial_population}
-max_population = {self.max_population}
+max_population = {self.max_population}      # soft carrying capacity
+population_safety_limit = {self.population_safety_limit}
 food_spawn_rate = {self.food_spawn_rate:.4f}
 food_max_particles = {self.food_max_particles}
 food_cycle_enabled = {str(self.food_cycle_enabled).lower()}
