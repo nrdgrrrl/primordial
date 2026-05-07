@@ -18,6 +18,7 @@ class RuntimeArgs:
     load: str | None = None
     save: str | None = None
     log: str | None = None
+    milestone_log: str | None = None
 
 
 def parse_runtime_args(argv: Sequence[str] | None = None) -> RuntimeArgs:
@@ -35,6 +36,7 @@ def parse_runtime_args(argv: Sequence[str] | None = None) -> RuntimeArgs:
     parser.add_argument("--load", type=str)
     parser.add_argument("--save", type=str)
     parser.add_argument("--log", type=str)
+    parser.add_argument("--milestone-log", type=str)
     ns, _unknown = parser.parse_known_args(list(argv) if argv is not None else None)
     return RuntimeArgs(
         debug=bool(ns.debug),
@@ -44,4 +46,5 @@ def parse_runtime_args(argv: Sequence[str] | None = None) -> RuntimeArgs:
         load=ns.load,
         save=ns.save,
         log=ns.log.lower() if ns.log else None,
+        milestone_log=ns.milestone_log,
     )

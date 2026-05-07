@@ -224,6 +224,7 @@ class Simulation:
         self.height = height
         self.settings = settings
         self._predator_prey_run_logger: Any = None
+        self._predator_prey_milestone_logger: Any = None
         self._predator_prey_adaptive_tuning_enabled = bool(
             self._get_mode_param("adaptive_tuning_enabled", True)
         )
@@ -292,6 +293,10 @@ class Simulation:
     def set_predator_prey_run_logger(self, run_logger: Any) -> None:
         """Attach an optional run logger used by predator-prey stability mode."""
         self._predator_prey_run_logger = run_logger
+
+    def set_predator_prey_milestone_logger(self, milestone_logger: Any) -> None:
+        """Attach an optional milestone logger for predator-prey narrative generation."""
+        self._predator_prey_milestone_logger = milestone_logger
 
     def set_predator_prey_adaptive_tuning_enabled(self, enabled: bool) -> None:
         """Enable or disable predator-prey adaptive tuning updates."""
@@ -647,10 +652,16 @@ class Simulation:
         for spec in _PREDATOR_PREY_ADAPTIVE_DIALS:
             if spec.key not in values:
                 continue
+            old_value = mode_params.get(spec.key, spec.default)
             mode_params[spec.key] = self._clamp_predator_prey_dial_value(
                 spec,
                 values[spec.key],
             )
+            new_value = mode_params[spec.key]
+            if self._predator_prey_milestone_logger is not None and abs(new_value - old_value) > 0.001:
+                self._predator_prey_milestone_logger.log_adaptive_tuning_change(
+                    self, spec.key, old_value, new_value,
+                )
 
     def _serialize_predator_prey_dial_values(
         self,
@@ -711,7 +722,11 @@ class Simulation:
 
     def _spawn_initial_population_energy(self) -> None:
         """Spawn the initial population for energy mode."""
-        for _ in range(self.settings.initial_population):
+        initial_pop = min(
+            self.settings.initial_population,
+            self._get_population_spawn_limit(),
+        )
+        for _ in range(initial_pop):
             lid = self._alloc_lineage_id()
             creature = Creature.spawn(
                 self.width, self.height, lineage_id=lid, energy=0.7
@@ -727,6 +742,7 @@ class Simulation:
             0,
             int(self._get_mode_param("initial_population", self.settings.initial_population)),
         )
+        initial_pop = min(initial_pop, self._get_population_spawn_limit())
         n_predators = int(initial_pop * predator_fraction)
 
         for i in range(initial_pop):
@@ -795,6 +811,7 @@ class Simulation:
     def _spawn_initial_population_boids(self) -> None:
         """Spawn boids population with mid-range conformity/efficiency."""
         initial_pop = self._get_mode_param("initial_population", self.settings.initial_population)
+        initial_pop = min(initial_pop, self._get_population_spawn_limit())
         for _ in range(initial_pop):
             lid = self._alloc_lineage_id()
             genome = Genome(
@@ -827,6 +844,7 @@ class Simulation:
     def _spawn_initial_population_drift(self) -> None:
         """Spawn drift population — dreamlike, small."""
         initial_pop = self._get_mode_param("initial_population", 60)
+        initial_pop = min(initial_pop, self._get_population_spawn_limit())
         for _ in range(initial_pop):
             lid = self._alloc_lineage_id()
             creature = Creature.spawn(
@@ -965,6 +983,7 @@ class Simulation:
         for creature in self.creatures:
             creature.trail = []
             creature.glyph_surface = None
+            creature.glyph_surface_cache_key = None
             creature.rotation_angle = 0.0
             creature._glyph_phase = creature.genome.hue * 6.28
             creature.clamp_depth_band()
@@ -1039,6 +1058,8 @@ class Simulation:
         creature_bucket = self._build_creature_bucket()
 
         for creature in self.creatures:
+            if self._queue_preexisting_death(creature, dead_creatures, dead_causes):
+                continue
             aggression = creature.genome.aggression
             if aggression > 0.6:
                 hunted = self._creature_hunt(creature, creature_bucket)
@@ -1064,25 +1085,41 @@ class Simulation:
             creature.energy -= energy_cost
             creature.energy = max(0.0, creature.energy)
 
+            if creature.energy <= 0:
+                self._queue_creature_death(
+                    creature,
+                    dead_creatures,
+                    dead_causes,
+                    self._resolve_death_cause(creature),
+                )
+                continue
+
             if random.random() < self.settings.cosmic_ray_rate:
                 self._apply_cosmic_ray(creature)
 
             if creature.energy >= self.settings.energy_to_reproduce:
-                offspring = self._reproduce(creature)
+                offspring = self._reproduce(
+                    creature,
+                    queued_births=len(new_creatures),
+                )
                 if offspring:
                     new_creatures.append(offspring)
 
             if creature.energy <= 0:
-                dead_creatures.append(creature)
-                dead_causes[id(creature)] = "energy"
+                self._queue_creature_death(
+                    creature,
+                    dead_creatures,
+                    dead_causes,
+                    self._resolve_death_cause(creature),
+                )
             elif creature.age >= creature.get_max_lifespan():
-                dead_creatures.append(creature)
-                dead_causes[id(creature)] = "age"
+                self._queue_creature_death(creature, dead_creatures, dead_causes, "age")
 
         for creature in new_creatures:
             self.creatures.append(creature)
             self.birth_events.append(creature)
 
+        self._sweep_frame_deaths(dead_creatures, dead_causes)
         self._process_deaths(dead_creatures, dead_causes)
 
     # ------------------------------------------------------------------
@@ -1126,6 +1163,8 @@ class Simulation:
         cosmic_rate = self.settings.cosmic_ray_rate
 
         for creature in self.creatures:
+            if self._queue_preexisting_death(creature, dead_creatures, dead_causes):
+                continue
             if creature.species not in {"predator", "prey"}:
                 creature.species = self._resolve_predator_prey_species(
                     creature.species,
@@ -1182,6 +1221,14 @@ class Simulation:
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
+                if creature.energy <= 0:
+                    self._queue_creature_death(
+                        creature,
+                        dead_creatures,
+                        dead_causes,
+                        self._resolve_death_cause(creature),
+                    )
+                    continue
                 self._record_predator_post_cost_state(
                     creature,
                     repro_threshold=repro_threshold,
@@ -1192,7 +1239,11 @@ class Simulation:
                     and creature.recent_animal_energy
                     >= self._get_predator_recent_animal_energy_required()
                 ):
-                    offspring = self._reproduce_pp(creature, mutation_rate)
+                    offspring = self._reproduce_pp(
+                        creature,
+                        mutation_rate,
+                        queued_births=len(new_creatures),
+                    )
                     if offspring:
                         new_creatures.append(offspring)
 
@@ -1208,9 +1259,21 @@ class Simulation:
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
+                if creature.energy <= 0:
+                    self._queue_creature_death(
+                        creature,
+                        dead_creatures,
+                        dead_causes,
+                        self._resolve_death_cause(creature),
+                    )
+                    continue
 
                 if creature.energy >= self._get_reproduction_threshold(creature):
-                    offspring = self._reproduce_pp(creature, mutation_rate)
+                    offspring = self._reproduce_pp(
+                        creature,
+                        mutation_rate,
+                        queued_births=len(new_creatures),
+                    )
                     if offspring:
                         new_creatures.append(offspring)
 
@@ -1218,22 +1281,26 @@ class Simulation:
                 self._apply_cosmic_ray_pp(creature)
 
             if creature.energy <= 0:
-                dead_creatures.append(creature)
-                dead_causes[id(creature)] = (
-                    "predation"
-                    if id(creature) in self._predation_victims_this_frame
-                    else "energy"
+                self._queue_creature_death(
+                    creature,
+                    dead_creatures,
+                    dead_causes,
+                    self._resolve_death_cause(creature),
                 )
             elif creature.age >= creature.get_max_lifespan():
-                dead_creatures.append(creature)
-                dead_causes[id(creature)] = "age"
+                self._queue_creature_death(creature, dead_creatures, dead_causes, "age")
 
         for creature in new_creatures:
             self.creatures.append(creature)
             self.birth_events.append(creature)
 
+        self._sweep_frame_deaths(dead_creatures, dead_causes)
         self._process_deaths(dead_creatures, dead_causes)
         self._check_predator_prey_collapse()
+
+        if self._predator_prey_milestone_logger is not None:
+            self._predator_prey_milestone_logger.log_population_change(self)
+            self._predator_prey_milestone_logger.log_lineage_evolution(self)
 
     def _tick_predator_state(self, predator: Creature) -> None:
         predator.recent_animal_energy = max(
@@ -1486,6 +1553,10 @@ class Simulation:
                         "frame": self._frame,
                         "lineage_id": creature.lineage_id,
                     })
+                if self._predator_prey_milestone_logger is not None:
+                    self._predator_prey_milestone_logger.log_species_flip(
+                        self, creature, previous_species, next_species,
+                    )
                 creature.species = next_species
                 creature.lineage_id = self._alloc_lineage_id()
                 creature.recent_animal_energy = 0.0
@@ -1499,13 +1570,19 @@ class Simulation:
 
         creature.genome = new_genome  # type: ignore[misc]
         creature.glyph_surface = None
+        creature.glyph_surface_cache_key = None
         creature._glyph_phase = new_genome.hue * 6.28
         self.cosmic_ray_events.append((creature.x, creature.y))
 
-    def _reproduce_pp(self, creature: Creature, mutation_rate: float) -> Creature | None:
+    def _reproduce_pp(
+        self,
+        creature: Creature,
+        mutation_rate: float,
+        *,
+        queued_births: int = 0,
+    ) -> Creature | None:
         """Reproduce in predator_prey mode with hysteresis-based offspring role."""
-        max_pop = self._get_mode_param("max_population", self.settings.max_population)
-        if len(self.creatures) >= max_pop:
+        if not self._can_queue_birth(queued_births):
             return None
 
         creature.energy /= 2
@@ -1633,6 +1710,8 @@ class Simulation:
             state.collapse_trial_delta = 0.0
             state.collapse_trial_value = None
         self._finalize_predator_prey_run(state.survival_ticks)
+        if self._predator_prey_milestone_logger is not None:
+            self._predator_prey_milestone_logger.log_collapse(self, cause)
 
     def _finalize_predator_prey_run(self, survival_ticks: int) -> None:
         state = self._predator_prey_state
@@ -1708,6 +1787,9 @@ class Simulation:
             if tuning.last_decision_pending_log:
                 self._predator_prey_run_logger.log_trial_decision(self)
                 tuning.last_decision_pending_log = False
+
+        if self._predator_prey_milestone_logger is not None:
+            self._predator_prey_milestone_logger.log_completed_run(self)
 
     def _check_ecosystem_balance(
         self,
@@ -1911,6 +1993,8 @@ class Simulation:
             preserve_predator_prey_state=True,
             new_seed=new_seed,
         )
+        if self._predator_prey_milestone_logger is not None:
+            self._predator_prey_milestone_logger.log_run_start(self)
 
     def reset_predator_prey_adaptive_tuning(self) -> None:
         """Restore adaptive dials to their baseline values and clear stability history."""
@@ -1976,6 +2060,8 @@ class Simulation:
         self._apply_predator_prey_tuning_values(tuning.current_values)
         if self._predator_prey_run_logger is not None:
             self._predator_prey_run_logger.log_dial_reset(self)
+        if self._predator_prey_milestone_logger is not None:
+            self._predator_prey_milestone_logger.log_dial_reset(self)
 
     # ------------------------------------------------------------------
     # Boids mode
@@ -2004,6 +2090,8 @@ class Simulation:
         speed_base = self.settings.creature_speed_base
 
         for creature in self.creatures:
+            if self._queue_preexisting_death(creature, dead_creatures, dead_causes):
+                continue
             sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n_neighbors, alignment_dot = \
                 self._compute_boid_forces(
                     creature, boid_neighbors.get(id(creature), [])
@@ -2041,21 +2129,29 @@ class Simulation:
                 self._apply_cosmic_ray(creature)
 
             if creature.energy >= energy_to_reproduce:
-                offspring = self._reproduce_boids(creature, mutation_rate)
+                offspring = self._reproduce_boids(
+                    creature,
+                    mutation_rate,
+                    queued_births=len(new_creatures),
+                )
                 if offspring:
                     new_creatures.append(offspring)
 
             if creature.energy <= 0:
-                dead_creatures.append(creature)
-                dead_causes[id(creature)] = "energy"
+                self._queue_creature_death(
+                    creature,
+                    dead_creatures,
+                    dead_causes,
+                    self._resolve_death_cause(creature),
+                )
             elif creature.age >= creature.get_max_lifespan():
-                dead_creatures.append(creature)
-                dead_causes[id(creature)] = "age"
+                self._queue_creature_death(creature, dead_creatures, dead_causes, "age")
 
         for creature in new_creatures:
             self.creatures.append(creature)
             self.birth_events.append(creature)
 
+        self._sweep_frame_deaths(dead_creatures, dead_causes)
         self._process_deaths(dead_creatures, dead_causes)
 
         # Phase-sync glyph pulses within flocks
@@ -2223,10 +2319,15 @@ class Simulation:
                     diff += 2 * math.pi
                 m._glyph_phase += diff * 0.05
 
-    def _reproduce_boids(self, creature: Creature, mutation_rate: float) -> Creature | None:
+    def _reproduce_boids(
+        self,
+        creature: Creature,
+        mutation_rate: float,
+        *,
+        queued_births: int = 0,
+    ) -> Creature | None:
         """Reproduce in boids mode."""
-        max_pop = self._get_mode_param("max_population", self.settings.max_population)
-        if len(self.creatures) >= max_pop:
+        if not self._can_queue_birth(queued_births):
             return None
 
         creature.energy /= 2
@@ -2276,6 +2377,8 @@ class Simulation:
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
 
         for creature in self.creatures:
+            if self._queue_preexisting_death(creature, dead_creatures, dead_causes):
+                continue
             # Passive energy regen — no cost for movement
             creature.energy = min(1.0, creature.energy + 0.002)
 
@@ -2299,19 +2402,23 @@ class Simulation:
                 self._apply_cosmic_ray(creature)
 
             if creature.energy >= energy_to_reproduce:
-                offspring = self._reproduce_drift(creature, mutation_rate)
+                offspring = self._reproduce_drift(
+                    creature,
+                    mutation_rate,
+                    queued_births=len(new_creatures),
+                )
                 if offspring:
                     new_creatures.append(offspring)
 
             # Drift: die only of old age
             if creature.age >= creature.get_max_lifespan():
-                dead_creatures.append(creature)
-                dead_causes[id(creature)] = "age"
+                self._queue_creature_death(creature, dead_creatures, dead_causes, "age")
 
         for creature in new_creatures:
             self.creatures.append(creature)
             self.birth_events.append(creature)
 
+        self._sweep_frame_deaths(dead_creatures, dead_causes)
         self._process_deaths(dead_creatures, dead_causes)
 
     def _drift_wander(self, creature: Creature) -> None:
@@ -2381,10 +2488,15 @@ class Simulation:
 
         creature.age += 1
 
-    def _reproduce_drift(self, creature: Creature, mutation_rate: float) -> Creature | None:
+    def _reproduce_drift(
+        self,
+        creature: Creature,
+        mutation_rate: float,
+        *,
+        queued_births: int = 0,
+    ) -> Creature | None:
         """Reproduce in drift mode — offspring appears at same position."""
-        max_pop = self._get_mode_param("max_population", self.settings.max_population)
-        if len(self.creatures) >= max_pop:
+        if not self._can_queue_birth(queued_births):
             return None
 
         creature.energy /= 2
@@ -2444,7 +2556,9 @@ class Simulation:
 
     def _get_food_rate(self) -> float:
         """Current food spawn rate accounting for the boom/bust cycle."""
-        base_rate = self.settings.food_spawn_rate
+        base_rate = float(
+            self._get_mode_param("food_spawn_rate", self.settings.food_spawn_rate)
+        )
         # Corrective compatibility path: existing configs often persisted the old
         # energy default of 0.6, which now collapses too easily in interactive runs.
         if self.settings.sim_mode == "energy" and math.isclose(base_rate, 0.6, abs_tol=1e-9):
@@ -2778,6 +2892,7 @@ class Simulation:
 
         creature.genome = new_genome  # type: ignore[misc]
         creature.glyph_surface = None
+        creature.glyph_surface_cache_key = None
         creature._glyph_phase = new_genome.hue * 6.28
         self.cosmic_ray_events.append((creature.x, creature.y))
 
@@ -2785,9 +2900,14 @@ class Simulation:
     # Reproduction (energy / general)
     # ------------------------------------------------------------------
 
-    def _reproduce(self, creature: Creature) -> Creature | None:
+    def _reproduce(
+        self,
+        creature: Creature,
+        *,
+        queued_births: int = 0,
+    ) -> Creature | None:
         """Handle creature reproduction with lineage tracking (energy mode)."""
-        if len(self.creatures) >= self.settings.max_population:
+        if not self._can_queue_birth(queued_births):
             return None
 
         creature.energy /= 2
@@ -2821,12 +2941,101 @@ class Simulation:
 
     def _get_overcrowding_penalty(self) -> float:
         """Calculate energy cost penalty for overcrowding."""
-        max_pop = self._get_mode_param("max_population", self.settings.max_population)
-        population_ratio = len(self.creatures) / max(1, max_pop)
+        population_ratio = len(self.creatures) / self._get_carrying_capacity()
         if population_ratio < 0.5:
             return 0.0
         excess = (population_ratio - 0.5) * 2
         return excess * excess
+
+    def _get_carrying_capacity(self) -> int:
+        """Return the soft ecological carrying capacity for the active mode."""
+        return max(
+            1,
+            int(self._get_mode_param("max_population", self.settings.max_population)),
+        )
+
+    def _get_population_safety_limit(self) -> int:
+        """Return the hard emergency population fuse used to bound runtime cost."""
+        return max(self._get_carrying_capacity(), int(self.settings.population_safety_limit))
+
+    def _get_population_spawn_limit(self) -> int:
+        """Return the maximum safe population for initial world bootstrap."""
+        if self._uses_hard_population_cap():
+            return min(self._get_population_safety_limit(), self._get_carrying_capacity())
+        return self._get_population_safety_limit()
+
+    def _uses_hard_population_cap(self) -> bool:
+        """Drift remains explicitly capped until it has real regulating forces."""
+        return self.settings.sim_mode == "drift"
+
+    def _can_queue_birth(self, queued_births: int = 0) -> bool:
+        """Return whether another offspring can be admitted this frame."""
+        projected_population = len(self.creatures) + queued_births
+        if projected_population >= self._get_population_safety_limit():
+            return False
+        if self._uses_hard_population_cap() and projected_population >= self._get_carrying_capacity():
+            return False
+        return True
+
+    def _resolve_death_cause(self, creature: Creature) -> str:
+        """Resolve the current death cause for a zero-energy creature."""
+        if (
+            self.settings.sim_mode == "predator_prey"
+            and id(creature) in self._predation_victims_this_frame
+        ):
+            return "predation"
+        return "energy"
+
+    def _queue_creature_death(
+        self,
+        creature: Creature,
+        dead_creatures: list[Creature],
+        dead_causes: dict[int, str],
+        cause: str,
+    ) -> None:
+        """Queue a creature for death processing once per frame."""
+        creature_id = id(creature)
+        if creature_id in dead_causes:
+            return
+        dead_creatures.append(creature)
+        dead_causes[creature_id] = cause
+
+    def _queue_preexisting_death(
+        self,
+        creature: Creature,
+        dead_creatures: list[Creature],
+        dead_causes: dict[int, str],
+    ) -> bool:
+        """Skip creatures that are already dead before their turn starts."""
+        if creature.energy <= 0:
+            self._queue_creature_death(
+                creature,
+                dead_creatures,
+                dead_causes,
+                self._resolve_death_cause(creature),
+            )
+            return True
+        if creature.age >= creature.get_max_lifespan():
+            self._queue_creature_death(creature, dead_creatures, dead_causes, "age")
+            return True
+        return False
+
+    def _sweep_frame_deaths(
+        self,
+        dead_creatures: list[Creature],
+        dead_causes: dict[int, str],
+    ) -> None:
+        """Capture victims that were killed after their own turn earlier this frame."""
+        for creature in self.creatures:
+            if creature.energy <= 0:
+                self._queue_creature_death(
+                    creature,
+                    dead_creatures,
+                    dead_causes,
+                    self._resolve_death_cause(creature),
+                )
+            elif creature.age >= creature.get_max_lifespan():
+                self._queue_creature_death(creature, dead_creatures, dead_causes, "age")
 
     def _get_sensing_upkeep_cost(self, creature: Creature) -> float:
         """M3 corrective pass: keep sensing range-limited and noisy, but not taxing."""

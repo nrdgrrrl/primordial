@@ -36,6 +36,7 @@ except (AttributeError, OSError):
     logger.debug("DPI awareness API unavailable on this platform.")
 
 from .rendering import Renderer
+from .milestone_logging import PredatorPreyMilestoneLogger
 from .run_logging import PredatorPreyCSVRunLogger
 from .settings import Settings
 from .simulation import (
@@ -515,6 +516,7 @@ def main(
     _apply_runtime_overrides(settings, runtime_args)
     loaded_world_size = _resolve_loaded_world_size(runtime_args)
     csv_run_logger = _create_run_logger(settings, runtime_args)
+    milestone_logger = _create_milestone_logger(settings, runtime_args)
 
     # Set up display based on mode
     if scr_args.mode == "screensaver":
@@ -567,6 +569,11 @@ def main(
         pygame.quit()
         raise SystemExit(str(exc)) from exc
     simulation.set_predator_prey_run_logger(csv_run_logger)
+    simulation.set_predator_prey_milestone_logger(milestone_logger)
+    if milestone_logger is not None:
+        milestone_logger.log_session_start(simulation)
+        if settings.sim_mode == "predator_prey":
+            milestone_logger.log_run_start(simulation)
     renderer = Renderer(screen, settings, debug=runtime_args.debug)
     active_snapshot_path = _resolve_snapshot_path(
         settings,
@@ -870,6 +877,9 @@ def main(
         saved_path = save_snapshot(simulation, runtime_args.save)
         logger.info("Saved simulation snapshot to %s", saved_path)
 
+    if milestone_logger is not None:
+        milestone_logger.close()
+
     pygame.quit()
     sys.exit(0)
 
@@ -990,6 +1000,18 @@ def _create_run_logger(
     run_logger = PredatorPreyCSVRunLogger(csv_path)
     logger.info("CSV run logging enabled: %s", csv_path)
     return run_logger
+
+
+def _create_milestone_logger(
+    settings: Settings,
+    runtime_args: RuntimeArgs,
+) -> PredatorPreyMilestoneLogger | None:
+    """Create the optional milestone logger when requested at launch."""
+    if not runtime_args.milestone_log:
+        return None
+    yaml_path = _run_log_directory(settings) / runtime_args.milestone_log
+    ml = PredatorPreyMilestoneLogger(yaml_path)
+    return ml
 
 
 def _load_predator_prey_tuning_state(settings: Settings) -> dict[str, Any] | None:
