@@ -56,6 +56,7 @@ class Creature:
 
     # Cached glyph surface (set by renderer, cleared on reproduction)
     glyph_surface: Any = field(default=None)
+    glyph_surface_cache_key: Any = field(default=None)
 
     # Glyph pulse phase — initialised to genome.hue * 6.28 at spawn so pulse
     # matches hue in all modes; in boids mode it is phase-locked toward flock average.

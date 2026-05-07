@@ -148,6 +148,42 @@ class SettingsOverlayTests(unittest.TestCase):
             saved = config_path.read_text(encoding="utf-8")
             self.assertIn("predator_fraction = 0.1100", saved)
 
+    def test_settings_overlay_routes_food_spawn_rate_to_active_mode_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            settings.sim_mode = "predator_prey"
+            settings.food_spawn_rate = 0.8
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.pending["mode_param:predator_prey:food_spawn_rate"] = 0.2
+
+            action = overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN))
+
+            self.assertEqual(action, "apply")
+            self.assertEqual(settings.food_spawn_rate, 0.8)
+            self.assertEqual(settings.mode_params["predator_prey"]["food_spawn_rate"], 0.2)
+
+    def test_settings_overlay_routes_carrying_capacity_to_active_mode_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            settings.sim_mode = "boids"
+            settings.max_population = 220
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.pending["mode_param:boids:max_population"] = 180
+
+            action = overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN))
+
+            self.assertEqual(action, "apply")
+            self.assertEqual(settings.max_population, 220)
+            self.assertEqual(settings.mode_params["boids"]["max_population"], 180)
+
     def test_food_cycle_length_field_uses_clear_label_and_seconds_display(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"

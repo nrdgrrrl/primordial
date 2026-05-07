@@ -92,6 +92,14 @@ class RendererCacheTests(unittest.TestCase):
 
         self.assertEqual(rotate_mock.call_count, 1)
 
+    def test_glyph_cache_invalidates_when_color_changes(self) -> None:
+        creature = Creature(x=80.0, y=60.0, genome=Genome.random())
+
+        red = get_glyph_surface(creature, (255, 0, 0), 48)
+        green = get_glyph_surface(creature, (0, 255, 0), 48)
+
+        self.assertIsNot(red, green)
+
     def test_ocean_theme_applies_predator_tint_even_for_cool_hues(self) -> None:
         theme = OceanTheme()
         genome = Genome(hue=0.08, saturation=0.95)

@@ -23,6 +23,7 @@ class Field:
     mode_param_mode: str | None = None
     mode_param_key: str | None = None
     visible_modes: list[str] | None = None
+    use_active_mode_param: bool = False
 
 
 class SettingsOverlay:
@@ -41,7 +42,7 @@ class SettingsOverlay:
 
         self.fields = [
             Field("Mode", "sim_mode", "enum", options=["energy", "predator_prey", "boids", "drift"], section="Simulation", requires_reset=True),
-            Field("Initial Population", "initial_population", "int", 0, 500, 5, section="Simulation", requires_reset=True),
+            Field("Initial Population", "initial_population", "int", 0, 500, 5, section="Simulation", requires_reset=True, use_active_mode_param=True),
             Field(
                 "Starting Predators",
                 "",
@@ -55,19 +56,20 @@ class SettingsOverlay:
                 mode_param_key="predator_fraction",
                 visible_modes=["predator_prey"],
             ),
-            Field("Max Population", "max_population", "int", 1, 600, 5, section="Simulation"),
-            Field("Food Spawn Rate", "food_spawn_rate", "float", 0.0, 2.0, 0.05, section="Simulation"),
+            Field("Carrying Capacity", "max_population", "int", 1, 600, 5, section="Simulation", use_active_mode_param=True),
+            Field("Population Safety Limit", "population_safety_limit", "int", 50, 10000, 50, section="Simulation"),
+            Field("Food Spawn Rate", "food_spawn_rate", "float", 0.0, 2.0, 0.05, section="Simulation", use_active_mode_param=True),
             Field("Creature Speed", "creature_speed_base", "float", 0.5, 3.0, 0.05, section="Simulation"),
             Field("Visual Theme", "visual_theme", "enum", options=["ocean", "petri", "geometric", "chaotic"], section="Display"),
             Field("Fullscreen", "fullscreen", "bool", section="Display"),
-            Field("Target FPS", "target_fps", "int", 15, 240, 5, section="Display"),
+            Field("Target FPS", "target_fps", "int", 15, 240, 5, section="Display", use_active_mode_param=True),
             Field("Show HUD", "show_hud", "bool", section="Display"),
-            Field("Mutation Rate", "mutation_rate", "float", 0.0, 1.0, 0.01, section="Evolution"),
-            Field("Cosmic Ray Rate", "cosmic_ray_rate", "float", 0.0, 0.01, 0.0001, section="Evolution"),
-            Field("Food Cycle", "food_cycle_enabled", "bool", section="Evolution"),
+            Field("Mutation Rate", "mutation_rate", "float", 0.0, 1.0, 0.01, section="Evolution", use_active_mode_param=True),
+            Field("Cosmic Ray Rate", "cosmic_ray_rate", "float", 0.0, 0.01, 0.0001, section="Evolution", use_active_mode_param=True),
+            Field("Food Cycle", "food_cycle_enabled", "bool", section="Evolution", use_active_mode_param=True),
             Field("Food Cycle Length", "food_cycle_period", "int", 60, 5000, 30, section="Evolution"),
             Field("Zone Count", "zone_count", "int", 0, 12, 1, section="Evolution"),
-            Field("Zone Strength", "zone_strength", "float", 0.0, 1.0, 0.05, section="Evolution"),
+            Field("Zone Strength", "zone_strength", "float", 0.0, 1.0, 0.05, section="Evolution", use_active_mode_param=True),
         ]
         self._panel = pygame.Surface((600, 650), pygame.SRCALPHA)
         self._shade: pygame.Surface | None = None
@@ -87,10 +89,9 @@ class SettingsOverlay:
         self.snapshot_status_is_error = False
 
     def sync_from_settings(self) -> None:
-        self.pending = {
-            self._pending_key(f): self._get_field_value(f)
-            for f in self.fields
-        }
+        self.pending = {}
+        for field in self.fields:
+            self.pending[self._pending_key(field)] = self._get_field_value(field)
         self.confirm_reset = False
         self.confirm_reset_predator_prey_dials = False
         self._clamp_selected()
@@ -140,7 +141,8 @@ class SettingsOverlay:
             self._adjust(1)
         elif event.key == pygame.K_RETURN:
             for field in self.fields:
-                self._set_field_value(field, self.pending[self._pending_key(field)])
+                pending_key = self._ensure_pending_value(field)
+                self._set_field_value(field, self.pending[pending_key])
             self.settings.save()
             self.close()
             return "apply"
@@ -158,7 +160,7 @@ class SettingsOverlay:
         field = self._selected_field()
         if field is None:
             return
-        pending_key = self._pending_key(field)
+        pending_key = self._ensure_pending_value(field)
         value = self.pending[pending_key]
         self.confirm_reset = False
         self.confirm_reset_predator_prey_dials = False
@@ -258,7 +260,7 @@ class SettingsOverlay:
         screen.blit(self._panel, (x, y))
 
     def _format_value(self, field: Field) -> str:
-        value = self.pending[self._pending_key(field)]
+        value = self.pending[self._ensure_pending_value(field)]
         if field.kind == "bool":
             return "[ ON ]" if value else "[ OFF ]"
         if field.kind == "enum":
@@ -274,20 +276,43 @@ class SettingsOverlay:
         return f"{float(value):.3f}"
 
     def _pending_key(self, field: Field) -> str:
-        if field.mode_param_mode is not None and field.mode_param_key is not None:
-            return f"mode_param:{field.mode_param_mode}:{field.mode_param_key}"
+        mode_target = self._resolve_mode_target(field)
+        if mode_target is not None:
+            mode_name, mode_key = mode_target
+            return f"mode_param:{mode_name}:{mode_key}"
         return field.attr
 
     def _get_field_value(self, field: Field) -> object:
-        if field.mode_param_mode is not None and field.mode_param_key is not None:
-            return self.settings.mode_params[field.mode_param_mode][field.mode_param_key]
+        mode_target = self._resolve_mode_target(field)
+        if mode_target is not None:
+            mode_name, mode_key = mode_target
+            return self.settings.mode_params[mode_name][mode_key]
         return getattr(self.settings, field.attr)
 
     def _set_field_value(self, field: Field, value: object) -> None:
-        if field.mode_param_mode is not None and field.mode_param_key is not None:
-            self.settings.mode_params[field.mode_param_mode][field.mode_param_key] = value
+        mode_target = self._resolve_mode_target(field)
+        if mode_target is not None:
+            mode_name, mode_key = mode_target
+            self.settings.mode_params[mode_name][mode_key] = value
             return
         setattr(self.settings, field.attr, value)
+
+    def _resolve_mode_target(self, field: Field) -> tuple[str, str] | None:
+        if field.mode_param_mode is not None and field.mode_param_key is not None:
+            return (field.mode_param_mode, field.mode_param_key)
+        if not field.use_active_mode_param:
+            return None
+        active_mode = self._current_mode_for_visibility()
+        mode_values = self.settings.mode_params.get(active_mode)
+        if mode_values is None or field.attr not in mode_values:
+            return None
+        return (active_mode, field.attr)
+
+    def _ensure_pending_value(self, field: Field) -> str:
+        pending_key = self._pending_key(field)
+        if pending_key not in self.pending:
+            self.pending[pending_key] = self._get_field_value(field)
+        return pending_key
 
     def _current_mode_for_visibility(self) -> str:
         return str(self.pending.get("sim_mode", self.settings.sim_mode))

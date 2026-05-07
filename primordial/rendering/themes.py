@@ -368,6 +368,7 @@ class OceanTheme(Theme):
         if (creature.glyph_surface is not None and
                 abs(creature.glyph_surface.get_width() - glyph_size) > 4):
             creature.glyph_surface = None
+            creature.glyph_surface_cache_key = None
 
         glyph = get_glyph_surface(creature, color, glyph_size)
 

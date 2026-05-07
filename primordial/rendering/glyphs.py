@@ -438,6 +438,11 @@ def get_glyph_surface(
     Returns:
         Cached or freshly built glyph surface.
     """
-    if creature.glyph_surface is None:
+    cache_key = (id(creature.genome), color, int(base_size))
+    if (
+        creature.glyph_surface is None
+        or creature.glyph_surface_cache_key != cache_key
+    ):
         creature.glyph_surface = build_glyph_surface(creature.genome, color, base_size)
+        creature.glyph_surface_cache_key = cache_key
     return creature.glyph_surface
