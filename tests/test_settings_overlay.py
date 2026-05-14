@@ -198,6 +198,20 @@ class SettingsOverlayTests(unittest.TestCase):
             self.assertEqual(field.label, "Food Cycle Length")
             self.assertEqual(overlay._format_value(field), "< 1800f / 30.0s >")
 
+    def test_food_cycle_length_seconds_display_uses_active_mode_sim_tick_rate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            settings.sim_mode = "predator_prey"
+            settings.food_cycle_period = 1800
+            overlay = SettingsOverlay(settings)
+            field = next(f for f in overlay.fields if f.attr == "food_cycle_period")
+            overlay.sync_from_settings()
+
+            self.assertEqual(overlay._format_value(field), "< 1800f / 60.0s >")
+
 
 if __name__ == "__main__":
     unittest.main()

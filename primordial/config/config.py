@@ -72,6 +72,8 @@ _CANONICAL_MODE_KEYS: dict[str, tuple[str, ...]] = {
     "predator_prey": (
         "initial_population",
         "predator_fraction",
+        "target_fps",
+        "simulation_tick_hz",
         "food_spawn_rate",
         "mutation_rate",
         "adaptive_tuning_enabled",
@@ -129,6 +131,8 @@ _MODE_PARAM_RULES: dict[str, tuple[str, float | int | None, float | int | None]]
     "initial_population": ("int", 0, None),
     "max_population": ("int", 1, None),
     "predator_fraction": ("float", 0.0, 1.0),
+    "target_fps": ("int", 1, None),
+    "simulation_tick_hz": ("int", 1, None),
     "food_spawn_rate": ("float", 0.0, None),
     "mutation_rate": ("float", 0.0, 1.0),
     "adaptive_tuning_enabled": ("bool", None, None),
@@ -163,7 +167,6 @@ _MODE_PARAM_RULES: dict[str, tuple[str, float | int | None, float | int | None]]
     "adaptive_near_extinction_prey_floor": ("int", 0, None),
     "food_cycle_enabled": ("bool", None, None),
     "zone_strength": ("float", 0.0, 1.0),
-    "target_fps": ("int", 1, None),
     "cosmic_ray_rate": ("float", 0.0, 1.0),
 }
 

@@ -63,6 +63,8 @@ target_fps = 30
 mutation_rate = 0.1200
 
 [modes.predator_prey]
+target_fps = 30
+simulation_tick_hz = 30
 adaptive_tuning_enabled = true
 predator_energy_to_reproduce = 0.7100
 predator_kill_energy_gain_cap = 0.6500
@@ -99,6 +101,11 @@ adaptive_near_extinction_prey_floor = 7
         self.assertEqual(settings.mode_params["drift"]["target_fps"], 30)
         self.assertEqual(settings.mode_params["drift"]["mutation_rate"], 0.12)
         self.assertEqual(settings.mode_params["drift"]["zone_strength"], 0.6)
+        self.assertEqual(settings.mode_params["predator_prey"]["target_fps"], 30)
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["simulation_tick_hz"],
+            30,
+        )
         self.assertEqual(settings.mode_params["predator_prey"]["food_spawn_rate"], 0.65)
         self.assertTrue(
             settings.mode_params["predator_prey"]["adaptive_tuning_enabled"]

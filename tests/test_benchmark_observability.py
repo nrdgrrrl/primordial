@@ -97,10 +97,18 @@ class BenchmarkObservabilityTests(unittest.TestCase):
                     self.assertTrue(output_path.exists())
                     self.assertEqual(payload["scenario"]["id"], scenario_id)
                     self.assertGreaterEqual(payload["run"]["duration_seconds"], 0.0)
+                    self.assertIn("target_fps", payload["run"])
+                    self.assertIn("simulation_tick_hz", payload["run"])
                     self.assertGreaterEqual(payload["performance"]["frames_rendered"], 1)
                     self.assertGreaterEqual(payload["performance"]["sim_steps_total"], 1)
                     self.assertIn("frame_ms", payload["performance"])
                     self.assertIn("clamp_drop", payload["performance"])
+                    expected_tick_hz = 30 if scenario_id == "predator_prey_medium" else 60
+                    self.assertEqual(payload["run"]["target_fps"], expected_tick_hz)
+                    self.assertEqual(
+                        payload["run"]["simulation_tick_hz"],
+                        expected_tick_hz,
+                    )
                     self.assertEqual(
                         set(payload["observability"]),
                         expected_shared_keys | expected_optional_keys[scenario_id],

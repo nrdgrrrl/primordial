@@ -17,6 +17,7 @@ from .main import (
     _advance_fixed_step_frame,
     _apply_display_mode,
     _create_fixed_step_loop_state,
+    _get_effective_target_fps,
     _get_fullscreen_resolution,
 )
 from .rendering import Renderer
@@ -71,7 +72,7 @@ def run_display_toggle_probe(
         simulation = Simulation(world_width, world_height, settings)
         renderer = Renderer(screen, settings, debug=True)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = _create_fixed_step_loop_state(settings)
 
         original_renderer_resize = renderer.resize
         original_simulation_resize = simulation.resize
@@ -110,7 +111,7 @@ def run_display_toggle_probe(
             clock,
             runtime_loop,
             frame_count=max(1, settle_frames),
-            target_fps=settings.target_fps,
+            target_fps=_get_effective_target_fps(settings),
         )
         checkpoints.append(
             _capture_checkpoint(
@@ -133,7 +134,7 @@ def run_display_toggle_probe(
                 clock,
                 runtime_loop,
                 frame_count=max(1, settle_frames),
-                target_fps=settings.target_fps,
+                target_fps=_get_effective_target_fps(settings),
             )
             label = (
                 f"toggle_{toggle_index + 1}_fullscreen"

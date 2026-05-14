@@ -3221,7 +3221,18 @@ class Simulation:
 
     def get_recent_predation_stats(self) -> dict[str, int]:
         """Return lightweight rolling predator/prey telemetry for the HUD."""
-        window_frames = max(30, int(self.settings.target_fps * _PREDATION_RECENT_WINDOW_SECONDS))
+        window_frames = max(
+            30,
+            int(
+                float(
+                    self._get_mode_param(
+                        "simulation_tick_hz",
+                        self.settings.target_fps,
+                    )
+                )
+                * _PREDATION_RECENT_WINDOW_SECONDS
+            ),
+        )
         cutoff = self._frame - window_frames
         while self._recent_kill_frames and self._recent_kill_frames[0] <= cutoff:
             self._recent_kill_frames.popleft()

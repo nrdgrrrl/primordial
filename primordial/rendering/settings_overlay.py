@@ -6,9 +6,6 @@ from dataclasses import dataclass
 
 import pygame
 
-_SIMULATION_FRAMES_PER_SECOND = 60.0
-
-
 @dataclass
 class Field:
     label: str
@@ -269,7 +266,7 @@ class SettingsOverlay:
             return f"< {int(round(float(value) * 100.0))}% >"
         if field.attr == "food_cycle_period":
             frames = int(value)
-            seconds = frames / _SIMULATION_FRAMES_PER_SECOND
+            seconds = frames / self._simulation_frames_per_second()
             return f"< {frames}f / {seconds:.1f}s >"
         if field.kind == "int":
             return f"< {int(value)} >"
@@ -316,6 +313,13 @@ class SettingsOverlay:
 
     def _current_mode_for_visibility(self) -> str:
         return str(self.pending.get("sim_mode", self.settings.sim_mode))
+
+    def _simulation_frames_per_second(self) -> float:
+        active_mode = self._current_mode_for_visibility()
+        mode_values = self.settings.mode_params.get(active_mode, {})
+        if isinstance(mode_values, dict) and "simulation_tick_hz" in mode_values:
+            return max(1.0, float(mode_values["simulation_tick_hz"]))
+        return 60.0
 
     def _visible_fields(self) -> list[Field]:
         active_mode = self._current_mode_for_visibility()

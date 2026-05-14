@@ -37,7 +37,9 @@ from .main import (
     _apply_display_mode,
     _build_frame_metrics,
     _create_fixed_step_loop_state,
+    _get_effective_target_fps,
     _get_fullscreen_resolution,
+    _get_simulation_tick_hz,
     _simulation_timing_is_suppressed,
 )
 from .rendering import Renderer
@@ -503,7 +505,7 @@ def _run_single_graphical_benchmark(
             simulation = Simulation(world_width, world_height, settings)
         renderer = Renderer(screen, settings, debug=False)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
 
         original_renderer_resize = renderer.resize
@@ -581,7 +583,7 @@ def _run_single_graphical_benchmark(
             pygame.display.flip()
             present_ms = (time.perf_counter() - present_start) * 1000.0
             pacing_start = time.perf_counter()
-            clock.tick(max(1, settings.target_fps))
+            clock.tick(max(1, _get_effective_target_fps(settings)))
             pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
             frame_end = time.perf_counter()
 
@@ -830,6 +832,8 @@ def _build_run_result(
         if values
     }
     current_display_size = [renderer.display_width, renderer.display_height]
+    effective_target_fps = _get_effective_target_fps(settings)
+    simulation_tick_hz = _get_simulation_tick_hz(settings)
     run_result = {
         "run_id": spec.run_id,
         "scenario": spec.scenario,
@@ -841,7 +845,8 @@ def _build_run_result(
         "duration_seconds_requested": spec.duration_seconds,
         "duration_seconds_actual": elapsed_wall_seconds,
         "fullscreen": spec.fullscreen,
-        "target_fps": settings.target_fps,
+        "target_fps": effective_target_fps,
+        "simulation_tick_hz": simulation_tick_hz,
         "notes": spec.notes,
         "resolution": {
             "world": [simulation.width, simulation.height],
@@ -895,7 +900,7 @@ def _build_run_result(
     }
     run_result["dominant_cost"] = _determine_dominant_cost(
         effective_fps_overall=float(run_result["performance"]["effective_fps_overall"]),
-        target_fps=settings.target_fps,
+        target_fps=effective_target_fps,
         sim_mean=float(run_result["performance"]["sim_ms"]["mean"]),
         render_mean=float(run_result["performance"]["render_ms"]["mean"]),
         present_mean=float(run_result["performance"]["present_ms"]["mean"]),
@@ -1004,7 +1009,7 @@ def _run_profile_capture(
             simulation = Simulation(world_width, world_height, settings)
         renderer = Renderer(screen, settings, debug=False)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
         profiler = cProfile.Profile()
 
@@ -1039,7 +1044,7 @@ def _run_profile_capture(
             pygame.display.flip()
             present_ms = (time.perf_counter() - present_start) * 1000.0
             pacing_start = time.perf_counter()
-            clock.tick(max(1, settings.target_fps))
+            clock.tick(max(1, _get_effective_target_fps(settings)))
             pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
             frame_end = time.perf_counter()
             timing_collector.record_frame(
@@ -1108,6 +1113,7 @@ def _write_runs_csv(path: Path, run_results: list[dict[str, Any]]) -> None:
         "display_width",
         "display_height",
         "target_fps",
+        "simulation_tick_hz",
         "frames_rendered",
         "sim_ticks_advanced",
         "effective_fps_overall",
@@ -1169,6 +1175,7 @@ def _write_runs_csv(path: Path, run_results: list[dict[str, Any]]) -> None:
                     "display_width": run["resolution"]["final_display"][0],
                     "display_height": run["resolution"]["final_display"][1],
                     "target_fps": run["target_fps"],
+                    "simulation_tick_hz": run["simulation_tick_hz"],
                     "frames_rendered": perf["frames_rendered"],
                     "sim_ticks_advanced": perf["sim_ticks_advanced"],
                     "effective_fps_overall": perf["effective_fps_overall"],
@@ -1697,7 +1704,8 @@ def _build_settings_snapshot(settings: Settings, mode: str) -> dict[str, Any]:
         "sim_mode": settings.sim_mode,
         "visual_theme": settings.visual_theme,
         "fullscreen": settings.fullscreen,
-        "target_fps": settings.target_fps,
+        "target_fps": _get_effective_target_fps(settings),
+        "simulation_tick_hz": _get_simulation_tick_hz(settings),
         "show_hud": settings.show_hud,
         "initial_population": settings.initial_population,
         "max_population": settings.max_population,

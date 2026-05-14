@@ -20,6 +20,8 @@ import pygame
 from .main import (
     LoopTimingCollector,
     _create_fixed_step_loop_state,
+    _get_effective_target_fps,
+    _get_simulation_tick_hz,
     run_bounded_session,
 )
 from .rendering import Renderer
@@ -105,7 +107,7 @@ def run_benchmark(
         simulation = Simulation(scenario.width, scenario.height, settings)
         renderer = Renderer(screen, settings, debug=False)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
         observability = ObservabilityCollector(scenario.mode)
 
@@ -116,7 +118,7 @@ def run_benchmark(
             runtime_loop,
             timing_collector,
             duration_seconds=seconds,
-            target_fps=settings.target_fps,
+            target_fps=_get_effective_target_fps(settings),
             frame_observer=observability.record_frame,
         )
         if timing_collector.frame_count == 0:
@@ -162,7 +164,8 @@ def _build_benchmark_payload(
             "started_at": started_at,
             "duration_seconds": elapsed_wall_seconds,
             "duration_seconds_requested": seconds_requested,
-            "target_fps": settings.target_fps,
+            "target_fps": _get_effective_target_fps(settings),
+            "simulation_tick_hz": _get_simulation_tick_hz(settings),
             "platform": platform.platform(),
             "python": sys.version.split()[0],
             "pygame": pygame.version.ver,

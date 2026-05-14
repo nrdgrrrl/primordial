@@ -177,7 +177,7 @@ def _run_graphical(
         screen = pygame.display.set_mode((scenario.width, scenario.height))
         simulation = Simulation(scenario.width, scenario.height, settings)
         renderer = Renderer(screen, settings, debug=False)
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = _create_fixed_step_loop_state(settings)
 
         t0 = time.perf_counter()
         for _ in range(steps):
@@ -246,7 +246,7 @@ def _run_graphical_full_rng_isolated(
         renderer = Renderer(screen, settings, debug=False)
         random.setstate(rng_state)
 
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = _create_fixed_step_loop_state(settings)
 
         t0 = time.perf_counter()
         for _ in range(steps):

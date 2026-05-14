@@ -1352,7 +1352,7 @@ class Renderer:
 
         if len(self._fps_history) > 1:
             points: list[tuple[int, int]] = []
-            target = max(1.0, float(self.settings.target_fps))
+            target = max(1.0, float(self._effective_target_fps()))
             max_fps = max(target * 1.2, max(self._fps_history))
             for i, v in enumerate(self._fps_history):
                 x = fps_rect.left + int(i * (fps_rect.width - 1) / (len(self._fps_history) - 1))
@@ -1375,7 +1375,7 @@ class Renderer:
                 pygame.draw.lines(panel, (140, 180, 255), False, points, 1)
 
         fps_text = self._debug_font.render(
-            f"FPS {self.fps:5.1f} / {self.settings.target_fps}",
+            f"FPS {self.fps:5.1f} / {self._effective_target_fps()}",
             True,
             (220, 245, 255),
         )
@@ -1398,6 +1398,15 @@ class Renderer:
                 self.fps = (len(self.frame_times) - 1) / elapsed
             return self.frame_times[-1] - self.frame_times[-2]
         return 1.0 / 60.0
+
+    def _effective_target_fps(self) -> int:
+        """Return the active mode's target FPS for debug rendering."""
+        mode_params = getattr(self.settings, "mode_params", {})
+        if isinstance(mode_params, dict):
+            values = mode_params.get(self.settings.sim_mode)
+            if isinstance(values, dict) and "target_fps" in values:
+                return max(1, int(values["target_fps"]))
+        return max(1, int(self.settings.target_fps))
 
     def _draw_stub_overlay(self, simulation: Simulation) -> None:
         """Draw 'coming soon' overlay for stub modes/themes."""

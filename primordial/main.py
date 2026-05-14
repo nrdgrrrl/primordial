@@ -143,9 +143,56 @@ class FixedStepLoopState:
         self.dropped_frame_count += 1
 
 
-def _create_fixed_step_loop_state() -> FixedStepLoopState:
+def _get_effective_mode_param(
+    settings: Settings | object,
+    key: str,
+    fallback: int | float | bool,
+) -> int | float | bool:
+    """Resolve an active-mode override with a safe fallback."""
+    mode = getattr(settings, "sim_mode", "")
+    mode_params = getattr(settings, "mode_params", {})
+    if isinstance(mode_params, dict):
+        values = mode_params.get(mode)
+        if isinstance(values, dict) and key in values:
+            return values[key]
+    return fallback
+
+
+def _get_effective_target_fps(settings: Settings | object) -> int:
+    """Return the active mode's effective presentation cap."""
+    fallback = max(1, int(getattr(settings, "target_fps", 60)))
+    return max(1, int(_get_effective_mode_param(settings, "target_fps", fallback)))
+
+
+def _get_simulation_tick_hz(settings: Settings | object) -> float:
+    """Return the active mode's fixed simulation rate."""
+    return max(
+        1.0,
+        float(_get_effective_mode_param(settings, "simulation_tick_hz", 60)),
+    )
+
+
+def _build_fixed_step_loop_config(
+    settings: Settings | object | None = None,
+) -> FixedStepLoopConfig:
+    """Build timing config using the active mode's simulation rate when available."""
+    if settings is None:
+        return FixedStepLoopConfig()
+    fixed_timestep_seconds = 1.0 / _get_simulation_tick_hz(settings)
+    return FixedStepLoopConfig(
+        fixed_timestep_seconds=fixed_timestep_seconds,
+        max_sim_steps_per_outer_frame=MAX_SIM_STEPS_PER_OUTER_FRAME,
+        max_accumulated_seconds=(
+            fixed_timestep_seconds * MAX_SIM_STEPS_PER_OUTER_FRAME
+        ),
+    )
+
+
+def _create_fixed_step_loop_state(
+    settings: Settings | object | None = None,
+) -> FixedStepLoopState:
     """Build the shared loop scaffold used by runtime and profile paths."""
-    return FixedStepLoopState()
+    return FixedStepLoopState(config=_build_fixed_step_loop_config(settings))
 
 
 def _get_fullscreen_resolution() -> tuple[int, int]:
@@ -583,7 +630,7 @@ def main(
 
     # Clock for FPS limiting
     clock = pygame.time.Clock()
-    runtime_loop = _create_fixed_step_loop_state()
+    runtime_loop = _create_fixed_step_loop_state(settings)
     timing_collector = LoopTimingCollector(retain_samples=False)
 
     if runtime_args.profile:
@@ -655,6 +702,7 @@ def main(
                 if renderer.settings_overlay.visible:
                     action = renderer.settings_overlay.handle_event(event)
                     if action == "apply":
+                        runtime_loop.config = _build_fixed_step_loop_config(settings)
                         if settings.fullscreen != bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
                             _apply_display_mode(settings, simulation, renderer)
                         renderer.set_theme(settings.visual_theme)
@@ -729,6 +777,7 @@ def main(
                                     settings,
                                     renderer,
                                 )
+                                runtime_loop.config = _build_fixed_step_loop_config(settings)
                                 simulation.paused = True
                                 runtime_loop.reset_timing_debt()
                                 renderer.settings_overlay.sync_from_settings()
@@ -847,7 +896,12 @@ def main(
         pygame.display.flip()
         present_ms = (time.perf_counter() - present_start) * 1000.0
 
-        target_fps = settings.target_fps // 2 if scr_args.mode == "preview" else settings.target_fps
+        effective_target_fps = _get_effective_target_fps(settings)
+        target_fps = (
+            max(1, effective_target_fps // 2)
+            if scr_args.mode == "preview"
+            else effective_target_fps
+        )
         pacing_start = time.perf_counter()
         clock.tick(target_fps)
         pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
@@ -1134,7 +1188,7 @@ def _run_profile_session(
         runtime_loop,
         timing_collector,
         duration_seconds=60.0,
-        target_fps=settings.target_fps,
+        target_fps=_get_effective_target_fps(settings),
     )
     profiler.disable()
 
@@ -1222,7 +1276,7 @@ def _run_config_dialog() -> None:
             ("Sim Mode", settings.sim_mode),
             ("Visual Theme", settings.visual_theme),
             ("Population", str(settings.initial_population)),
-            ("Target FPS", str(settings.target_fps)),
+            ("Target FPS", str(_get_effective_target_fps(settings))),
         ]
         y = 72
         for label, value in lines:
