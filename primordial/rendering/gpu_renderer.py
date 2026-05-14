@@ -514,7 +514,9 @@ class PredatorPreyGpuRenderer:
         current_time = time.time()
         anim_time = current_time - self.start_time
         self._update_fps(current_time)
+        t0 = time.perf_counter()
         snapshot = self._build_snapshot(simulation, anim_time)
+        timings["snapshot_ms"] = (time.perf_counter() - t0) * 1000.0
         bg = snapshot.background_color
         t0 = time.perf_counter()
         glClearColor(bg[0], bg[1], bg[2], bg[3])
