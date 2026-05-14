@@ -11,7 +11,17 @@ from primordial.rendering.inspect_mode import (
     InspectMode,
     build_creature_card,
     display_to_world,
-    _guess_behavior,
+)
+from primordial.rendering.creature_observation import (
+    classify_life_stage,
+    temperament_tags,
+    format_tags,
+    motion_style_label,
+    depth_preference_label,
+    infer_behavior_mode,
+    infer_attention_target,
+    LifeStage,
+    AttentionTarget,
 )
 
 
@@ -28,16 +38,21 @@ def _make_creature(
     depth_band: int = 1,
     satiety_ticks_remaining: int = 0,
     recent_animal_energy: float = 0.0,
+    flock_id: int = -1,
     speed: float = 0.5,
     size: float = 0.5,
     sense_radius: float = 0.5,
     aggression: float = 0.5,
     efficiency: float = 0.5,
     longevity: float = 0.5,
+    conformity: float = 0.5,
+    motion_style: float = 0.5,
+    depth_preference: float = 0.5,
     radius: float = 5.0,
     max_lifespan: int = 100,
     age_fraction: float = 0.5,
     depth_band_name: str = "mid",
+    effective_sense_radius: float = 95.0,
 ) -> SimpleNamespace:
     genome = SimpleNamespace(
         speed=speed,
@@ -53,9 +68,9 @@ def _make_creature(
         stroke_scale=0.5,
         appendages=0.3,
         rotation_speed=0.3,
-        motion_style=0.5,
-        conformity=0.5,
-        depth_preference=0.5,
+        motion_style=motion_style,
+        conformity=conformity,
+        depth_preference=depth_preference,
     )
     creature = SimpleNamespace(
         x=x,
@@ -68,6 +83,7 @@ def _make_creature(
         species=species,
         lineage_id=lineage_id,
         depth_band=depth_band,
+        flock_id=flock_id,
         satiety_ticks_remaining=satiety_ticks_remaining,
         recent_animal_energy=recent_animal_energy,
     )
@@ -75,6 +91,7 @@ def _make_creature(
     creature.get_age_fraction = MagicMock(return_value=age_fraction)
     creature.get_max_lifespan = MagicMock(return_value=max_lifespan)
     creature.get_depth_band_name = MagicMock(return_value=depth_band_name)
+    creature.get_effective_sense_radius = MagicMock(return_value=effective_sense_radius)
     return creature
 
 
@@ -285,26 +302,28 @@ class TestClearSelection(unittest.TestCase):
 
 
 class TestBuildCreatureCard(unittest.TestCase):
-    def test_basic_fields(self):
+    def test_basic_identity_fields(self):
         c1 = _make_creature(
             species="prey",
             energy=0.75,
             age=30,
             lineage_id=7,
-            x=200.0,
-            y=300.0,
-            vx=1.5,
-            vy=2.5,
         )
         sim = _make_simulation([c1])
         card = build_creature_card(c1, sim)
         self.assertEqual(card["species"], "Prey")
         self.assertEqual(card["lineage"], "#7")
-        self.assertIn("30", card["age"])
-        self.assertEqual(card["energy"], "0.75")
-        self.assertEqual(card["pos"], "(200, 300)")
-        vel = math.sqrt(1.5**2 + 2.5**2)
-        self.assertEqual(card["vel"], f"{vel:.2f}")
+        self.assertIn("stage", card)
+        self.assertIn("tags", card)
+
+    def test_section_headers_present(self):
+        c1 = _make_creature(species="prey")
+        sim = _make_simulation([c1])
+        card = build_creature_card(c1, sim)
+        self.assertIn("section_identity", card)
+        self.assertIn("section_vitals", card)
+        self.assertIn("section_genome", card)
+        self.assertIn("section_behavior", card)
 
     def test_predator_fields(self):
         c1 = _make_creature(
@@ -341,37 +360,65 @@ class TestBuildCreatureCard(unittest.TestCase):
         self.assertEqual(card["aggr"], "0.90")
         self.assertEqual(card["eff"], "0.40")
 
+    def test_motion_and_depth_pref_in_card(self):
+        c1 = _make_creature(motion_style=0.2, depth_preference=0.8)
+        sim = _make_simulation([c1])
+        card = build_creature_card(c1, sim)
+        self.assertEqual(card["motion"], "Glide")
+        self.assertEqual(card["depth_pref"], "Deep")
+
+    def test_attention_absent_without_sim_data(self):
+        c1 = _make_creature(species="prey", x=100, y=100)
+        sim = _make_simulation([c1])
+        card = build_creature_card(c1, sim)
+        self.assertNotIn("attention", card)
+
 
 class TestGuessBehavior(unittest.TestCase):
-    def test_hungry_when_low_energy(self):
-        c1 = _make_creature(energy=0.10)
+    def test_starving_when_very_low_energy(self):
+        c1 = _make_creature(energy=0.05)
         sim = _make_simulation([])
-        self.assertEqual(_guess_behavior(c1, sim), "hungry / at risk")
+        self.assertEqual(infer_behavior_mode(c1, sim), "starving")
+
+    def test_foraging_when_low_energy(self):
+        c1 = _make_creature(energy=0.15)
+        sim = _make_simulation([])
+        self.assertEqual(infer_behavior_mode(c1, sim), "foraging")
 
     def test_sated_predator(self):
         c1 = _make_creature(species="predator", energy=0.5, satiety_ticks_remaining=10)
         sim = _make_simulation([])
-        self.assertEqual(_guess_behavior(c1, sim), "sated / close-range hunting")
+        self.assertEqual(infer_behavior_mode(c1, sim), "sated")
 
     def test_hunting_predator_with_recent_animal(self):
-        c1 = _make_creature(species="predator", energy=0.5, recent_animal_energy=0.1)
+        c1 = _make_creature(species="predator", energy=0.7, recent_animal_energy=0.1)
         sim = _make_simulation([])
-        self.assertEqual(_guess_behavior(c1, sim), "hunting")
+        self.assertEqual(infer_behavior_mode(c1, sim), "hunting")
+
+    def test_stalking_predator_low_energy(self):
+        c1 = _make_creature(species="predator", energy=0.40, recent_animal_energy=0.08)
+        sim = _make_simulation([])
+        self.assertEqual(infer_behavior_mode(c1, sim), "stalking")
 
     def test_foraging_predator_no_recent_animal(self):
         c1 = _make_creature(species="predator", energy=0.5, recent_animal_energy=0.01)
         sim = _make_simulation([])
-        self.assertEqual(_guess_behavior(c1, sim), "foraging or hunting")
+        self.assertEqual(infer_behavior_mode(c1, sim), "foraging")
 
     def test_prey_foraging(self):
         c1 = _make_creature(species="prey", energy=0.5)
         sim = _make_simulation([])
-        self.assertEqual(_guess_behavior(c1, sim), "foraging")
+        self.assertEqual(infer_behavior_mode(c1, sim), "foraging")
 
     def test_none_species_wandering(self):
         c1 = _make_creature(species="none", energy=0.5)
         sim = _make_simulation([])
-        self.assertEqual(_guess_behavior(c1, sim), "wandering / foraging")
+        self.assertEqual(infer_behavior_mode(c1, sim), "wandering")
+
+    def test_flocking_when_flock_id(self):
+        c1 = _make_creature(species="none", energy=0.5, flock_id=3)
+        sim = _make_simulation([])
+        self.assertEqual(infer_behavior_mode(c1, sim), "flocking")
 
 
 class TestDisplayToWorld(unittest.TestCase):
@@ -394,6 +441,130 @@ class TestDisplayToWorld(unittest.TestCase):
         wx, wy = display_to_world(50, 50, 100, 100, 200, 200)
         self.assertAlmostEqual(wx, 100.0)
         self.assertAlmostEqual(wy, 100.0)
+
+
+class TestClassifyLifeStage(unittest.TestCase):
+    def test_larva(self):
+        c = _make_creature(age_fraction=0.01)
+        stage = classify_life_stage(c)
+        self.assertEqual(stage.label, "Larva")
+
+    def test_juvenile(self):
+        c = _make_creature(age_fraction=0.20)
+        stage = classify_life_stage(c)
+        self.assertEqual(stage.label, "Juvenile")
+
+    def test_young_adult(self):
+        c = _make_creature(age_fraction=0.50)
+        stage = classify_life_stage(c)
+        self.assertEqual(stage.label, "Young adult")
+
+    def test_adult(self):
+        c = _make_creature(age_fraction=0.70)
+        stage = classify_life_stage(c)
+        self.assertEqual(stage.label, "Adult")
+
+    def test_elder(self):
+        c = _make_creature(age_fraction=0.90)
+        stage = classify_life_stage(c)
+        self.assertEqual(stage.label, "Elder")
+
+    def test_decrepit(self):
+        c = _make_creature(age_fraction=0.98)
+        stage = classify_life_stage(c)
+        self.assertEqual(stage.label, "Decrepit")
+
+    def test_returns_age_fraction(self):
+        c = _make_creature(age_fraction=0.42)
+        stage = classify_life_stage(c)
+        self.assertAlmostEqual(stage.age_fraction, 0.42)
+
+
+class TestTemperamentTags(unittest.TestCase):
+    def test_aggressive_tag(self):
+        c = _make_creature(aggression=0.80)
+        self.assertIn("Aggressive", temperament_tags(c))
+
+    def test_docile_tag(self):
+        c = _make_creature(aggression=0.20)
+        self.assertIn("Docile", temperament_tags(c))
+
+    def test_no_middling_tags(self):
+        c = _make_creature(aggression=0.5, speed=0.5, size=0.5)
+        tags = temperament_tags(c)
+        for t in ["Aggressive", "Docile", "Swift", "Sluggish", "Large", "Tiny"]:
+            self.assertNotIn(t, tags)
+
+    def test_swift_tag(self):
+        c = _make_creature(speed=0.75)
+        self.assertIn("Swift", temperament_tags(c))
+
+    def test_keen_eyed_tag(self):
+        c = _make_creature(sense_radius=0.80)
+        self.assertIn("Keen-eyed", temperament_tags(c))
+
+    def test_efficient_tag(self):
+        c = _make_creature(efficiency=0.75)
+        self.assertIn("Efficient", temperament_tags(c))
+
+    def test_long_lived_tag(self):
+        c = _make_creature(longevity=0.80)
+        self.assertIn("Long-lived", temperament_tags(c))
+
+    def test_flockish_tag(self):
+        c = _make_creature(conformity=0.75)
+        self.assertIn("Flockish", temperament_tags(c))
+
+    def test_loner_tag(self):
+        c = _make_creature(conformity=0.20)
+        self.assertIn("Loner", temperament_tags(c))
+
+
+class TestFormatTags(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(format_tags([]), "—")
+
+    def test_up_to_max(self):
+        self.assertEqual(format_tags(["A", "B", "C", "D"], max_tags=3), "A, B, C")
+
+    def test_fewer_than_max(self):
+        self.assertEqual(format_tags(["A", "B"], max_tags=5), "A, B")
+
+
+class TestMotionStyleLabel(unittest.TestCase):
+    def test_glide(self):
+        self.assertEqual(motion_style_label(0.1), "Glide")
+
+    def test_swim(self):
+        self.assertEqual(motion_style_label(0.5), "Swim")
+
+    def test_dart(self):
+        self.assertEqual(motion_style_label(0.8), "Dart")
+
+    def test_boundary_glide_swim(self):
+        self.assertEqual(motion_style_label(0.34), "Swim")
+
+    def test_boundary_swim_dart(self):
+        self.assertEqual(motion_style_label(0.67), "Dart")
+
+
+class TestDepthPreferenceLabel(unittest.TestCase):
+    def test_surface(self):
+        self.assertEqual(depth_preference_label(0.1), "Surface")
+
+    def test_mid(self):
+        self.assertEqual(depth_preference_label(0.5), "Mid")
+
+    def test_deep(self):
+        self.assertEqual(depth_preference_label(0.9), "Deep")
+
+
+class TestInferAttentionTarget(unittest.TestCase):
+    def test_returns_none_when_no_sim_data(self):
+        c = _make_creature(species="prey", x=100, y=100)
+        sim = _make_simulation([c])
+        result = infer_attention_target(c, sim)
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

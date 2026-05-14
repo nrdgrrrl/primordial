@@ -12,6 +12,17 @@ import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .creature_observation import (
+    LifeStage,
+    classify_life_stage,
+    temperament_tags,
+    format_tags,
+    motion_style_label,
+    depth_preference_label,
+    infer_behavior_mode,
+    infer_attention_target,
+)
+
 if TYPE_CHECKING:
     from ..simulation.creature import Creature
     from ..simulation.simulation import Simulation
@@ -152,57 +163,68 @@ def build_creature_card(
 
     Keys are display labels; values are formatted strings.  This function
     is pure (it reads creature/simulation state but does not mutate it).
+
+    The card is organised into logical sections using prefix conventions
+    that renderers can use for grouping:
+
+    - ``section_*`` — section header labels (no colon or value)
+    - ``*`` — ordinary key-value rows
+
+    Sections: Identity, Vitals, Genome, Behavior
     """
     age_frac = creature.get_age_fraction()
     max_life = creature.get_max_lifespan()
     age_pct = age_frac * 100.0
-    speed_trait = creature.genome.speed
-    size_trait = creature.genome.size
-    sense_trait = creature.genome.sense_radius
-    aggr_trait = creature.genome.aggression
-    eff_trait = creature.genome.efficiency
     vel = math.sqrt(creature.vx ** 2 + creature.vy ** 2)
 
-    card: dict[str, str] = {
-        "species": creature.species.capitalize(),
-        "lineage": f"#{creature.lineage_id}",
-        "age": f"{creature.age} / {int(max_life)}  ({age_pct:.0f}%)",
-        "energy": f"{creature.energy:.2f}",
-        "depth": creature.get_depth_band_name(),
-        "speed": f"{speed_trait:.2f}",
-        "size": f"{size_trait:.2f}",
-        "sense": f"{sense_trait:.2f}",
-        "aggr": f"{aggr_trait:.2f}",
-        "eff": f"{eff_trait:.2f}",
-        "pos": f"({creature.x:.0f}, {creature.y:.0f})",
-        "vel": f"{vel:.2f}",
-    }
+    life_stage = classify_life_stage(creature)
+    tags = temperament_tags(creature)
+    behavior = infer_behavior_mode(creature, simulation)
+    motion = motion_style_label(creature.genome.motion_style)
+    depth_pref = depth_preference_label(creature.genome.depth_preference)
+
+    card: dict[str, str] = {}
+
+    # ── Identity section ──
+    card["section_identity"] = ""
+    card["species"] = creature.species.capitalize()
+    card["lineage"] = f"#{creature.lineage_id}"
+    card["stage"] = life_stage.label
+    card["tags"] = format_tags(tags)
+
+    # ── Vitals section ──
+    card["section_vitals"] = ""
+    card["age"] = f"{creature.age} / {int(max_life)}  ({age_pct:.0f}%)"
+    card["energy"] = f"{creature.energy:.2f}"
+    card["depth"] = creature.get_depth_band_name()
 
     if creature.species == "predator":
         card["recent_animal_e"] = f"{creature.recent_animal_energy:.3f}"
         card["satiety"] = f"{creature.satiety_ticks_remaining}t"
 
-    card["behavior"] = _guess_behavior(creature, simulation)
+    card["pos"] = f"({creature.x:.0f}, {creature.y:.0f})"
+
+    # ── Genome section ──
+    card["section_genome"] = ""
+    card["speed"] = f"{creature.genome.speed:.2f}"
+    card["size"] = f"{creature.genome.size:.2f}"
+    card["sense"] = f"{creature.genome.sense_radius:.2f}"
+    card["aggr"] = f"{creature.genome.aggression:.2f}"
+    card["eff"] = f"{creature.genome.efficiency:.2f}"
+    card["motion"] = motion
+    card["depth_pref"] = depth_pref
+
+    # ── Behavior section ──
+    card["section_behavior"] = ""
+    card["behavior"] = behavior
+    card["vel"] = f"{vel:.2f}"
+
+    attention = infer_attention_target(creature, simulation)
+    if attention is not None:
+        card["attention"] = attention.kind
+        card["attention_conf"] = f"{attention.confidence:.0%}"
+
     return card
-
-
-def _guess_behavior(creature: Creature, simulation: Simulation) -> str:
-    """Produce a short human-readable behavior guess.
-
-    Uses only data already on the creature object and cheap simulation
-    state — no neighbour scans.
-    """
-    if creature.energy < 0.15:
-        return "hungry / at risk"
-    if creature.species == "predator":
-        if creature.satiety_ticks_remaining > 0:
-            return "sated / close-range hunting"
-        if creature.recent_animal_energy < 0.04:
-            return "foraging or hunting"
-        return "hunting"
-    if creature.species == "prey":
-        return "foraging"
-    return "wandering / foraging"
 
 
 # ──────────────────────────────────────────────────────────────────────

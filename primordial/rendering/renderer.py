@@ -441,6 +441,7 @@ class Renderer:
             self.theme.render_creature(target, creature, anim_time, scale=scale)
             if selected_creature is not None and creature is selected_creature:
                 self._draw_selection_ring(target, creature, anim_time)
+                self._draw_attention_line(target, creature, simulation, anim_time)
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Predator locator highlight (hold P) ---
@@ -532,6 +533,28 @@ class Renderer:
         ring_radius = max(4, int(radius * pulse))
         pygame.draw.circle(target, (255, 255, 255), (cx, cy), ring_radius, 2)
 
+    def _draw_attention_line(
+        self, target: pygame.Surface, creature: "Creature",
+        simulation: "Simulation", anim_time: float,
+    ) -> None:
+        """Draw a pulsing line from the inspected creature to its attention target."""
+        from .creature_observation import infer_attention_target
+        attention = infer_attention_target(creature, simulation)
+        if attention is None:
+            return
+        t_pulse = int(100 + 80 * math.sin(anim_time * 3.0))
+        kind_colors = {
+            "prey": (255, 80, 80),
+            "threat": (255, 200, 50),
+            "food": (80, 255, 80),
+        }
+        color = kind_colors.get(attention.kind, (200, 200, 200))
+        cx, cy = int(creature.x), int(creature.y)
+        tx, ty = int(attention.x), int(attention.y)
+        line_surf = pygame.Surface(target.get_size(), pygame.SRCALPHA)
+        pygame.draw.line(line_surf, (*color, t_pulse), (cx, cy), (tx, ty), 1)
+        target.blit(line_surf, (0, 0))
+
     def _draw_inspect_overlay(
         self, simulation: "Simulation", target: pygame.Surface,
     ) -> None:
@@ -547,15 +570,18 @@ class Renderer:
 
         card_font = pygame.font.Font(None, 18)
         card_title_font = pygame.font.Font(None, 22)
+        section_font = pygame.font.Font(None, 17)
         line_height = 20
         padding = 10
         card_width = 220
-        card_lines = list(card.items())
-        card_height = padding * 2 + len(card_lines) * line_height + line_height
+
+        row_count = 0
+        for _k, _v in card.items():
+            row_count += 1
+        card_height = padding * 2 + row_count * line_height + line_height
 
         margin_x = 12
         margin_y = 12
-        hud_bottom = target.get_height() - 10
         card_x = margin_x
         card_y = margin_y
 
@@ -578,15 +604,26 @@ class Renderer:
         surface.blit(mode_surf, (padding, padding))
 
         y = padding + line_height
-        species_label = card.get("species", "???")
-        title_text = f"{species_label} #{creature.lineage_id}"
-        title_surf = card_title_font.render(title_text, True, (220, 240, 255))
-        surface.blit(title_surf, (padding, y))
-        y += line_height + 2
 
-        skip_keys = {"species"}
+        _SECTION_LABELS = {
+            "section_identity": "IDENTITY",
+            "section_vitals": "VITALS",
+            "section_genome": "GENOME",
+            "section_behavior": "BEHAVIOR",
+        }
+
         for key, value in card.items():
-            if key in skip_keys:
+            if key.startswith("section_"):
+                label = _SECTION_LABELS.get(key, key.replace("section_", "").upper())
+                header_surf = section_font.render(f"— {label} —", True, (100, 140, 180))
+                surface.blit(header_surf, (padding, y))
+                y += line_height
+                continue
+            if key == "species":
+                title_text = f"{value} #{creature.lineage_id}"
+                title_surf = card_title_font.render(title_text, True, (220, 240, 255))
+                surface.blit(title_surf, (padding, y))
+                y += line_height + 2
                 continue
             display_key = key.replace("_", " ").capitalize()
             label_surf = card_font.render(f"{display_key}: ", True, (140, 160, 180))

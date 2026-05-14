@@ -14,6 +14,17 @@ from .hud import HUD
 from .glyphs import build_glyph_surface, get_glyph_surface
 from .animations import AnimationManager
 from .inspect_mode import InspectMode, build_creature_card, display_to_world
+from .creature_observation import (
+    LifeStage,
+    classify_life_stage,
+    temperament_tags,
+    format_tags,
+    motion_style_label,
+    depth_preference_label,
+    infer_behavior_mode,
+    infer_attention_target,
+    AttentionTarget,
+)
 
 __all__ = [
     "Renderer", "Theme", "OceanTheme", "StubTheme", "get_theme",
@@ -21,4 +32,8 @@ __all__ = [
     "create_renderer", "display_flags_for_settings", "renderer_backend_name",
     "renderer_gpu_info", "save_renderer_screenshot", "wants_gpu_renderer",
     "InspectMode", "build_creature_card", "display_to_world",
+    "LifeStage", "classify_life_stage",
+    "temperament_tags", "format_tags",
+    "motion_style_label", "depth_preference_label",
+    "infer_behavior_mode", "infer_attention_target", "AttentionTarget",
 ]
