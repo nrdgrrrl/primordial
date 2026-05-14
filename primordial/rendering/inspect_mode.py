@@ -104,7 +104,7 @@ class InspectMode:
         world_y: float,
         simulation: Simulation,
         *,
-        pick_radius: float = 24.0,
+        pick_radius: float = 48.0,
     ) -> None:
         """Select the nearest living creature under *world_x, world_y*.
 

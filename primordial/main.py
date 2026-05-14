@@ -712,17 +712,13 @@ def main(
                     renderer.set_predator_highlight(False)
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                print(f"MOUSE CLICK pos={event.pos} inspect={renderer.inspect_mode.enabled} mode={scr_args.mode}")
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
                     wx, wy = _display_to_world(
                         event.pos[0], event.pos[1],
                         renderer.display_width, renderer.display_height,
                         simulation.width, simulation.height,
                     )
-                    print(f"  world=({wx:.1f}, {wy:.1f}) display={renderer.display_width}x{renderer.display_height} sim={simulation.width}x{simulation.height} pop={len(simulation.creatures)}")
                     renderer.inspect_mode.select_at_world_pos(wx, wy, simulation)
-                    sel = renderer.inspect_mode.get_selected_creature(simulation)
-                    print(f"  selected_id={renderer.inspect_mode.selected_creature_id} creature={sel}")
 
             elif event.type == pygame.KEYDOWN:
                 if renderer.settings_overlay.visible:
