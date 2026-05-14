@@ -179,7 +179,10 @@ def build_creature_card(
 
     life_stage = classify_life_stage(creature)
     tags = temperament_tags(creature)
-    behavior = infer_behavior_mode(creature, simulation)
+    try:
+        behavior = infer_behavior_mode(creature, simulation)
+    except Exception:
+        behavior = "unknown"
     motion = motion_style_label(creature.genome.motion_style)
     depth_pref = depth_preference_label(creature.genome.depth_preference)
 
@@ -219,7 +222,10 @@ def build_creature_card(
     card["behavior"] = behavior
     card["vel"] = f"{vel:.2f}"
 
-    attention = infer_attention_target(creature, simulation)
+    try:
+        attention = infer_attention_target(creature, simulation)
+    except Exception:
+        attention = None
     if attention is not None:
         card["attention"] = attention.kind
         card["attention_conf"] = f"{attention.confidence:.0%}"

@@ -271,10 +271,12 @@ def _nearest_food(
     fm = getattr(simulation, "food_manager", None)
     if fm is None:
         return None
-    result = fm.find_nearest(creature.x, creature.y, sense, depth_band=creature.depth_band)
-    if result is None:
-        result = fm.find_nearest(creature.x, creature.y, sense)
-    return result
+    food = fm.find_nearest(creature.x, creature.y, sense, depth_band=creature.depth_band)
+    if food is None:
+        food = fm.find_nearest(creature.x, creature.y, sense)
+    if food is None:
+        return None
+    return (food.x, food.y)
 
 
 def _proximity_confidence(

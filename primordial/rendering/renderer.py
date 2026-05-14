@@ -539,7 +539,10 @@ class Renderer:
     ) -> None:
         """Draw a pulsing line from the inspected creature to its attention target."""
         from .creature_observation import infer_attention_target
-        attention = infer_attention_target(creature, simulation)
+        try:
+            attention = infer_attention_target(creature, simulation)
+        except Exception:
+            attention = None
         if attention is None:
             return
         t_pulse = int(100 + 80 * math.sin(anim_time * 3.0))

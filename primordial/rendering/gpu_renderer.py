@@ -949,7 +949,10 @@ class PredatorPreyGpuRenderer:
             lines.append(LineSprite(points[i][0], points[i][1], points[j][0], points[j][1], color))
 
         from .creature_observation import infer_attention_target
-        attention = infer_attention_target(creature, simulation)
+        try:
+            attention = infer_attention_target(creature, simulation)
+        except Exception:
+            attention = None
         if attention is not None:
             t_pulse = 0.4 + 0.4 * math.sin(anim_time * 3.0)
             kind_colors = {
