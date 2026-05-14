@@ -42,6 +42,8 @@ from .rendering import (
     renderer_backend_name,
     wants_gpu_renderer,
 )
+from .rendering.inspect_mode import InspectMode as _InspectMode
+from .rendering.inspect_mode import display_to_world as _display_to_world
 from .milestone_logging import PredatorPreyMilestoneLogger
 from .run_logging import PredatorPreyCSVRunLogger
 from .settings import Settings
@@ -709,6 +711,15 @@ def main(
                 if event.key == pygame.K_p:
                     renderer.set_predator_highlight(False)
 
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if renderer.inspect_mode.enabled and scr_args.mode == "normal":
+                    wx, wy = _display_to_world(
+                        event.pos[0], event.pos[1],
+                        renderer.display_width, renderer.display_height,
+                        simulation.width, simulation.height,
+                    )
+                    renderer.inspect_mode.select_at_world_pos(wx, wy, simulation)
+
             elif event.type == pygame.KEYDOWN:
                 if renderer.settings_overlay.visible:
                     action = renderer.settings_overlay.handle_event(event)
@@ -854,6 +865,7 @@ def main(
                         renderer.screen,
                         scr_args.mode,
                         runtime_loop,
+                        inspect_mode=renderer.inspect_mode,
                     )
                     if renderer.settings_overlay.visible:
                         _prev_mode = settings.sim_mode
@@ -885,10 +897,21 @@ def main(
             _transition_dir,
             _transition_alpha,
         )
+
+        # Inspect mode: pause or slow the simulation
+        inspect_suppress = False
+        if renderer.inspect_mode.enabled and not sim_suppressed:
+            if renderer.inspect_mode.pause_mode == "pause":
+                inspect_suppress = True
+            elif renderer.inspect_mode.pause_mode == "slow":
+                frame_dt = max(0.0, 1.0 / max(1, _get_effective_target_fps(settings)))
+                if not renderer.inspect_mode.should_step_slow(frame_dt):
+                    inspect_suppress = True
+
         sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
             simulation,
             runtime_loop,
-            allow_simulation=not sim_suppressed,
+            allow_simulation=not sim_suppressed and not inspect_suppress,
         )
 
         debug_payload = timing_collector.latest_debug_payload()
@@ -1345,6 +1368,7 @@ def handle_keydown(
     screen: pygame.Surface,
     mode: str,
     runtime_loop: FixedStepLoopState,
+    inspect_mode: InspectMode | None = None,
 ) -> bool:
     """
     Handle keyboard input.
@@ -1358,6 +1382,38 @@ def handle_keydown(
         return False
     elif key == pygame.K_h:
         renderer.toggle_hud()
+    elif key == pygame.K_i:
+        if inspect_mode is not None:
+            was_enabled = inspect_mode.enabled
+            inspect_mode.toggle(simulation_paused=simulation.paused)
+            if inspect_mode.enabled:
+                simulation.paused = True
+                pygame.mouse.set_visible(True)
+                renderer.show_cursor = True
+            else:
+                restore_paused = inspect_mode.was_paused_before
+                if restore_paused is not None:
+                    simulation.paused = restore_paused
+                else:
+                    simulation.paused = False
+                hide_cursor = (
+                    settings.fullscreen
+                    or bool(screen.get_flags() & pygame.FULLSCREEN)
+                    or mode == "screensaver"
+                )
+                pygame.mouse.set_visible(not hide_cursor)
+                renderer.show_cursor = False
+                inspect_mode.clear_selection()
+            runtime_loop.reset_timing_debt()
+    elif key == pygame.K_m:
+        if inspect_mode is not None and inspect_mode.enabled:
+            inspect_mode.toggle_pause_slow()
+            if inspect_mode.pause_mode == "pause":
+                simulation.paused = True
+            elif inspect_mode.pause_mode == "slow":
+                simulation.paused = False
+            inspect_mode._slow_accumulator = 0.0
+            runtime_loop.reset_timing_debt()
     elif key == pygame.K_s and mode != "screensaver":
         renderer.toggle_settings_overlay()
     elif key == pygame.K_SPACE:

@@ -2,6 +2,29 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-14] — feat: Inspect Mode (read-only creature observability)
+
+**What changed** (`rendering/inspect_mode.py`, `rendering/renderer.py`,
+`rendering/gpu_renderer.py`, `rendering/__init__.py`, `primordial/main.py`,
+`tests/test_inspect_mode.py`):
+
+- Added an optional **Inspect Mode** for read-only creature observability,
+  toggled with **I**. While active the simulation is paused (default) or in
+  slow-motion at 2 Hz (press **M** to switch). Clicking a creature selects it
+  and displays a detail card (species, lineage, age, energy, depth, genome
+  traits, position, velocity, behavior guess; predators also show recent animal
+  energy and satiety).
+- The mode is purely observational: it never mutates simulation state, consumes
+  RNG, or alters ecology dials. Exiting restores the prior paused/running state.
+- Both the pygame and OpenGL renderers draw a selection highlight ring around
+  the selected creature and a right-side info card overlay.
+- Slow-mode ticks use an accumulator pattern independent of target FPS, so
+  determinism is preserved at full speed and behaviour is identical when
+  observed at 2 Hz.
+- Selection uses `id(creature)` so it naturally resets on world reset.
+- Added 42 unit tests covering toggle, selection, slow-mode accumulator,
+  creature card building, behavior guessing, and coordinate conversion.
+
 ## [2026-03-13] — feat: predator_prey stability scoring, extinction game-over, and adaptive tuning
 
 **What changed** (`simulation/simulation.py`, `rendering/hud.py`,

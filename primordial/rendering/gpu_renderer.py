@@ -83,6 +83,7 @@ from OpenGL.raw.GL.VERSION.GL_2_0 import (
 
 from .glyphs import build_glyph_surface
 from .hud import HUD
+from .inspect_mode import InspectMode
 from .renderer import _ZONE_BG_COLORS
 from .settings_overlay import SettingsOverlay
 from .snapshot import GlyphSprite, LineSprite, PredatorPreyRenderSnapshot, RadialSprite
@@ -374,6 +375,8 @@ class PredatorPreyGpuRenderer:
         self.frame_times: deque[float] = deque(maxlen=60)
         self.fps = 0.0
         self.show_predator_highlight = False
+        self.show_cursor = False
+        self.inspect_mode = InspectMode()
         self.hud = HUD(font_size=16)
         self.hud.visible = settings.show_hud
         self.settings_overlay = SettingsOverlay(settings)
@@ -552,6 +555,12 @@ class PredatorPreyGpuRenderer:
         t0 = time.perf_counter()
         self._draw_lines(snapshot.predator_highlights, width=2.0)
         timings["predator_highlights_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        t0 = time.perf_counter()
+        inspect_lines = self._build_inspect_highlight(simulation, anim_time)
+        if inspect_lines:
+            self._draw_lines(inspect_lines, width=2.0)
+        timings["inspect_highlight_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
         self._draw_ui(simulation)
@@ -827,6 +836,7 @@ class PredatorPreyGpuRenderer:
             or self.settings_overlay.visible
             or self.settings_overlay.fade > 0
             or simulation.predator_prey_game_over_active
+            or self.inspect_mode.enabled
         )
         if not should_draw:
             return
@@ -834,10 +844,87 @@ class PredatorPreyGpuRenderer:
         self.hud.render(self._ui_surface, simulation, self.fps)
         if simulation.predator_prey_game_over_active:
             self._draw_game_over_overlay(simulation)
+        self._draw_inspect_overlay(simulation)
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
             self.settings_overlay.update()
             self.settings_overlay.draw(self._ui_surface)
         self._draw_surface_texture(self._ui_surface)
+
+    def _draw_inspect_overlay(self, simulation) -> None:
+        """Draw the creature card overlay on the UI surface."""
+        if not self.inspect_mode.enabled:
+            return
+        creature = self.inspect_mode.get_selected_creature(simulation)
+        if creature is None:
+            mode_label = "INSPECT  (I: exit)"
+            if self.inspect_mode.pause_mode == "slow":
+                mode_label += f"  [Slow {self.inspect_mode.slow_hz:.0f}Hz  M: toggle]"
+            else:
+                mode_label += "  [Paused  M: slow]"
+            from .inspect_mode import build_creature_card
+            label_surf = self._overlay_small_font.render(mode_label, True, (140, 180, 220))
+            self._ui_surface.blit(label_surf, (12, 12))
+            return
+        from .inspect_mode import build_creature_card
+        card = build_creature_card(creature, simulation)
+        card_font = pygame.font.Font(None, 18)
+        card_title_font = pygame.font.Font(None, 22)
+        line_height = 20
+        padding = 10
+        card_width = 220
+        card_lines = list(card.items())
+        card_height = padding * 2 + len(card_lines) * line_height + line_height
+        surface = pygame.Surface((card_width, card_height), pygame.SRCALPHA)
+        surface.fill((8, 12, 24, 200))
+        pygame.draw.rect(surface, (80, 160, 240, 180), (0, 0, card_width, card_height), 1, border_radius=4)
+        mode_label = "INSPECT  (I: exit)"
+        if self.inspect_mode.pause_mode == "slow":
+            mode_label += f"  [Slow {self.inspect_mode.slow_hz:.0f}Hz  M: toggle]"
+        else:
+            mode_label += "  [Paused  M: slow]"
+        mode_surf = card_font.render(mode_label, True, (140, 180, 220))
+        surface.blit(mode_surf, (padding, padding))
+        y = padding + line_height
+        species_label = card.get("species", "???")
+        title_text = f"{species_label} #{creature.lineage_id}"
+        title_surf = card_title_font.render(title_text, True, (220, 240, 255))
+        surface.blit(title_surf, (padding, y))
+        y += line_height + 2
+        skip_keys = {"species"}
+        for key, value in card.items():
+            if key in skip_keys:
+                continue
+            display_key = key.replace("_", " ").capitalize()
+            label_surf = card_font.render(f"{display_key}: ", True, (140, 160, 180))
+            value_surf = card_font.render(value, True, (220, 240, 255))
+            surface.blit(label_surf, (padding, y))
+            surface.blit(value_surf, (padding + label_surf.get_width(), y))
+            y += line_height
+        self._ui_surface.blit(surface, (12, 12))
+
+    def _build_inspect_highlight(self, simulation, anim_time: float) -> list[LineSprite]:
+        """Build line sprites for the inspect selection ring."""
+        if not self.inspect_mode.enabled:
+            return []
+        creature = self.inspect_mode.get_selected_creature(simulation)
+        if creature is None:
+            return []
+        pulse = 0.5 + 0.5 * math.sin(anim_time * 4.0)
+        radius = creature.get_radius() + 6.0 + 4.0 * pulse
+        color = (1.0, 1.0, 1.0, 0.8)
+        cx, cy = creature.x, creature.y
+        n = 24
+        points = []
+        for i in range(n):
+            angle = 2.0 * math.pi * i / n
+            px = cx + radius * math.cos(angle)
+            py = cy + radius * math.sin(angle)
+            points.append((px, py))
+        lines = []
+        for i in range(n):
+            j = (i + 1) % n
+            lines.append(LineSprite(points[i][0], points[i][1], points[j][0], points[j][1], color))
+        return lines
 
     def _draw_game_over_overlay(self, simulation) -> None:
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)

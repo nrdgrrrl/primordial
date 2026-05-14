@@ -12,6 +12,7 @@ import pygame
 
 from .animations import AnimationManager
 from .hud import HUD
+from .inspect_mode import InspectMode
 from .settings_overlay import SettingsOverlay
 from .themes import AmbientParticle, OceanTheme, Theme, get_theme
 
@@ -233,6 +234,8 @@ class Renderer:
         self._game_over_overlay_cache_key: tuple[object, ...] | None = None
         self._game_over_overlay_cache: pygame.Surface | None = None
         self.show_predator_highlight = False
+        self.show_cursor = False
+        self.inspect_mode = InspectMode()
 
         self.settings_overlay = SettingsOverlay(settings)
 
@@ -429,10 +432,15 @@ class Renderer:
 
         # --- Creatures ---
         t0 = time.perf_counter()
+        selected_creature = None
+        if self.inspect_mode.enabled:
+            selected_creature = self.inspect_mode.get_selected_creature(simulation)
         for creature in simulation.creatures:
             birth_scale = self.animation_manager.get_birth_scale(creature)
             scale = birth_scale if birth_scale is not None else 1.0
             self.theme.render_creature(target, creature, anim_time, scale=scale)
+            if selected_creature is not None and creature is selected_creature:
+                self._draw_selection_ring(target, creature, anim_time)
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Predator locator highlight (hold P) ---
@@ -465,6 +473,10 @@ class Renderer:
         t0 = time.perf_counter()
         self._draw_predator_prey_game_over_overlay(simulation)
         timings["overlay_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        t0 = time.perf_counter()
+        self._draw_inspect_overlay(simulation, target)
+        timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
@@ -505,6 +517,91 @@ class Renderer:
     def set_predator_highlight(self, active: bool) -> None:
         """Toggle the temporary predator locator overlay."""
         self.show_predator_highlight = active
+
+    # ------------------------------------------------------------------
+    # Inspect mode rendering
+    # ------------------------------------------------------------------
+
+    def _draw_selection_ring(
+        self, target: pygame.Surface, creature: "Creature", anim_time: float,
+    ) -> None:
+        """Draw a bright selection ring around the inspected creature."""
+        cx, cy = int(creature.x), int(creature.y)
+        radius = int(creature.get_radius()) + 6
+        pulse = 1.0 + 0.12 * math.sin(anim_time * 4.0)
+        ring_radius = max(4, int(radius * pulse))
+        pygame.draw.circle(target, (255, 255, 255), (cx, cy), ring_radius, 2)
+
+    def _draw_inspect_overlay(
+        self, simulation: "Simulation", target: pygame.Surface,
+    ) -> None:
+        """Draw the creature card overlay when inspect mode is active."""
+        if not self.inspect_mode.enabled:
+            return
+        creature = self.inspect_mode.get_selected_creature(simulation)
+        if creature is None:
+            return
+
+        from .inspect_mode import build_creature_card
+        card = build_creature_card(creature, simulation)
+
+        card_font = pygame.font.Font(None, 18)
+        card_title_font = pygame.font.Font(None, 22)
+        line_height = 20
+        padding = 10
+        card_width = 220
+        card_lines = list(card.items())
+        card_height = padding * 2 + len(card_lines) * line_height + line_height
+
+        margin_x = 12
+        margin_y = 12
+        hud_bottom = target.get_height() - 10
+        card_x = margin_x
+        card_y = margin_y
+
+        hud_height_estimate = 200
+        left_top_free = hud_height_estimate + margin_y
+        if card_y + card_height > left_top_free + 10:
+            card_x = target.get_width() - card_width - margin_x
+
+        surface = pygame.Surface((card_width, card_height), pygame.SRCALPHA)
+        surface.fill((8, 12, 24, 200))
+
+        pygame.draw.rect(surface, (80, 160, 240, 180), (0, 0, card_width, card_height), 1, border_radius=4)
+
+        mode_label = "INSPECT  (I: exit)"
+        if self.inspect_mode.pause_mode == "slow":
+            mode_label += f"  [Slow {self.inspect_mode.slow_hz:.0f}Hz  M: toggle]"
+        else:
+            mode_label += "  [Paused  M: slow]"
+        mode_surf = card_font.render(mode_label, True, (140, 180, 220))
+        surface.blit(mode_surf, (padding, padding))
+
+        y = padding + line_height
+        species_label = card.get("species", "???")
+        title_text = f"{species_label} #{creature.lineage_id}"
+        title_surf = card_title_font.render(title_text, True, (220, 240, 255))
+        surface.blit(title_surf, (padding, y))
+        y += line_height + 2
+
+        skip_keys = {"species"}
+        for key, value in card.items():
+            if key in skip_keys:
+                continue
+            display_key = key.replace("_", " ").capitalize()
+            label_surf = card_font.render(f"{display_key}: ", True, (140, 160, 180))
+            value_surf = card_font.render(value, True, (220, 240, 255))
+            surface.blit(label_surf, (padding, y))
+            surface.blit(value_surf, (padding + label_surf.get_width(), y))
+            y += line_height
+
+        target.blit(surface, (card_x, card_y))
+
+        if self.inspect_mode.pause_mode == "pause":
+            pause_label = card_font.render("PAUSED — inspect", True, (255, 200, 100))
+            pause_x = target.get_width() - pause_label.get_width() - margin_x
+            pause_y = target.get_height() - margin_y - pause_label.get_height()
+            target.blit(pause_label, (pause_x, pause_y))
 
     def _draw_predator_prey_game_over_overlay(self, simulation: "Simulation") -> None:
         """Tint the screen red and present restart details after ecological collapse."""
