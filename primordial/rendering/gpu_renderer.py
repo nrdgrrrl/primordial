@@ -248,7 +248,7 @@ in vec2 v_uv;
 out vec4 frag_color;
 
 void main() {
-    vec4 sample_color = texture(u_texture, vec2(v_uv.x, 1.0 - v_uv.y));
+    vec4 sample_color = texture(u_texture, v_uv);
     frag_color = vec4(sample_color.rgb * sample_color.a, sample_color.a);
 }
 """

@@ -17,6 +17,7 @@ from primordial.rendering import (
     display_flags_for_settings,
     wants_gpu_renderer,
 )
+from primordial.rendering.gpu_renderer import _TEXTURE_FRAGMENT_SHADER
 from primordial.settings import Settings
 
 
@@ -65,6 +66,10 @@ class RendererBackendTests(unittest.TestCase):
         self.assertTrue(flags & pygame.OPENGL)
         self.assertTrue(flags & pygame.DOUBLEBUF)
         self.assertFalse(flags & pygame.SCALED)
+
+    def test_gpu_ui_texture_shader_does_not_double_flip_uploaded_surface(self) -> None:
+        self.assertIn("texture(u_texture, v_uv)", _TEXTURE_FRAGMENT_SHADER)
+        self.assertNotIn("1.0 - v_uv.y", _TEXTURE_FRAGMENT_SHADER)
 
 
 if __name__ == "__main__":
