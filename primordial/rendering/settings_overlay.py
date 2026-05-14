@@ -58,6 +58,7 @@ class SettingsOverlay:
             Field("Food Spawn Rate", "food_spawn_rate", "float", 0.0, 2.0, 0.05, section="Simulation", use_active_mode_param=True),
             Field("Creature Speed", "creature_speed_base", "float", 0.5, 3.0, 0.05, section="Simulation"),
             Field("Visual Theme", "visual_theme", "enum", options=["ocean", "petri", "geometric", "chaotic"], section="Display"),
+            Field("Render Backend", "render_backend", "enum", options=["pygame", "gpu"], section="Display", visible_modes=["predator_prey"]),
             Field("Fullscreen", "fullscreen", "bool", section="Display"),
             Field("Target FPS", "target_fps", "int", 15, 240, 5, section="Display", use_active_mode_param=True),
             Field("Show HUD", "show_hud", "bool", section="Display"),

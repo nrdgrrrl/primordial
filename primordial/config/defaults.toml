@@ -24,6 +24,7 @@ target_fps = 60
 show_hud = true
 
 [rendering]
+render_backend = "gpu"
 glyph_size_base = 48
 kin_line_max_distance = 0.0
 kin_line_min_group = 3

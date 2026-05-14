@@ -42,7 +42,14 @@ from .main import (
     _get_simulation_tick_hz,
     _simulation_timing_is_suppressed,
 )
-from .rendering import Renderer
+from .rendering import (
+    Renderer,
+    create_renderer,
+    display_flags_for_settings,
+    renderer_backend_name,
+    renderer_gpu_info,
+    save_renderer_screenshot,
+)
 from .settings import Settings
 from .simulation import Simulation
 
@@ -503,7 +510,7 @@ def _run_single_graphical_benchmark(
             simulation.set_predator_prey_adaptive_tuning_enabled(False)
         else:
             simulation = Simulation(world_width, world_height, settings)
-        renderer = Renderer(screen, settings, debug=False)
+        renderer = create_renderer(screen, settings, debug=False)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
@@ -847,6 +854,8 @@ def _build_run_result(
         "fullscreen": spec.fullscreen,
         "target_fps": effective_target_fps,
         "simulation_tick_hz": simulation_tick_hz,
+        "render_backend": renderer_backend_name(renderer),
+        "gpu_info": renderer_gpu_info(renderer),
         "notes": spec.notes,
         "resolution": {
             "world": [simulation.width, simulation.height],
@@ -957,7 +966,7 @@ def _capture_checkpoint(
     frame_index: int,
 ) -> dict[str, Any]:
     screenshot_path = output_dir / f"{label}.png"
-    pygame.image.save(renderer.screen, screenshot_path)
+    save_renderer_screenshot(renderer, screenshot_path)
     snapshot = simulation.build_observability_snapshot()
     predator_count, prey_count = (
         simulation.get_species_counts()
@@ -1007,7 +1016,7 @@ def _run_profile_capture(
             simulation.set_predator_prey_adaptive_tuning_enabled(False)
         else:
             simulation = Simulation(world_width, world_height, settings)
-        renderer = Renderer(screen, settings, debug=False)
+        renderer = create_renderer(screen, settings, debug=False)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
@@ -1088,6 +1097,8 @@ def _run_profile_capture(
             "seed": seed,
             "duration_seconds_actual": elapsed_wall_seconds,
             "display_path": display_context.display_path,
+            "render_backend": renderer_backend_name(renderer),
+            "gpu_info": renderer_gpu_info(renderer),
             "files": {
                 "pstats": str(pstats_path),
                 "text": str(text_path),
@@ -1114,6 +1125,7 @@ def _write_runs_csv(path: Path, run_results: list[dict[str, Any]]) -> None:
         "display_height",
         "target_fps",
         "simulation_tick_hz",
+        "render_backend",
         "frames_rendered",
         "sim_ticks_advanced",
         "effective_fps_overall",
@@ -1176,6 +1188,7 @@ def _write_runs_csv(path: Path, run_results: list[dict[str, Any]]) -> None:
                     "display_height": run["resolution"]["final_display"][1],
                     "target_fps": run["target_fps"],
                     "simulation_tick_hz": run["simulation_tick_hz"],
+                    "render_backend": run.get("render_backend", "pygame"),
                     "frames_rendered": perf["frames_rendered"],
                     "sim_ticks_advanced": perf["sim_ticks_advanced"],
                     "effective_fps_overall": perf["effective_fps_overall"],
@@ -1692,10 +1705,16 @@ def _zip_directory(
 def _create_display_for_run(settings: Settings) -> tuple[int, int, pygame.Surface]:
     if settings.fullscreen:
         width, height = _get_fullscreen_resolution()
-        screen = pygame.display.set_mode((width, height), FULLSCREEN_FLAGS)
+        screen = pygame.display.set_mode(
+            (width, height),
+            display_flags_for_settings(settings, FULLSCREEN_FLAGS),
+        )
     else:
         width, height = DEFAULT_WINDOWED_SIZE
-        screen = pygame.display.set_mode((width, height))
+        screen = pygame.display.set_mode(
+            (width, height),
+            display_flags_for_settings(settings),
+        )
     return width, height, screen
 
 
@@ -1703,6 +1722,7 @@ def _build_settings_snapshot(settings: Settings, mode: str) -> dict[str, Any]:
     return {
         "sim_mode": settings.sim_mode,
         "visual_theme": settings.visual_theme,
+        "render_backend": settings.render_backend,
         "fullscreen": settings.fullscreen,
         "target_fps": _get_effective_target_fps(settings),
         "simulation_tick_hz": _get_simulation_tick_hz(settings),

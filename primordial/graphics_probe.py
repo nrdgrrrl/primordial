@@ -20,7 +20,12 @@ from .main import (
     _get_effective_target_fps,
     _get_fullscreen_resolution,
 )
-from .rendering import Renderer
+from .rendering import (
+    Renderer,
+    create_renderer,
+    display_flags_for_settings,
+    save_renderer_screenshot,
+)
 from .settings import Settings
 from .simulation import Simulation
 
@@ -60,17 +65,20 @@ def run_display_toggle_probe(
 
         if start_fullscreen:
             world_width, world_height = _get_fullscreen_resolution()
-            flags = pygame.FULLSCREEN | pygame.SCALED
+            flags = display_flags_for_settings(
+                settings,
+                pygame.FULLSCREEN | pygame.SCALED,
+            )
         else:
             world_width, world_height = DEFAULT_WINDOWED_SIZE
-            flags = 0
+            flags = display_flags_for_settings(settings)
 
         screen = pygame.display.set_mode((world_width, world_height), flags)
         pygame.display.set_caption("Primordial Graphics Toggle Probe")
         pygame.mouse.set_visible(not settings.fullscreen)
 
         simulation = Simulation(world_width, world_height, settings)
-        renderer = Renderer(screen, settings, debug=True)
+        renderer = create_renderer(screen, settings, debug=True)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
 
@@ -205,7 +213,7 @@ def _capture_checkpoint(
 ) -> dict[str, Any]:
     """Persist a screenshot and capture the current runtime state."""
     screenshot_path = output_dir / f"{label}.png"
-    pygame.image.save(renderer.screen, screenshot_path)
+    save_renderer_screenshot(renderer, screenshot_path)
 
     return {
         "label": label,

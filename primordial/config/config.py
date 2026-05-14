@@ -43,6 +43,7 @@ _SECTION_FIELDS: dict[str, dict[str, tuple[str, str]]] = {
         "show_hud": ("show_hud", "bool"),
     },
     "rendering": {
+        "render_backend": ("render_backend", "str"),
         "glyph_size_base": ("glyph_size_base", "int"),
         "kin_line_max_distance": ("kin_line_max_distance", "float"),
         "kin_line_min_group": ("kin_line_min_group", "int"),
@@ -210,6 +211,7 @@ class Config:
 
     VALID_SIM_MODES = ["energy", "predator_prey", "boids", "drift"]
     VALID_VISUAL_THEMES = ["ocean", "petri", "geometric", "chaotic"]
+    VALID_RENDER_BACKENDS = ["pygame", "gpu"]
 
     def __init__(self) -> None:
         self.config_path = get_config_path()
@@ -356,6 +358,12 @@ class Config:
         if self.visual_theme not in self.VALID_VISUAL_THEMES:
             logger.warning("Invalid visual_theme '%s'; falling back to ocean.", self.visual_theme)
             self.visual_theme = "ocean"
+        if self.render_backend not in self.VALID_RENDER_BACKENDS:
+            logger.warning(
+                "Invalid render_backend '%s'; falling back to pygame.",
+                self.render_backend,
+            )
+            self.render_backend = "pygame"
 
         self._validate_mode_params()
 
@@ -443,6 +451,7 @@ target_fps = {self.target_fps}
 show_hud = {str(self.show_hud).lower()}
 
 [rendering]
+render_backend = "{self.render_backend}"
 glyph_size_base = {self.glyph_size_base}
 kin_line_max_distance = {self.kin_line_max_distance:.1f}
 kin_line_min_group = {self.kin_line_min_group}

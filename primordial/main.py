@@ -35,7 +35,13 @@ try:
 except (AttributeError, OSError):
     logger.debug("DPI awareness API unavailable on this platform.")
 
-from .rendering import Renderer
+from .rendering import (
+    Renderer,
+    create_renderer,
+    display_flags_for_settings,
+    renderer_backend_name,
+    wants_gpu_renderer,
+)
 from .milestone_logging import PredatorPreyMilestoneLogger
 from .run_logging import PredatorPreyCSVRunLogger
 from .settings import Settings
@@ -568,7 +574,8 @@ def main(
     # Set up display based on mode
     if scr_args.mode == "screensaver":
         width, height = _get_fullscreen_resolution()
-        screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
+        flags = display_flags_for_settings(settings, pygame.FULLSCREEN | pygame.SCALED)
+        screen = pygame.display.set_mode((width, height), flags)
         pygame.mouse.set_visible(False)
     elif scr_args.mode == "preview":
         # SDL_WINDOWID was already set by root main.py; just create a surface
@@ -579,14 +586,18 @@ def main(
     else:
         if settings.fullscreen:
             width, height = _get_fullscreen_resolution()
-            screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN | pygame.SCALED)
+            flags = display_flags_for_settings(settings, pygame.FULLSCREEN | pygame.SCALED)
+            screen = pygame.display.set_mode((width, height), flags)
         else:
             if loaded_world_size is not None:
                 width, height = loaded_world_size
             else:
                 width = 1280
                 height = 720
-            screen = pygame.display.set_mode((width, height))
+            screen = pygame.display.set_mode(
+                (width, height),
+                display_flags_for_settings(settings),
+            )
         pygame.mouse.set_visible(False)
 
     pygame.display.set_caption("Primordial")
@@ -621,7 +632,7 @@ def main(
         milestone_logger.log_session_start(simulation)
         if settings.sim_mode == "predator_prey":
             milestone_logger.log_run_start(simulation)
-    renderer = Renderer(screen, settings, debug=runtime_args.debug)
+    renderer = create_renderer(screen, settings, debug=runtime_args.debug)
     active_snapshot_path = _resolve_snapshot_path(
         settings,
         runtime_args.load or runtime_args.save,
@@ -703,7 +714,21 @@ def main(
                     action = renderer.settings_overlay.handle_event(event)
                     if action == "apply":
                         runtime_loop.config = _build_fixed_step_loop_config(settings)
-                        if settings.fullscreen != bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
+                        backend_changed = (
+                            renderer_backend_name(renderer)
+                            != _desired_renderer_backend_name(settings)
+                        )
+                        display_changed = settings.fullscreen != bool(
+                            renderer.screen.get_flags() & pygame.FULLSCREEN
+                        )
+                        if backend_changed:
+                            renderer = _recreate_renderer_for_backend(
+                                settings,
+                                simulation,
+                                debug=runtime_args.debug,
+                                snapshot_path=active_snapshot_path,
+                            )
+                        elif display_changed:
                             _apply_display_mode(settings, simulation, renderer)
                         renderer.set_theme(settings.visual_theme)
                         renderer.set_mode(settings.sim_mode)
@@ -1154,7 +1179,8 @@ def _swap_loaded_simulation(
 ) -> Simulation:
     """Install a loaded simulation into the live runtime without special sim logic."""
     if (simulation.width, simulation.height) != (renderer.width, renderer.height):
-        flags = pygame.FULLSCREEN | pygame.SCALED if settings.fullscreen else 0
+        base_flags = pygame.FULLSCREEN | pygame.SCALED if settings.fullscreen else 0
+        flags = display_flags_for_settings(settings, base_flags)
         screen = pygame.display.set_mode((simulation.width, simulation.height), flags)
         pygame.mouse.set_visible(not settings.fullscreen)
         renderer.resize(simulation.width, simulation.height, screen=screen)
@@ -1381,6 +1407,37 @@ def _force_windowed_mode(
     _apply_display_mode(settings, simulation, renderer)
 
 
+def _desired_renderer_backend_name(settings: Settings) -> str:
+    """Return the backend name implied by the current mode/config/environment."""
+    return "gpu" if wants_gpu_renderer(settings) else "pygame"
+
+
+def _recreate_renderer_for_backend(
+    settings: Settings,
+    simulation: Simulation,
+    *,
+    debug: bool,
+    snapshot_path: Path,
+) -> object:
+    """Recreate the display and renderer when backend requirements change."""
+    if settings.fullscreen:
+        display_size = _get_fullscreen_resolution()
+        base_flags = pygame.FULLSCREEN | pygame.SCALED
+    else:
+        display_size = DEFAULT_WINDOWED_SIZE
+        base_flags = 0
+
+    screen = pygame.display.set_mode(
+        display_size,
+        display_flags_for_settings(settings, base_flags),
+    )
+    pygame.mouse.set_visible(not settings.fullscreen)
+    renderer = create_renderer(screen, settings, debug=debug)
+    renderer.resize(simulation.width, simulation.height, screen=screen)
+    renderer.settings_overlay.set_snapshot_path(str(snapshot_path))
+    return renderer
+
+
 def _apply_display_mode(
     settings: Settings,
     simulation: Simulation,
@@ -1389,11 +1446,12 @@ def _apply_display_mode(
     """Apply the current display mode without mutating simulation world state."""
     if settings.fullscreen:
         width, height = _get_fullscreen_resolution()
-        flags = pygame.FULLSCREEN | pygame.SCALED
+        base_flags = pygame.FULLSCREEN | pygame.SCALED
     else:
         width, height = DEFAULT_WINDOWED_SIZE
-        flags = 0
+        base_flags = 0
 
+    flags = display_flags_for_settings(settings, base_flags)
     screen = pygame.display.set_mode((width, height), flags)
     pygame.mouse.set_visible(not settings.fullscreen)
     renderer.resize(simulation.width, simulation.height, screen=screen)

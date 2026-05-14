@@ -24,7 +24,7 @@ from .main import (
     _get_simulation_tick_hz,
     run_bounded_session,
 )
-from .rendering import Renderer
+from .rendering import create_renderer
 from .scenarios import (
     SCENARIOS,
     ScenarioDefinition as BenchmarkScenario,
@@ -105,7 +105,7 @@ def run_benchmark(
         apply_scenario_settings(settings, scenario)
 
         simulation = Simulation(scenario.width, scenario.height, settings)
-        renderer = Renderer(screen, settings, debug=False)
+        renderer = create_renderer(screen, settings, debug=False)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
