@@ -124,6 +124,24 @@ class InspectMode:
                 best_dist = dist
         self.selected_creature_id = id(best) if best is not None else None
 
+    def select_at_display_pos(
+        self,
+        display_x: float,
+        display_y: float,
+        display_width: int,
+        display_height: int,
+        simulation: Simulation,
+    ) -> None:
+        """Select the nearest creature in the current presentation space."""
+        best = find_nearest_creature_at_display_pos(
+            display_x,
+            display_y,
+            display_width,
+            display_height,
+            simulation,
+        )
+        self.selected_creature_id = id(best) if best is not None else None
+
     def get_selected_creature(self, simulation: Simulation) -> Creature | None:
         """Return the currently selected creature, or None."""
         if self.selected_creature_id is None:
@@ -252,3 +270,38 @@ def display_to_world(
     wx = display_x * (world_width / max(1, display_width))
     wy = display_y * (world_height / max(1, display_height))
     return wx, wy
+
+
+def find_nearest_creature_at_display_pos(
+    display_x: float,
+    display_y: float,
+    display_width: int,
+    display_height: int,
+    simulation: Simulation,
+) -> Creature | None:
+    """Return the nearest creature to a scaled presentation-space click."""
+    world_width = max(1, int(simulation.width))
+    world_height = max(1, int(simulation.height))
+    safe_display_width = max(1, int(display_width))
+    safe_display_height = max(1, int(display_height))
+
+    scale_x = safe_display_width / world_width
+    scale_y = safe_display_height / world_height
+    uniform_scale = min(scale_x, scale_y)
+    base_pick_radius = max(1.0, 48.0 * uniform_scale)
+
+    best: Creature | None = None
+    best_dist = base_pick_radius
+    for creature in simulation.creatures:
+        creature_display_x = creature.x * scale_x
+        creature_display_y = creature.y * scale_y
+        dx = creature_display_x - display_x
+        dy = creature_display_y - display_y
+        dist = math.sqrt(dx * dx + dy * dy)
+
+        displayed_radius = creature.get_radius() * uniform_scale
+        threshold = max(displayed_radius + 8.0, 16.0 * uniform_scale, base_pick_radius)
+        if dist < threshold and dist < best_dist:
+            best = creature
+            best_dist = dist
+    return best

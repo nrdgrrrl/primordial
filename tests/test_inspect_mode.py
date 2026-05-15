@@ -11,6 +11,7 @@ from primordial.rendering.inspect_mode import (
     InspectMode,
     build_creature_card,
     display_to_world,
+    find_nearest_creature_at_display_pos,
 )
 from primordial.rendering.creature_observation import (
     classify_life_stage,
@@ -95,8 +96,13 @@ def _make_creature(
     return creature
 
 
-def _make_simulation(creatures: list | None = None) -> SimpleNamespace:
-    return SimpleNamespace(creatures=creatures or [])
+def _make_simulation(
+    creatures: list | None = None,
+    *,
+    width: int = 800,
+    height: int = 600,
+) -> SimpleNamespace:
+    return SimpleNamespace(creatures=creatures or [], width=width, height=height)
 
 
 class TestInspectModeToggle(unittest.TestCase):
@@ -256,6 +262,32 @@ class TestSelectAtWorldPos(unittest.TestCase):
         mode = InspectMode()
         mode.select_at_world_pos(100.0, 100.0, sim)
         self.assertIsNone(mode.selected_creature_id)
+
+    def test_selects_at_display_pos_when_world_is_scaled(self):
+        creature = _make_creature(x=400.0, y=300.0)
+        sim = _make_simulation([creature], width=1600, height=1200)
+        mode = InspectMode()
+        mode.select_at_display_pos(200.0, 150.0, 800, 600, sim)
+        self.assertEqual(mode.selected_creature_id, id(creature))
+
+
+class TestFindNearestCreatureAtDisplayPos(unittest.TestCase):
+    def test_returns_nearest_creature_in_display_space(self):
+        c1 = _make_creature(x=400.0, y=300.0)
+        c2 = _make_creature(x=1000.0, y=300.0)
+        sim = _make_simulation([c1, c2], width=1600, height=1200)
+
+        result = find_nearest_creature_at_display_pos(198.0, 149.0, 800, 600, sim)
+
+        self.assertIs(result, c1)
+
+    def test_returns_none_when_click_is_out_of_range(self):
+        c1 = _make_creature(x=400.0, y=300.0)
+        sim = _make_simulation([c1], width=1600, height=1200)
+
+        result = find_nearest_creature_at_display_pos(700.0, 500.0, 800, 600, sim)
+
+        self.assertIsNone(result)
 
 
 class TestGetSelectedCreature(unittest.TestCase):
