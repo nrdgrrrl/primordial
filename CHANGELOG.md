@@ -2,6 +2,15 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — refactor: peel display and runtime-state helpers out of main
+
+Moved display mode switching, coordinate diagnostics, keyboard handling, and
+runtime sidecar persistence helpers out of `primordial/main.py` into focused
+modules under `primordial/display/`, `primordial/input/`, and
+`primordial/persistence/`. Updated probes, graphical benchmarking, and tests to
+import those helpers from their new homes without changing simulation,
+rendering, timing, benchmark, or UI behavior.
+
 ## [2026-05-15] — cleanup: expose runtime helper API names
 
 Renamed shared fixed-step and frame-metrics runtime helpers to package-internal

@@ -30,7 +30,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame
 
 from .graphics_probe import _build_edge_counts, _hash_zone_state
-from .main import (
+from .display.mode import (
     DEFAULT_WINDOWED_SIZE,
     _apply_display_mode,
     _get_fullscreen_resolution,

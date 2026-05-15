@@ -15,11 +15,11 @@ import pygame
 from primordial.rendering.hud import HUD
 from primordial.rendering.renderer import Renderer
 from primordial.settings import Settings
-from primordial.main import (
+from primordial.input import handle_keydown
+from primordial.persistence.runtime_state import (
     _load_predator_prey_tuning_state,
     _predator_prey_tuning_state_path,
     _save_predator_prey_tuning_state,
-    handle_keydown,
 )
 from primordial.runtime import create_fixed_step_loop_state
 from primordial.simulation import Simulation, build_snapshot, load_snapshot_payload

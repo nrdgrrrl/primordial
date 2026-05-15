@@ -12,7 +12,7 @@ from typing import Any
 
 import pygame
 
-from .main import (
+from .display.mode import (
     DEFAULT_WINDOWED_SIZE,
     _apply_display_mode,
     _get_fullscreen_resolution,

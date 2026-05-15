@@ -18,13 +18,13 @@ class GraphicsProbeTests(unittest.TestCase):
             "primordial.graphics_probe._get_fullscreen_resolution",
             return_value=(1920, 1080),
         ), patch(
-            "primordial.main._get_fullscreen_resolution",
+            "primordial.display.mode._get_fullscreen_resolution",
             return_value=(1920, 1080),
         ), patch(
             "primordial.graphics_probe.pygame.SCALED",
             0,
         ), patch(
-            "primordial.main.pygame.SCALED",
+            "primordial.display.mode.pygame.SCALED",
             0,
         ):
             report = run_display_toggle_probe(

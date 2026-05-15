@@ -8,15 +8,12 @@ Supports Windows screensaver modes: /s (screensaver), /p HWND (preview), /c (con
 
 from __future__ import annotations
 
-import json
 import logging
 import platform
 import random
 import sys
 import time
-import webbrowser
 from pathlib import Path
-from typing import Any
 
 import pygame
 
@@ -31,16 +28,26 @@ try:
 except (AttributeError, OSError):
     logger.debug("DPI awareness API unavailable on this platform.")
 
-from .rendering import (
-    Renderer,
-    create_renderer,
-    display_flags_for_settings,
-    renderer_backend_name,
-    wants_gpu_renderer,
+from .display import (
+    DEFAULT_WINDOWED_SIZE,
+    _apply_display_mode,
+    _desired_renderer_backend_name,
+    _get_fullscreen_resolution,
+    _log_inspect_click_diagnostics,
+    _recreate_renderer_for_backend,
+    window_to_world,
 )
-from .rendering.inspect_mode import InspectMode as _InspectMode
+from .input import handle_keydown
+from .rendering import Renderer, create_renderer, display_flags_for_settings, renderer_backend_name
+from .persistence.runtime_state import (
+    _create_milestone_logger,
+    _create_run_logger,
+    _load_predator_prey_tuning_state,
+    _open_predator_prey_help,
+    _resolve_snapshot_path,
+    _save_predator_prey_tuning_state,
+)
 from .runtime import (
-    FixedStepLoopState,
     LoopTimingCollector,
     advance_fixed_step_frame,
     build_fixed_step_loop_config,
@@ -50,8 +57,6 @@ from .runtime import (
     simulation_timing_is_suppressed,
 )
 from .runtime.profile import _run_profile_session
-from .milestone_logging import PredatorPreyMilestoneLogger
-from .run_logging import PredatorPreyCSVRunLogger
 from .settings import Settings
 from .simulation import (
     Simulation,
@@ -61,158 +66,7 @@ from .simulation import (
     save_snapshot,
 )
 from .utils.cli import RuntimeArgs
-from .utils.paths import get_base_path
 from .utils.screensaver import ScreensaverArgs
-
-DEFAULT_WINDOWED_SIZE = (1280, 720)
-PREDATOR_PREY_TUNING_STATE_VERSION = 1
-PREDATOR_PREY_TUNING_STATE_KIND = "primordial.predator_prey_tuning_state"
-
-
-def _get_fullscreen_resolution() -> tuple[int, int]:
-    """Resolve the desktop/native resolution used for fullscreen mode."""
-    get_desktop_sizes = getattr(pygame.display, "get_desktop_sizes", None)
-    if callable(get_desktop_sizes):
-        try:
-            desktop_sizes = get_desktop_sizes()
-        except pygame.error:
-            desktop_sizes = []
-        if desktop_sizes:
-            return desktop_sizes[0]
-
-    display_info = pygame.display.Info()
-    return display_info.current_w, display_info.current_h
-
-
-def _get_window_size(fallback: tuple[int, int] = DEFAULT_WINDOWED_SIZE) -> tuple[int, int]:
-    """Return SDL logical window size used by mouse event coordinates."""
-    window_width = fallback[0]
-    window_height = fallback[1]
-    get_window_size = getattr(pygame.display, "get_window_size", None)
-    if callable(get_window_size):
-        try:
-            queried_width, queried_height = get_window_size()
-        except pygame.error:
-            queried_width, queried_height = 0, 0
-        if queried_width > 0 and queried_height > 0:
-            window_width = int(queried_width)
-            window_height = int(queried_height)
-    return max(1, window_width), max(1, window_height)
-
-
-def window_to_world(
-    event_x: float,
-    event_y: float,
-    simulation: Simulation,
-) -> tuple[float, float]:
-    """Map SDL mouse-event coordinates into simulation world coordinates."""
-    window_w, window_h = _get_window_size((simulation.width, simulation.height))
-    return (
-        event_x * simulation.width / max(1, window_w),
-        event_y * simulation.height / max(1, window_h),
-    )
-
-
-def world_to_window(
-    world_x: float,
-    world_y: float,
-    simulation: Simulation,
-) -> tuple[float, float]:
-    """Map simulation world coordinates into SDL logical window coordinates."""
-    window_w, window_h = _get_window_size((simulation.width, simulation.height))
-    return (
-        world_x * max(1, window_w) / max(1, simulation.width),
-        world_y * max(1, window_h) / max(1, simulation.height),
-    )
-
-
-def _get_display_window_size(renderer: object) -> tuple[int, int, int, int]:
-    """Return renderer display size and SDL window size for diagnostics."""
-    display_width = max(1, int(getattr(renderer, "display_width", 0)))
-    display_height = max(1, int(getattr(renderer, "display_height", 0)))
-    window_width, window_height = _get_window_size((display_width, display_height))
-    return display_width, display_height, window_width, window_height
-
-
-def _get_gl_viewport() -> list[int] | None:
-    """Return the current OpenGL viewport for diagnostics when a GL context exists."""
-    try:
-        from OpenGL.GL import GL_VIEWPORT, glGetIntegerv
-
-        viewport = glGetIntegerv(GL_VIEWPORT)
-    except Exception:
-        return None
-    try:
-        return [int(value) for value in viewport]
-    except TypeError:
-        return None
-
-
-def _log_inspect_click_diagnostics(
-    event_pos: tuple[int, int],
-    world_pos: tuple[float, float],
-    simulation: Simulation,
-    renderer: object,
-) -> None:
-    """Emit enough inspect-click data to diagnose platform coordinate offsets."""
-    display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
-    selected = renderer.inspect_mode.get_selected_creature(simulation)
-    mouse_pos = pygame.mouse.get_pos()
-    flags = int(renderer.screen.get_flags()) if hasattr(renderer, "screen") else 0
-    backend = renderer_backend_name(renderer)
-
-    selected_payload: dict[str, float | int | str | None] = {
-        "id": None,
-        "species": None,
-        "world_x": None,
-        "world_y": None,
-        "render_window_x": None,
-        "render_window_y": None,
-        "delta_from_event_x": None,
-        "delta_from_event_y": None,
-    }
-    if selected is not None:
-        render_window_x, render_window_y = world_to_window(selected.x, selected.y, simulation)
-        selected_payload = {
-            "id": id(selected),
-            "species": selected.species,
-            "world_x": round(float(selected.x), 3),
-            "world_y": round(float(selected.y), 3),
-            "render_window_x": round(render_window_x, 3),
-            "render_window_y": round(render_window_y, 3),
-            "delta_from_event_x": round(render_window_x - event_pos[0], 3),
-            "delta_from_event_y": round(render_window_y - event_pos[1], 3),
-        }
-
-    logger.debug(
-        "INSPECT_CLICK_DIAGNOSTIC %s",
-        json.dumps(
-            {
-                "backend": backend,
-                "fullscreen": bool(flags & pygame.FULLSCREEN),
-                "opengl": bool(flags & pygame.OPENGL),
-                "scaled": bool(flags & pygame.SCALED),
-                "event_pos": [int(event_pos[0]), int(event_pos[1])],
-                "mouse_get_pos": [int(mouse_pos[0]), int(mouse_pos[1])],
-                "mapped_world_pos": [round(float(world_pos[0]), 3), round(float(world_pos[1]), 3)],
-                "display_size": [display_width, display_height],
-                "window_size": [window_width, window_height],
-                "screen_size": list(renderer.screen.get_size()) if hasattr(renderer, "screen") else None,
-                "renderer_size": [
-                    int(getattr(renderer, "width", 0)),
-                    int(getattr(renderer, "height", 0)),
-                ],
-                "renderer_display_size": [
-                    int(getattr(renderer, "display_width", 0)),
-                    int(getattr(renderer, "display_height", 0)),
-                ],
-                "world_size": [int(simulation.width), int(simulation.height)],
-                "gl_viewport": _get_gl_viewport(),
-                "selected": selected_payload,
-            },
-            sort_keys=True,
-        ),
-    )
 
 
 def main(
@@ -271,8 +125,7 @@ def main(
             if loaded_world_size is not None:
                 width, height = loaded_world_size
             else:
-                width = 1280
-                height = 720
+                width, height = DEFAULT_WINDOWED_SIZE
             screen = pygame.display.set_mode(
                 (width, height),
                 display_flags_for_settings(settings),
@@ -753,132 +606,6 @@ def _resolve_loaded_world_size(
         raise SystemExit(str(exc)) from exc
 
 
-def _default_snapshot_path(settings: Settings) -> Path:
-    """Return the bounded default snapshot path used by in-app save/load."""
-    return Path(settings.config_path).parent / "world_snapshot.json"
-
-
-def _predator_prey_tuning_state_path(settings: Settings) -> Path:
-    """Return the persisted predator-prey tuning state file path."""
-    return Path(settings.config_path).parent / "predator_prey_tuning_state.json"
-
-
-def _run_log_directory(settings: Settings) -> Path:
-    """Return the directory that stores optional CSV run logs."""
-    if getattr(sys, "frozen", False):
-        return Path(settings.config_path).parent / "run_logs"
-    return get_base_path() / "run_logs"
-
-
-def _run_log_csv_path(settings: Settings) -> Path:
-    """Return the predator-prey stability CSV path."""
-    return _run_log_directory(settings) / "predator_prey_runs.csv"
-
-
-def _create_run_logger(
-    settings: Settings,
-    runtime_args: RuntimeArgs,
-) -> PredatorPreyCSVRunLogger | None:
-    """Create the optional CSV run logger when requested at launch."""
-    if runtime_args.log != "csv":
-        return None
-    csv_path = _run_log_csv_path(settings)
-    run_logger = PredatorPreyCSVRunLogger(csv_path)
-    logger.info("CSV run logging enabled: %s", csv_path)
-    return run_logger
-
-
-def _create_milestone_logger(
-    settings: Settings,
-    runtime_args: RuntimeArgs,
-) -> PredatorPreyMilestoneLogger | None:
-    """Create the optional milestone logger when requested at launch."""
-    if not runtime_args.milestone_log:
-        return None
-    yaml_path = _run_log_directory(settings) / runtime_args.milestone_log
-    ml = PredatorPreyMilestoneLogger(yaml_path)
-    return ml
-
-
-def _load_predator_prey_tuning_state(settings: Settings) -> dict[str, Any] | None:
-    path = _predator_prey_tuning_state_path(settings)
-    if not path.exists():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("Unable to read predator-prey tuning state from %s: %s", path, exc)
-        return None
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("version") != PREDATOR_PREY_TUNING_STATE_VERSION:
-        return None
-    if payload.get("kind") != PREDATOR_PREY_TUNING_STATE_KIND:
-        return None
-    state = payload.get("state")
-    return state if isinstance(state, dict) else None
-
-
-def _save_predator_prey_tuning_state(settings: Settings, simulation: Simulation) -> Path | None:
-    if settings.sim_mode != "predator_prey":
-        return None
-    path = _predator_prey_tuning_state_path(settings)
-    payload = {
-        "version": PREDATOR_PREY_TUNING_STATE_VERSION,
-        "kind": PREDATOR_PREY_TUNING_STATE_KIND,
-        "state": simulation.export_predator_prey_tuning_state(),
-    }
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    except OSError as exc:
-        logger.warning("Unable to save predator-prey tuning state to %s: %s", path, exc)
-        return None
-    return path
-
-
-def _resolve_snapshot_path(
-    settings: Settings,
-    active_snapshot_path: str | Path | None,
-) -> Path:
-    """Reuse the active session path when present, otherwise use the default path."""
-    if active_snapshot_path is None:
-        return _default_snapshot_path(settings)
-    return Path(active_snapshot_path)
-
-
-def _predator_prey_help_path() -> Path:
-    """Resolve the bundled predator/prey system guide path."""
-    return get_base_path() / "docs" / "predator_prey_system_guide.md"
-
-
-def _open_predator_prey_help(
-    settings: Settings,
-    simulation: Simulation,
-    renderer: Renderer,
-) -> tuple[bool, str]:
-    """Open the predator/prey guide in the user's browser, exiting fullscreen first."""
-    help_path = _predator_prey_help_path()
-    if not help_path.exists():
-        return False, f"Help file missing: {help_path.name}"
-
-    if settings.fullscreen or bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
-        _force_windowed_mode(settings, simulation, renderer)
-
-    try:
-        opened = webbrowser.open_new_tab(help_path.resolve().as_uri())
-    except (OSError, webbrowser.Error) as exc:
-        logger.warning("Help launch failed for %s: %s", help_path, exc)
-        return False, f"Help launch failed: {exc}"
-
-    if not opened:
-        logger.warning("Browser reported failure opening help file: %s", help_path)
-        return False, f"Help launch failed for {help_path.name}"
-
-    logger.info("Opened predator/prey guide in browser: %s", help_path)
-    return True, f"Opened {help_path.name} in browser"
-
-
 def _swap_loaded_simulation(
     simulation: Simulation,
     settings: Settings,
@@ -983,220 +710,6 @@ def _run_config_dialog() -> None:
 
     pygame.quit()
     sys.exit(0)
-
-
-def handle_keydown(
-    event: pygame.event.Event,
-    simulation: Simulation,
-    renderer: Renderer,
-    settings: Settings,
-    screen: pygame.Surface,
-    mode: str,
-    runtime_loop: FixedStepLoopState,
-    inspect_mode: InspectMode | None = None,
-) -> bool:
-    """
-    Handle keyboard input.
-
-    Returns:
-        True to continue running, False to quit.
-    """
-    key = event.key
-
-    if key in (pygame.K_ESCAPE, pygame.K_q):
-        return False
-    elif key == pygame.K_h:
-        renderer.toggle_hud()
-    elif key == pygame.K_i:
-        if inspect_mode is not None:
-            was_enabled = inspect_mode.enabled
-            inspect_mode.toggle(simulation_paused=simulation.paused)
-            if inspect_mode.enabled:
-                simulation.paused = True
-                pygame.mouse.set_visible(True)
-                renderer.show_cursor = True
-            else:
-                restore_paused = inspect_mode.was_paused_before
-                if restore_paused is not None:
-                    simulation.paused = restore_paused
-                else:
-                    simulation.paused = False
-                hide_cursor = (
-                    settings.fullscreen
-                    or bool(screen.get_flags() & pygame.FULLSCREEN)
-                    or mode == "screensaver"
-                )
-                pygame.mouse.set_visible(not hide_cursor)
-                renderer.show_cursor = False
-                inspect_mode.clear_selection()
-            runtime_loop.reset_timing_debt()
-    elif key == pygame.K_m:
-        if inspect_mode is not None and inspect_mode.enabled:
-            inspect_mode.toggle_pause_slow()
-            if inspect_mode.pause_mode == "pause":
-                simulation.paused = True
-            elif inspect_mode.pause_mode == "slow":
-                simulation.paused = False
-            inspect_mode._slow_accumulator = 0.0
-            runtime_loop.reset_timing_debt()
-    elif key == pygame.K_d:
-        if inspect_mode is not None and inspect_mode.enabled:
-            inspect_mode.toggle_detail_level()
-    elif key == pygame.K_s and mode != "screensaver":
-        renderer.toggle_settings_overlay()
-    elif key == pygame.K_SPACE:
-        if simulation.predator_prey_game_over_active:
-            simulation.restart_predator_prey_run()
-            renderer.reset_runtime_state()
-            runtime_loop.reset_timing_debt()
-            return True
-        simulation.paused = not simulation.paused
-        runtime_loop.reset_timing_debt()
-    elif key == pygame.K_f:
-        toggle_fullscreen(settings, simulation, renderer)
-    elif key == pygame.K_r:
-        if settings.sim_mode == "predator_prey":
-            simulation.restart_predator_prey_run()
-            renderer.reset_runtime_state()
-        else:
-            simulation.reset()
-        runtime_loop.reset_timing_debt()
-    elif key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
-        settings.food_spawn_rate = min(2.0, settings.food_spawn_rate + 0.1)
-    elif key in (pygame.K_MINUS, pygame.K_UNDERSCORE, pygame.K_KP_MINUS):
-        settings.food_spawn_rate = max(0.1, settings.food_spawn_rate - 0.1)
-
-    return True
-
-
-def toggle_fullscreen(
-    settings: Settings,
-    simulation: Simulation,
-    renderer: Renderer,
-) -> None:
-    """Toggle between fullscreen and windowed mode."""
-    settings.fullscreen = not settings.fullscreen
-    _apply_display_mode(settings, simulation, renderer)
-
-
-def _force_windowed_mode(
-    settings: Settings,
-    simulation: Simulation,
-    renderer: Renderer,
-) -> None:
-    """Recreate the display explicitly in windowed mode."""
-    if not settings.fullscreen and not bool(renderer.screen.get_flags() & pygame.FULLSCREEN):
-        return
-    settings.fullscreen = False
-    _apply_display_mode(settings, simulation, renderer)
-
-
-def _desired_renderer_backend_name(settings: Settings) -> str:
-    """Return the backend name implied by the current mode/config/environment."""
-    return "gpu" if wants_gpu_renderer(settings) else "pygame"
-
-
-def _display_mode_size(settings: Settings) -> tuple[tuple[int, int], int]:
-    """Return the active logical world/window size plus pygame base flags."""
-    if settings.fullscreen:
-        return _get_fullscreen_resolution(), pygame.FULLSCREEN | pygame.SCALED
-    return DEFAULT_WINDOWED_SIZE, 0
-
-
-def _log_display_mode_coordinate_state(
-    settings: Settings,
-    simulation: Simulation,
-    renderer: object,
-    *,
-    phase: str,
-) -> None:
-    """Log coordinate-space invariants after display mode changes."""
-    display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
-    screen = getattr(renderer, "screen", None)
-    screen_size = list(screen.get_size()) if hasattr(screen, "get_size") else None
-    payload = {
-        "phase": phase,
-        "fullscreen": bool(settings.fullscreen),
-        "window_size": [window_width, window_height],
-        "drawable_size": [
-            int(getattr(renderer, "drawable_width", display_width)),
-            int(getattr(renderer, "drawable_height", display_height)),
-        ],
-        "screen_size": screen_size,
-        "renderer_size": [
-            int(getattr(renderer, "width", 0)),
-            int(getattr(renderer, "height", 0)),
-        ],
-        "simulation_size": [int(simulation.width), int(simulation.height)],
-        "gl_viewport": _get_gl_viewport(),
-    }
-    logger.debug("DISPLAY_MODE_COORDINATE_STATE %s", json.dumps(payload, sort_keys=True))
-
-    renderer_size = (int(getattr(renderer, "width", 0)), int(getattr(renderer, "height", 0)))
-    simulation_size = (int(simulation.width), int(simulation.height))
-    if renderer_size != simulation_size:
-        logger.warning(
-            "Display mode coordinate invariant mismatch: renderer_size=%s simulation_size=%s",
-            renderer_size,
-            simulation_size,
-        )
-    if not settings.fullscreen and simulation_size != DEFAULT_WINDOWED_SIZE:
-        logger.warning(
-            "Windowed mode world size mismatch: simulation_size=%s expected=%s",
-            simulation_size,
-            DEFAULT_WINDOWED_SIZE,
-        )
-
-
-def _recreate_renderer_for_backend(
-    settings: Settings,
-    simulation: Simulation,
-    *,
-    debug: bool,
-    snapshot_path: Path,
-) -> object:
-    """Recreate the display and renderer when backend requirements change."""
-    display_size, base_flags = _display_mode_size(settings)
-
-    screen = pygame.display.set_mode(
-        display_size,
-        display_flags_for_settings(settings, base_flags),
-    )
-    pygame.mouse.set_visible(not settings.fullscreen)
-    simulation.resize(*display_size)
-    renderer = create_renderer(screen, settings, debug=debug)
-    renderer.resize(*display_size, screen=screen)
-    renderer.reset_runtime_state()
-    renderer.settings_overlay.set_snapshot_path(str(snapshot_path))
-    _log_display_mode_coordinate_state(
-        settings,
-        simulation,
-        renderer,
-        phase="recreate_renderer_for_backend",
-    )
-    return renderer
-
-
-def _apply_display_mode(
-    settings: Settings,
-    simulation: Simulation,
-    renderer: Renderer,
-) -> None:
-    """Apply the current display mode and resize the simulation world to match."""
-    (width, height), base_flags = _display_mode_size(settings)
-
-    flags = display_flags_for_settings(settings, base_flags)
-    screen = pygame.display.set_mode((width, height), flags)
-    pygame.mouse.set_visible(not settings.fullscreen)
-    simulation.resize(width, height)
-    renderer.resize(width, height, screen=screen)
-    renderer.reset_runtime_state()
-    _log_display_mode_coordinate_state(
-        settings,
-        simulation,
-        renderer,
-        phase="apply_display_mode",
-    )
 
 
 if __name__ == "__main__":

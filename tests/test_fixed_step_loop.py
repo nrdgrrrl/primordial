@@ -9,17 +9,21 @@ from unittest.mock import patch
 
 import pygame
 
-from primordial.main import (
-    DEFAULT_WINDOWED_SIZE,
-    _apply_display_mode,
-    _default_snapshot_path,
-    _force_windowed_mode,
+from primordial.display.coordinates import (
     _get_display_window_size,
-    _get_fullscreen_resolution,
-    _open_predator_prey_help,
-    _resolve_snapshot_path,
     window_to_world,
     world_to_window,
+)
+from primordial.display.mode import (
+    DEFAULT_WINDOWED_SIZE,
+    _apply_display_mode,
+    _force_windowed_mode,
+    _get_fullscreen_resolution,
+)
+from primordial.persistence.runtime_state import (
+    _default_snapshot_path,
+    _open_predator_prey_help,
+    _resolve_snapshot_path,
 )
 from primordial.runtime import (
     FIXED_SIM_TIMESTEP_SECONDS,
@@ -329,12 +333,12 @@ class FixedStepLoopTests(unittest.TestCase):
             renderer = SimpleNamespace(screen=FakeScreen(pygame.FULLSCREEN))
 
             with patch(
-                "primordial.main.get_base_path",
+                "primordial.persistence.runtime_state.get_base_path",
                 return_value=Path(temp_dir),
             ), patch(
-                "primordial.main._force_windowed_mode",
+                "primordial.persistence.runtime_state._force_windowed_mode",
             ) as force_windowed_mode_mock, patch(
-                "primordial.main.webbrowser.open_new_tab",
+                "primordial.persistence.runtime_state.webbrowser.open_new_tab",
                 return_value=True,
             ) as open_browser_mock:
                 opened, message = _open_predator_prey_help(
@@ -353,10 +357,10 @@ class FixedStepLoopTests(unittest.TestCase):
             settings = SimpleNamespace(fullscreen=False)
 
             with patch(
-                "primordial.main.get_base_path",
+                "primordial.persistence.runtime_state.get_base_path",
                 return_value=Path(temp_dir),
             ), patch(
-                "primordial.main.webbrowser.open_new_tab",
+                "primordial.persistence.runtime_state.webbrowser.open_new_tab",
             ) as open_browser_mock:
                 opened, message = _open_predator_prey_help(
                     settings,
@@ -383,10 +387,10 @@ class FixedStepLoopTests(unittest.TestCase):
         replacement_screen = object()
 
         with patch(
-            "primordial.main.pygame.display.set_mode",
+            "primordial.display.mode.pygame.display.set_mode",
             return_value=replacement_screen,
         ) as set_mode_mock, patch(
-            "primordial.main.pygame.mouse.set_visible",
+            "primordial.display.mode.pygame.mouse.set_visible",
         ) as set_visible_mock:
             _force_windowed_mode(settings, simulation, renderer)
 
@@ -403,10 +407,10 @@ class FixedStepLoopTests(unittest.TestCase):
 
     def test_get_fullscreen_resolution_prefers_desktop_size_over_current_window(self) -> None:
         with patch(
-            "primordial.main.pygame.display.get_desktop_sizes",
+            "primordial.display.mode.pygame.display.get_desktop_sizes",
             return_value=[(1920, 1080)],
         ), patch(
-            "primordial.main.pygame.display.Info",
+            "primordial.display.mode.pygame.display.Info",
             return_value=SimpleNamespace(current_w=1280, current_h=720),
         ):
             self.assertEqual(_get_fullscreen_resolution(), (1920, 1080))
@@ -425,13 +429,13 @@ class FixedStepLoopTests(unittest.TestCase):
         replacement_screen = object()
 
         with patch(
-            "primordial.main._get_fullscreen_resolution",
+            "primordial.display.mode._get_fullscreen_resolution",
             return_value=(1920, 1080),
         ) as get_resolution_mock, patch(
-            "primordial.main.pygame.display.set_mode",
+            "primordial.display.mode.pygame.display.set_mode",
             return_value=replacement_screen,
         ) as set_mode_mock, patch(
-            "primordial.main.pygame.mouse.set_visible",
+            "primordial.display.mode.pygame.mouse.set_visible",
         ) as set_visible_mock:
             _apply_display_mode(settings, simulation, renderer)
 
@@ -465,10 +469,10 @@ class FixedStepLoopTests(unittest.TestCase):
         replacement_screen = object()
 
         with patch(
-            "primordial.main.pygame.display.set_mode",
+            "primordial.display.mode.pygame.display.set_mode",
             return_value=replacement_screen,
         ) as set_mode_mock, patch(
-            "primordial.main.pygame.mouse.set_visible",
+            "primordial.display.mode.pygame.mouse.set_visible",
         ) as set_visible_mock:
             _apply_display_mode(settings, simulation, renderer)
 
@@ -483,7 +487,7 @@ class FixedStepLoopTests(unittest.TestCase):
     def test_window_to_world_maps_identity_when_window_matches_world(self) -> None:
         simulation = SimpleNamespace(width=1280, height=720)
         with patch(
-            "primordial.main.pygame.display.get_window_size",
+            "primordial.display.coordinates.pygame.display.get_window_size",
             return_value=(1280, 720),
         ):
             self.assertEqual(
@@ -494,7 +498,7 @@ class FixedStepLoopTests(unittest.TestCase):
     def test_window_to_world_scales_uniformly_from_window_to_larger_world(self) -> None:
         simulation = SimpleNamespace(width=1920, height=1080)
         with patch(
-            "primordial.main.pygame.display.get_window_size",
+            "primordial.display.coordinates.pygame.display.get_window_size",
             return_value=(1280, 720),
         ):
             self.assertEqual(
@@ -505,7 +509,7 @@ class FixedStepLoopTests(unittest.TestCase):
     def test_window_world_round_trip_is_stable(self) -> None:
         simulation = SimpleNamespace(width=1920, height=1080)
         with patch(
-            "primordial.main.pygame.display.get_window_size",
+            "primordial.display.coordinates.pygame.display.get_window_size",
             return_value=(1280, 720),
         ):
             world_pos = window_to_world(835, 424, simulation)
@@ -516,7 +520,7 @@ class FixedStepLoopTests(unittest.TestCase):
         renderer = SimpleNamespace(display_width=2560, display_height=1440)
 
         with patch(
-            "primordial.main.pygame.display.get_window_size",
+            "primordial.display.coordinates.pygame.display.get_window_size",
             return_value=(1280, 720),
         ):
             self.assertEqual(
@@ -539,7 +543,7 @@ class FixedStepLoopTests(unittest.TestCase):
         )
 
         with patch(
-            "primordial.main.pygame.display.get_window_size",
+            "primordial.display.coordinates.pygame.display.get_window_size",
             return_value=(1280, 720),
         ):
             world_x, world_y = window_to_world(835, 424, simulation)
