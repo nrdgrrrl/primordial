@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -35,8 +34,6 @@ from primordial.rendering.creature_observation import (
     depth_preference_label,
     infer_behavior_mode,
     infer_attention_target,
-    LifeStage,
-    AttentionTarget,
 )
 
 

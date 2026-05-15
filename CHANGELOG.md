@@ -2,6 +2,15 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — fix: settings overlay runtime action handling
+
+Extracted settings-overlay action handling from `primordial/main.py` into
+`primordial/runtime/settings_actions.py`. The reset-defaults action now applies
+runtime display/backend/theme/mode/timing updates instead of only mutating saved
+settings, and snapshot loads from the overlay reattach the existing predator-prey
+run and milestone loggers. Removed stale unused imports found during the code
+health audit.
+
 ## [2026-05-15] — refactor: peel display and runtime-state helpers out of main
 
 Moved display mode switching, coordinate diagnostics, keyboard handling, and

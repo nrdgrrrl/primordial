@@ -30,33 +30,32 @@ except (AttributeError, OSError):
 
 from .display import (
     DEFAULT_WINDOWED_SIZE,
-    _apply_display_mode,
-    _desired_renderer_backend_name,
     _get_fullscreen_resolution,
     _log_inspect_click_diagnostics,
-    _recreate_renderer_for_backend,
     window_to_world,
 )
 from .input import handle_keydown
-from .rendering import Renderer, create_renderer, display_flags_for_settings, renderer_backend_name
+from .rendering import create_renderer, display_flags_for_settings
 from .persistence.runtime_state import (
     _create_milestone_logger,
     _create_run_logger,
     _load_predator_prey_tuning_state,
-    _open_predator_prey_help,
     _resolve_snapshot_path,
     _save_predator_prey_tuning_state,
 )
 from .runtime import (
     LoopTimingCollector,
     advance_fixed_step_frame,
-    build_fixed_step_loop_config,
     build_frame_metrics,
     create_fixed_step_loop_state,
     get_effective_target_fps,
     simulation_timing_is_suppressed,
 )
 from .runtime.profile import _run_profile_session
+from .runtime.settings_actions import (
+    SettingsActionContext,
+    handle_settings_overlay_event,
+)
 from .settings import Settings
 from .simulation import (
     Simulation,
@@ -259,138 +258,26 @@ def main(
 
             elif event.type == pygame.KEYDOWN:
                 if renderer.settings_overlay.visible:
-                    action = renderer.settings_overlay.handle_event(event)
-                    if action == "apply":
-                        runtime_loop.config = build_fixed_step_loop_config(settings)
-                        backend_changed = (
-                            renderer_backend_name(renderer)
-                            != _desired_renderer_backend_name(settings)
-                        )
-                        display_changed = settings.fullscreen != bool(
-                            renderer.screen.get_flags() & pygame.FULLSCREEN
-                        )
-                        if backend_changed:
-                            renderer = _recreate_renderer_for_backend(
-                                settings,
-                                simulation,
-                                debug=runtime_args.debug,
-                                snapshot_path=active_snapshot_path,
-                            )
-                        elif display_changed:
-                            _apply_display_mode(settings, simulation, renderer)
-                        renderer.set_theme(settings.visual_theme)
-                        renderer.set_mode(settings.sim_mode)
-                        if settings.sim_mode != _prev_mode:
-                            _begin_mode_transition()
-                        else:
-                            simulation.paused = False
-                            runtime_loop.reset_timing_debt()
-                    elif action == "discard" and renderer.settings_overlay.fade_dir < 0:
-                        simulation.paused = False
-                        runtime_loop.reset_timing_debt()
-                    elif action == "save_snapshot":
-                        try:
-                            active_snapshot_path = save_snapshot(
-                                simulation,
-                                active_snapshot_path,
-                            )
-                        except OSError as exc:
-                            renderer.settings_overlay.set_snapshot_status(
-                                f"Save failed: {exc}",
-                                is_error=True,
-                            )
-                            logger.warning(
-                                "Settings overlay save failed at %s: %s",
-                                active_snapshot_path,
-                                exc,
-                            )
-                        else:
-                            renderer.settings_overlay.set_snapshot_path(
-                                str(active_snapshot_path)
-                            )
-                            renderer.settings_overlay.set_snapshot_status(
-                                f"Saved snapshot to {active_snapshot_path.name}"
-                            )
-                            logger.info(
-                                "Saved simulation snapshot from settings overlay to %s",
-                                active_snapshot_path,
-                            )
-                    elif action == "load_snapshot":
-                        if not active_snapshot_path.exists():
-                            renderer.settings_overlay.set_snapshot_status(
-                                (
-                                    "No snapshot found yet. "
-                                    f"Press V to save one at {active_snapshot_path.name} first."
-                                ),
-                                is_error=True,
-                            )
-                            logger.warning(
-                                "Settings overlay load failed from %s: snapshot file missing",
-                                active_snapshot_path,
-                            )
-                        else:
-                            try:
-                                loaded_simulation = load_snapshot(
-                                    active_snapshot_path,
-                                    settings=settings,
-                                )
-                            except SnapshotError as exc:
-                                renderer.settings_overlay.set_snapshot_status(
-                                    str(exc),
-                                    is_error=True,
-                                )
-                                logger.warning(
-                                    "Settings overlay load failed from %s: %s",
-                                    active_snapshot_path,
-                                    exc,
-                                )
-                            else:
-                                simulation = _swap_loaded_simulation(
-                                    loaded_simulation,
-                                    settings,
-                                    renderer,
-                                )
-                                runtime_loop.config = build_fixed_step_loop_config(settings)
-                                simulation.paused = True
-                                runtime_loop.reset_timing_debt()
-                                renderer.settings_overlay.sync_from_settings()
-                                renderer.settings_overlay.set_snapshot_path(
-                                    str(active_snapshot_path)
-                                )
-                                renderer.settings_overlay.set_snapshot_status(
-                                    f"Loaded snapshot from {active_snapshot_path.name}"
-                                )
-                                logger.info(
-                                    "Loaded simulation snapshot from settings overlay: %s",
-                                    active_snapshot_path,
-                                )
-                    elif action == "help":
-                        opened, status_message = _open_predator_prey_help(
+                    action_result = handle_settings_overlay_event(
+                        event,
+                        SettingsActionContext(
                             settings,
                             simulation,
                             renderer,
-                        )
-                        renderer.settings_overlay.pending["fullscreen"] = settings.fullscreen
-                        renderer.settings_overlay.set_snapshot_status(
-                            status_message,
-                            is_error=not opened,
-                        )
-                        runtime_loop.reset_timing_debt()
-                    elif action == "reset_predator_prey_dials":
-                        if settings.sim_mode != "predator_prey":
-                            renderer.settings_overlay.set_snapshot_status(
-                                "Predator-prey dial reset is only available in predator_prey mode.",
-                                is_error=True,
-                            )
-                        else:
-                            simulation.reset_predator_prey_adaptive_tuning()
-                            simulation.restart_predator_prey_run()
-                            renderer.reset_runtime_state()
-                            runtime_loop.reset_timing_debt()
-                            _save_predator_prey_tuning_state(settings, simulation)
-                            renderer.settings_overlay.set_snapshot_status(
-                                "Reset predator-prey dials to baseline and cleared max ticks."
-                            )
+                            runtime_loop,
+                            active_snapshot_path,
+                            _prev_mode,
+                            runtime_args.debug,
+                            csv_run_logger=csv_run_logger,
+                            milestone_logger=milestone_logger,
+                        ),
+                    )
+                    simulation = action_result.simulation
+                    renderer = action_result.renderer
+                    active_snapshot_path = action_result.active_snapshot_path
+                    _prev_mode = action_result.previous_mode
+                    if action_result.begin_mode_transition:
+                        _begin_mode_transition()
                 else:
                     if event.key == pygame.K_p:
                         renderer.set_predator_highlight(True)
@@ -604,23 +491,6 @@ def _resolve_loaded_world_size(
         return inspect_snapshot_dimensions(runtime_args.load)
     except SnapshotError as exc:
         raise SystemExit(str(exc)) from exc
-
-
-def _swap_loaded_simulation(
-    simulation: Simulation,
-    settings: Settings,
-    renderer: Renderer,
-) -> Simulation:
-    """Install a loaded simulation into the live runtime without special sim logic."""
-    if (simulation.width, simulation.height) != (renderer.width, renderer.height):
-        base_flags = pygame.FULLSCREEN | pygame.SCALED if settings.fullscreen else 0
-        flags = display_flags_for_settings(settings, base_flags)
-        screen = pygame.display.set_mode((simulation.width, simulation.height), flags)
-        pygame.mouse.set_visible(not settings.fullscreen)
-        renderer.resize(simulation.width, simulation.height, screen=screen)
-    renderer.set_mode(settings.sim_mode)
-    renderer.reset_runtime_state()
-    return simulation
 
 
 def _run_config_dialog() -> None:

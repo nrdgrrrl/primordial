@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 import random as _random_module
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # Isolated RNG for rendering — prevents visual randomness from polluting
 # the simulation's global random.Random() state.
