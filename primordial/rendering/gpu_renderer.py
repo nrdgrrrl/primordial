@@ -863,9 +863,9 @@ class PredatorPreyGpuRenderer:
         ]
         self._snapshot_debug_metrics = {
             "kin_lines_build_ms": kin_ms,
-            "kin_line_count": float(kin_line_diagnostics.get("kin_line_count", 0)),
-            "kin_line_segment_count": float(kin_line_diagnostics.get("kin_line_segment_count", 0)),
-            "kin_line_shimmer_count": float(kin_line_diagnostics.get("kin_line_shimmer_count", 0)),
+            "kin_line_count": float(kin_render.diagnostics.get("kin_line_count", 0)),
+            "kin_line_segment_count": float(kin_render.diagnostics.get("kin_line_segment_count", 0)),
+            "kin_line_shimmer_count": float(kin_render.diagnostics.get("kin_line_shimmer_count", 0)),
             "kin_line_max_distance": kin_distance,
             "kin_line_min_group": float(kin_min_group),
             "kin_line_qualifying_lineages": float(kin_line_diagnostics.get("qualifying_lineages", 0)),

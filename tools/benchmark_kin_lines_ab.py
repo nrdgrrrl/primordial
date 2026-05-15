@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A/B benchmark comparing kin-line rendering cost in predator_prey GPU mode.
 
-Runs 2-3 scenarios (kin_off, kin_on, optionally kin_debug_boost) with the same
+Runs 2-3 scenarios (kin_off, kin_on, optionally kin_on_synthetic) with the same
 seed(s) and duration, then prints a short summary table.  Uses in-memory settings
 overrides only — never touches the user config.
 
@@ -57,6 +57,7 @@ class ScenarioConfig:
     kin_line_max_distance: float
     kin_line_min_group: int
     kin_line_debug_boost: bool = False
+    lineage_cluster_size: int = 0
     extra_overrides: dict[str, Any] = field(default_factory=dict)
 
 
@@ -74,6 +75,14 @@ KIN_ON_PLAIN = ScenarioConfig(
     kin_line_min_group=3,
 )
 
+KIN_ON_SYNTHETIC = ScenarioConfig(
+    id="kin_on_synthetic",
+    label="kin_on_synthetic",
+    kin_line_max_distance=220.0,
+    kin_line_min_group=2,
+    lineage_cluster_size=6,
+)
+
 KIN_DEBUG_BOOST = ScenarioConfig(
     id="kin_debug_boost",
     label="kin_debug_boost (diagnostic)",
@@ -82,11 +91,33 @@ KIN_DEBUG_BOOST = ScenarioConfig(
     kin_line_debug_boost=True,
 )
 
-DEFAULT_SCENARIOS = [KIN_OFF, KIN_ON_PLAIN]
+DEFAULT_SCENARIOS = [KIN_OFF, KIN_ON_PLAIN, KIN_ON_SYNTHETIC]
 
 DEFAULT_SEEDS = [161803]
 DEFAULT_SECONDS = 60.0
 SCENARIO_ID = "predator_prey_medium"
+
+
+def _assign_lineage_clusters(simulation: Simulation, cluster_size: int) -> None:
+    """Benchmark-only: reassign lineage_id so nearby creatures share an id.
+
+    Sorts creatures by spatial grid cell then assigns sequential groups the
+    same lineage_id.  Uses ids starting at 1000 to avoid collisions with
+    simulation-assigned ids.  Does not change any simulation behaviour beyond
+    the lineage label.
+    """
+    creatures = simulation.creatures
+    if not creatures or cluster_size < 2:
+        return
+
+    cell = 120.0
+    sorted_creatures = sorted(
+        creatures,
+        key=lambda c: (int(c.x // cell), int(c.y // cell), c.x, c.y),
+    )
+
+    for i, creature in enumerate(sorted_creatures):
+        creature.lineage_id = 1000 + (i // cluster_size)
 
 
 def _apply_overrides(settings: Settings, cfg: ScenarioConfig) -> None:
@@ -135,6 +166,9 @@ def _run_scenario(
         else:
             simulation = Simulation(scenario.width, scenario.height, settings)
 
+        if cfg.lineage_cluster_size >= 2:
+            _assign_lineage_clusters(simulation, cfg.lineage_cluster_size)
+
         renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
@@ -142,8 +176,9 @@ def _run_scenario(
 
         render_breakdown_sums: dict[str, float] = {}
         render_breakdown_counts: dict[str, int] = {}
-        render_breakdown_samples: dict[str, list[float]] = {}
         kin_line_count_samples: list[int] = []
+        kin_qualifying_lineages_samples: list[int] = []
+        kin_largest_lineage_samples: list[int] = []
 
         start_time = time.perf_counter()
         end_time = start_time + seconds
@@ -160,6 +195,9 @@ def _run_scenario(
                 allow_simulation=not sim_suppressed,
             )
             runtime_loop.restore_buffered_attacks(simulation)
+
+            if cfg.lineage_cluster_size >= 2:
+                _assign_lineage_clusters(simulation, cfg.lineage_cluster_size)
 
             render_metrics = renderer.draw(simulation)
             render_ms = render_metrics.get("draw_total_ms", 0.0)
@@ -191,10 +229,13 @@ def _run_scenario(
                     continue
                 render_breakdown_sums[key] = render_breakdown_sums.get(key, 0.0) + float(value)
                 render_breakdown_counts[key] = render_breakdown_counts.get(key, 0) + 1
-                render_breakdown_samples.setdefault(key, []).append(float(value))
 
             if "kin_line_count" in render_metrics:
                 kin_line_count_samples.append(int(render_metrics["kin_line_count"]))
+            if "kin_line_qualifying_lineages" in render_metrics:
+                kin_qualifying_lineages_samples.append(int(render_metrics["kin_line_qualifying_lineages"]))
+            if "kin_line_largest_lineage" in render_metrics:
+                kin_largest_lineage_samples.append(int(render_metrics["kin_line_largest_lineage"]))
 
             if simulation.update_predator_prey_runtime(now_seconds=time.monotonic()):
                 renderer.reset_runtime_state()
@@ -231,6 +272,14 @@ def _run_scenario(
                 statistics.mean(kin_line_count_samples) if kin_line_count_samples else 0.0
             ),
             "kin_line_count_max": max(kin_line_count_samples) if kin_line_count_samples else 0,
+            "kin_qualifying_lineages_mean": (
+                statistics.mean(kin_qualifying_lineages_samples) if kin_qualifying_lineages_samples else 0.0
+            ),
+            "kin_qualifying_lineages_max": max(kin_qualifying_lineages_samples) if kin_qualifying_lineages_samples else 0,
+            "kin_largest_lineage_mean": (
+                statistics.mean(kin_largest_lineage_samples) if kin_largest_lineage_samples else 0.0
+            ),
+            "kin_largest_lineage_max": max(kin_largest_lineage_samples) if kin_largest_lineage_samples else 0,
             "render_breakdown_mean_ms": render_breakdown_mean_ms,
             "active_work_mean": (
                 timing_summary["timing_ms"]["render"]["mean"]
@@ -244,6 +293,7 @@ def _run_scenario(
                 "kin_line_max_distance": cfg.kin_line_max_distance,
                 "kin_line_min_group": cfg.kin_line_min_group,
                 "kin_line_debug_boost": cfg.kin_line_debug_boost,
+                "lineage_cluster_size": cfg.lineage_cluster_size,
             },
         }
         return result
@@ -269,7 +319,9 @@ def _run_all_scenarios(
                 f"sim_ms={result['sim_ms_mean']:.2f}  "
                 f"kin_lines_ms={result['kin_lines_ms_mean']:.3f}  "
                 f"kin_lines_build_ms={result['kin_lines_build_ms_mean']:.3f}  "
-                f"kin_line_count_mean={result['kin_line_count_mean']:.1f}",
+                f"kin_line_count_mean={result['kin_line_count_mean']:.1f}  "
+                f"qual_lineages={result['kin_qualifying_lineages_mean']:.1f}  "
+                f"largest_lineage={result['kin_largest_lineage_mean']:.1f}",
                 flush=True,
             )
     return results
@@ -284,8 +336,10 @@ def _average_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     numeric_keys = [
         "fps_mean", "fps_min", "render_ms_mean", "sim_ms_mean",
         "snapshot_ms_mean", "kin_lines_build_ms_mean", "kin_lines_ms_mean",
-        "kin_line_count_mean", "kin_line_count_max", "active_work_mean",
-        "headroom_30hz",
+        "kin_line_count_mean", "kin_line_count_max",
+        "kin_qualifying_lineages_mean", "kin_qualifying_lineages_max",
+        "kin_largest_lineage_mean", "kin_largest_lineage_max",
+        "active_work_mean", "headroom_30hz",
     ]
     avg: dict[str, Any] = {
         "scenario": results[0]["scenario"],
@@ -305,8 +359,8 @@ def _average_results(results: list[dict[str, Any]]) -> dict[str, Any]:
 def _build_summary_table(rows: list[dict[str, Any]], baseline_row: dict[str, Any]) -> str:
     headers = [
         "scenario", "seeds", "FPS mean/min", "render_ms", "sim_ms",
-        "snapshot_ms", "kin_lines_build_ms", "kin_lines_ms", "kin_line_count",
-        "active_work", "headroom@30Hz",
+        "snapshot_ms", "kin_build_ms", "kin_draw_ms", "lines",
+        "qual_lin", "largest", "active_work", "headroom@30Hz",
     ]
     lines = []
     col_widths = [len(h) for h in headers]
@@ -323,6 +377,8 @@ def _build_summary_table(rows: list[dict[str, Any]], baseline_row: dict[str, Any
             f"{row['kin_lines_build_ms_mean']:.3f}",
             f"{row['kin_lines_ms_mean']:.3f}",
             f"{row['kin_line_count_mean']:.1f}/{row['kin_line_count_max']}",
+            f"{row['kin_qualifying_lineages_mean']:.1f}/{row['kin_qualifying_lineages_max']}",
+            f"{row['kin_largest_lineage_mean']:.1f}/{row['kin_largest_lineage_max']}",
             f"{row['active_work_mean']:.2f}",
             f"{row['headroom_30hz']:.2f}",
         ]
@@ -441,7 +497,7 @@ def main() -> int:
         "--scenarios",
         type=str,
         default=None,
-        help="Comma-separated scenario ids: kin_off,kin_on_plain,kin_debug_boost (default: kin_off,kin_on_plain).",
+        help="Comma-separated scenario ids: kin_off,kin_on_plain,kin_on_synthetic,kin_debug_boost (default: kin_off,kin_on_plain,kin_on_synthetic).",
     )
     parser.add_argument(
         "--output-root",
@@ -456,6 +512,7 @@ def main() -> int:
     scenario_map = {
         "kin_off": KIN_OFF,
         "kin_on_plain": KIN_ON_PLAIN,
+        "kin_on_synthetic": KIN_ON_SYNTHETIC,
         "kin_debug_boost": KIN_DEBUG_BOOST,
     }
     if args.scenarios:

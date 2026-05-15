@@ -2,6 +2,23 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — fix: kin_line_count always reported as 0 in GPU renderer metrics
+
+`gpu_renderer.py` read `kin_line_count`, `kin_line_segment_count`, and
+`kin_line_shimmer_count` from the `kin_line_diagnostics` dict passed into
+`build_kin_line_render_data`, but those metrics are written to a separate
+`render_diag` dict inside that function (returned as `kin_render.diagnostics`).
+The `kin_line_diagnostics` dict only receives `qualifying_lineages` and
+`largest_lineage_size` from `build_gpu_kin_line_sprites`. Changed all three
+reads to use `kin_render.diagnostics` instead.
+
+Also updated `tools/benchmark_kin_lines_ab.py` to:
+- Add `kin_on_synthetic` scenario that assigns spatially-clustered lineage IDs
+  for benchmarking render cost with nonzero kin-line load.
+- Capture `qualifying_lineages` and `largest_lineage_size` metrics.
+- Re-apply lineage cluster assignment each frame so new creatures inherit
+  cluster IDs.
+
 ## [2026-05-15] — render: filament-style kin lines with glow, wave, and shimmer
 
 **What changed** (`primordial/rendering/snapshot.py`,
