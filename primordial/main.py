@@ -43,7 +43,6 @@ from .rendering import (
     wants_gpu_renderer,
 )
 from .rendering.inspect_mode import InspectMode as _InspectMode
-from .rendering.inspect_mode import find_nearest_creature_at_display_pos
 from .milestone_logging import PredatorPreyMilestoneLogger
 from .run_logging import PredatorPreyCSVRunLogger
 from .settings import Settings
@@ -218,28 +217,29 @@ def _get_fullscreen_resolution() -> tuple[int, int]:
     return display_info.current_w, display_info.current_h
 
 
-def _get_mouse_input_size_candidates(renderer: object) -> list[tuple[int, int]]:
-    """Return plausible presentation-space sizes for inspect mouse picking."""
-    candidates: list[tuple[int, int]] = []
-
-    display_size = (
-        max(1, int(getattr(renderer, "display_width", 0))),
-        max(1, int(getattr(renderer, "display_height", 0))),
-    )
-    candidates.append(display_size)
-
+def _map_mouse_event_to_display(
+    mouse_x: float,
+    mouse_y: float,
+    renderer: object,
+) -> tuple[float, float, int, int]:
+    """Map SDL mouse-event coordinates into renderer display coordinates."""
+    display_width = max(1, int(getattr(renderer, "display_width", 0)))
+    display_height = max(1, int(getattr(renderer, "display_height", 0)))
+    window_width = display_width
+    window_height = display_height
     get_window_size = getattr(pygame.display, "get_window_size", None)
     if callable(get_window_size):
         try:
-            window_width, window_height = get_window_size()
+            queried_width, queried_height = get_window_size()
         except pygame.error:
-            window_width, window_height = 0, 0
-        if window_width > 0 and window_height > 0:
-            window_size = (int(window_width), int(window_height))
-            if window_size not in candidates:
-                candidates.append(window_size)
+            queried_width, queried_height = 0, 0
+        if queried_width > 0 and queried_height > 0:
+            window_width = int(queried_width)
+            window_height = int(queried_height)
 
-    return candidates
+    display_x = mouse_x * (display_width / max(1, window_width))
+    display_y = mouse_y * (display_height / max(1, window_height))
+    return display_x, display_y, display_width, display_height
 
 
 @dataclass(frozen=True)
@@ -737,28 +737,17 @@ def main(
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
-                    best_creature = None
-                    best_dist = None
-                    for disp_w, disp_h in _get_mouse_input_size_candidates(renderer):
-                        creature = find_nearest_creature_at_display_pos(
-                            event.pos[0],
-                            event.pos[1],
-                            disp_w,
-                            disp_h,
-                            simulation,
-                        )
-                        if creature is None:
-                            continue
-                        scale_x = disp_w / max(1, simulation.width)
-                        scale_y = disp_h / max(1, simulation.height)
-                        dx = (creature.x * scale_x) - event.pos[0]
-                        dy = (creature.y * scale_y) - event.pos[1]
-                        dist = (dx * dx + dy * dy) ** 0.5
-                        if best_dist is None or dist < best_dist:
-                            best_creature = creature
-                            best_dist = dist
-                    renderer.inspect_mode.selected_creature_id = (
-                        id(best_creature) if best_creature is not None else None
+                    display_x, display_y, disp_w, disp_h = _map_mouse_event_to_display(
+                        event.pos[0],
+                        event.pos[1],
+                        renderer,
+                    )
+                    renderer.inspect_mode.select_at_display_pos(
+                        display_x,
+                        display_y,
+                        disp_w,
+                        disp_h,
+                        simulation,
                     )
 
             elif event.type == pygame.KEYDOWN:

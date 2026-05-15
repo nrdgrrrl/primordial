@@ -21,7 +21,7 @@ from primordial.main import (
     _default_snapshot_path,
     _force_windowed_mode,
     _get_fullscreen_resolution,
-    _get_mouse_input_size_candidates,
+    _map_mouse_event_to_display,
     _open_predator_prey_help,
     _resolve_snapshot_path,
     _run_profile_session,
@@ -399,7 +399,7 @@ class FixedStepLoopTests(unittest.TestCase):
         renderer.resize.assert_called_once_with(1280, 720, screen=replacement_screen)
         simulation.resize.assert_not_called()
 
-    def test_get_mouse_input_size_candidates_include_display_and_window(self) -> None:
+    def test_map_mouse_event_to_display_scales_window_coords_to_display_coords(self) -> None:
         renderer = SimpleNamespace(display_width=2560, display_height=1440)
 
         with patch(
@@ -407,11 +407,11 @@ class FixedStepLoopTests(unittest.TestCase):
             return_value=(1280, 720),
         ):
             self.assertEqual(
-                _get_mouse_input_size_candidates(renderer),
-                [(2560, 1440), (1280, 720)],
+                _map_mouse_event_to_display(640, 360, renderer),
+                (1280.0, 720.0, 2560, 1440),
             )
 
-    def test_get_mouse_input_size_candidates_fall_back_to_display_size(self) -> None:
+    def test_map_mouse_event_to_display_falls_back_to_display_size(self) -> None:
         renderer = SimpleNamespace(display_width=2560, display_height=1440)
 
         with patch(
@@ -419,8 +419,8 @@ class FixedStepLoopTests(unittest.TestCase):
             side_effect=pygame.error("window query failed"),
         ):
             self.assertEqual(
-                _get_mouse_input_size_candidates(renderer),
-                [(2560, 1440)],
+                _map_mouse_event_to_display(640, 360, renderer),
+                (640.0, 360.0, 2560, 1440),
             )
 
 

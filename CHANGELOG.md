@@ -8,10 +8,11 @@ All notable changes to Primordial are documented in this file.
 
 - Fixed a windowed-mode inspect selection bug where clicking a creature could
   select at the wrong on-screen position after switching away from fullscreen.
-- Inspect picking now evaluates whole presentation-size candidates
-  (`display_size`, plus `window_size` when distinct) and chooses the nearest
-  match, instead of forcing one global choice or mixing axes across spaces.
-- Added regression tests covering the candidate-pair helper and fallback path.
+- Inspect picking now maps SDL mouse-event coordinates from window space into
+  the renderer's display space before selecting a creature, covering Linux
+  display/window scaling differences in pygame and OpenGL renderers.
+- Added regression tests covering scaled window-to-display coordinate mapping
+  and the display-size fallback path.
 
 ## [2026-05-14] — feat: Inspect Mode (read-only creature observability)
 
