@@ -218,23 +218,21 @@ def _get_fullscreen_resolution() -> tuple[int, int]:
     return display_info.current_w, display_info.current_h
 
 
-def _get_mouse_input_axis_candidates(renderer: object) -> tuple[list[int], list[int]]:
-    """Return plausible X/Y presentation sizes for mouse-event coordinates."""
-    width_candidates = [max(1, int(getattr(renderer, "display_width", 0)))]
-    height_candidates = [max(1, int(getattr(renderer, "display_height", 0)))]
-
+def _get_mouse_input_size(renderer: object) -> tuple[int, int]:
+    """Return the presentation-space size used for inspect mouse picking."""
     get_window_size = getattr(pygame.display, "get_window_size", None)
     if callable(get_window_size):
         try:
             window_width, window_height = get_window_size()
         except pygame.error:
             window_width, window_height = 0, 0
-        if window_width > 0 and int(window_width) not in width_candidates:
-            width_candidates.append(int(window_width))
-        if window_height > 0 and int(window_height) not in height_candidates:
-            height_candidates.append(int(window_height))
+        if window_width > 0 and window_height > 0:
+            return int(window_width), int(window_height)
 
-    return width_candidates, height_candidates
+    return (
+        max(1, int(getattr(renderer, "display_width", 0))),
+        max(1, int(getattr(renderer, "display_height", 0))),
+    )
 
 
 @dataclass(frozen=True)
@@ -732,30 +730,13 @@ def main(
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
-                    width_candidates, height_candidates = _get_mouse_input_axis_candidates(renderer)
-                    best_creature = None
-                    best_dist = None
-                    for disp_w in width_candidates:
-                        for disp_h in height_candidates:
-                            creature = find_nearest_creature_at_display_pos(
-                                event.pos[0],
-                                event.pos[1],
-                                disp_w,
-                                disp_h,
-                                simulation,
-                            )
-                            if creature is None:
-                                continue
-                            scale_x = disp_w / max(1, simulation.width)
-                            scale_y = disp_h / max(1, simulation.height)
-                            dx = (creature.x * scale_x) - event.pos[0]
-                            dy = (creature.y * scale_y) - event.pos[1]
-                            dist = (dx * dx + dy * dy) ** 0.5
-                            if best_dist is None or dist < best_dist:
-                                best_creature = creature
-                                best_dist = dist
-                    renderer.inspect_mode.selected_creature_id = (
-                        id(best_creature) if best_creature is not None else None
+                    disp_w, disp_h = _get_mouse_input_size(renderer)
+                    renderer.inspect_mode.select_at_display_pos(
+                        event.pos[0],
+                        event.pos[1],
+                        disp_w,
+                        disp_h,
+                        simulation,
                     )
 
             elif event.type == pygame.KEYDOWN:

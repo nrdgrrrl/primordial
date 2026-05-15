@@ -4,16 +4,16 @@ All notable changes to Primordial are documented in this file.
 
 ## [2026-05-15] — fix: windowed inspect-mode picking follows scaled presentation
 
-**What changed** (`primordial/main.py`, `rendering/inspect_mode.py`,
-`tests/test_fixed_step_loop.py`, `tests/test_inspect_mode.py`):
+**What changed** (`primordial/main.py`, `tests/test_fixed_step_loop.py`):
 
 - Fixed a windowed-mode inspect selection bug where clicking a creature could
   select at the wrong on-screen position after switching away from fullscreen.
-- Inspect picking now works in scaled presentation space and evaluates the
-  plausible display/window coordinate candidates instead of assuming a single
-  mouse-input space.
-- Added regression tests covering both the candidate-axis helper and scaled
-  presentation-space creature picking.
+- Inspect picking now uses the window presentation size directly, with a
+  display-surface fallback only when the window-size query is unavailable.
+- Removed the mixed-axis candidate logic so windowed inspect clicks stay in one
+  consistent scaled coordinate space.
+- Added regression tests covering the window-size path and the display-size
+  fallback path.
 
 ## [2026-05-14] — feat: Inspect Mode (read-only creature observability)
 
