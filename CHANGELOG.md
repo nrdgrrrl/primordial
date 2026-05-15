@@ -2,16 +2,22 @@
 
 All notable changes to Primordial are documented in this file.
 
-## [2026-05-15] — debug: inspect click coordinate diagnostics
+## [2026-05-15] — fix: inspect click selection compares Linux coordinate spaces
 
 **What changed** (`primordial/main.py`, `tests/test_fixed_step_loop.py`):
 
+- Fixed windowed Inspect Mode selection on Linux OpenGL setups where SDL mouse
+  events, the OpenGL drawable, and the apparent window size can disagree after
+  a fullscreen/windowed transition.
+- Inspect click selection now evaluates raw display coordinates and
+  window-to-display scaled coordinates as complete candidate mappings, then
+  chooses the candidate with the best normalized pick score.
 - Added debug-only JSON diagnostics for Inspect Mode mouse clicks, including
   raw event coordinates, `pygame.mouse.get_pos()`, display/window/screen/world
   sizes, renderer backend and flags, mapped world coordinates, and selected
   creature render deltas.
-- Added regression tests for the display/window size helper used by the
-  diagnostic output.
+- Added regression tests for display/window size reporting, coordinate mapping,
+  and normalized candidate selection.
 
 ## [2026-05-14] — feat: Inspect Mode (read-only creature observability)
 

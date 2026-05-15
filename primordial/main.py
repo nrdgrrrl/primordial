@@ -11,6 +11,7 @@ from __future__ import annotations
 import cProfile
 import json
 import logging
+import math
 import platform
 import pstats
 import random
@@ -242,6 +243,96 @@ def _map_mouse_event_to_display(
     return display_x, display_y, display_width, display_height
 
 
+def _iter_mouse_display_candidates(
+    mouse_x: float,
+    mouse_y: float,
+    renderer: object,
+) -> list[tuple[str, float, float, int, int]]:
+    """Return complete candidate interpretations of a mouse click."""
+    display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
+    candidates = [
+        ("raw_display", float(mouse_x), float(mouse_y), display_width, display_height)
+    ]
+    scaled_x = mouse_x * (display_width / max(1, window_width))
+    scaled_y = mouse_y * (display_height / max(1, window_height))
+    if not (math.isclose(scaled_x, mouse_x) and math.isclose(scaled_y, mouse_y)):
+        candidates.append(("window_to_display", scaled_x, scaled_y, display_width, display_height))
+    return candidates
+
+
+def _score_nearest_creature_at_display_pos(
+    display_x: float,
+    display_y: float,
+    display_width: int,
+    display_height: int,
+    simulation: Simulation,
+) -> tuple[object | None, float | None, float | None]:
+    """Return nearest creature plus normalized score in one display space."""
+    world_width = max(1, int(simulation.width))
+    world_height = max(1, int(simulation.height))
+    safe_display_width = max(1, int(display_width))
+    safe_display_height = max(1, int(display_height))
+    scale_x = safe_display_width / world_width
+    scale_y = safe_display_height / world_height
+    uniform_scale = min(scale_x, scale_y)
+    base_pick_radius = max(1.0, 48.0 * uniform_scale)
+
+    best_creature = None
+    best_score: float | None = None
+    best_dist: float | None = None
+    for creature in simulation.creatures:
+        creature_display_x = creature.x * scale_x
+        creature_display_y = creature.y * scale_y
+        dx = creature_display_x - display_x
+        dy = creature_display_y - display_y
+        dist = math.sqrt(dx * dx + dy * dy)
+        displayed_radius = creature.get_radius() * uniform_scale
+        threshold = max(displayed_radius + 8.0, 16.0 * uniform_scale, base_pick_radius)
+        if dist >= threshold:
+            continue
+        score = dist / max(1.0, threshold)
+        if best_score is None or score < best_score:
+            best_creature = creature
+            best_score = score
+            best_dist = dist
+    return best_creature, best_score, best_dist
+
+
+def _select_inspect_click(
+    mouse_x: float,
+    mouse_y: float,
+    simulation: Simulation,
+    renderer: object,
+) -> tuple[float, float, int, int, str, float | None, float | None]:
+    """Select the best inspect target across plausible Linux mouse spaces."""
+    best_creature = None
+    best_score: float | None = None
+    best_dist: float | None = None
+    best_candidate = _iter_mouse_display_candidates(mouse_x, mouse_y, renderer)[0]
+    for candidate in _iter_mouse_display_candidates(mouse_x, mouse_y, renderer):
+        label, display_x, display_y, display_width, display_height = candidate
+        creature, score, dist = _score_nearest_creature_at_display_pos(
+            display_x,
+            display_y,
+            display_width,
+            display_height,
+            simulation,
+        )
+        if score is None:
+            continue
+        if best_score is None or score < best_score:
+            best_creature = creature
+            best_score = score
+            best_dist = dist
+            best_candidate = candidate
+
+    renderer.inspect_mode.selected_creature_id = (
+        id(best_creature) if best_creature is not None else None
+    )
+    label, display_x, display_y, display_width, display_height = best_candidate
+    return display_x, display_y, display_width, display_height, label, best_score, best_dist
+
+
 def _get_display_window_size(renderer: object) -> tuple[int, int, int, int]:
     """Return renderer display size and SDL window size for diagnostics."""
     display_width = max(1, int(getattr(renderer, "display_width", 0)))
@@ -280,6 +371,9 @@ def _log_inspect_click_diagnostics(
     mapped_display_size: tuple[int, int],
     simulation: Simulation,
     renderer: object,
+    selected_candidate: str,
+    selected_score: float | None,
+    selected_distance: float | None,
 ) -> None:
     """Emit enough inspect-click data to diagnose platform coordinate offsets."""
     display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
@@ -309,6 +403,29 @@ def _log_inspect_click_diagnostics(
         mapped_display_size[1],
         simulation,
     )
+    candidates = []
+    for label, candidate_x, candidate_y, candidate_w, candidate_h in _iter_mouse_display_candidates(
+        event_pos[0],
+        event_pos[1],
+        renderer,
+    ):
+        creature, score, dist = _score_nearest_creature_at_display_pos(
+            candidate_x,
+            candidate_y,
+            candidate_w,
+            candidate_h,
+            simulation,
+        )
+        candidates.append(
+            {
+                "label": label,
+                "display_pos": [round(float(candidate_x), 3), round(float(candidate_y), 3)],
+                "display_size": [candidate_w, candidate_h],
+                "nearest_id": id(creature) if creature is not None else None,
+                "score": round(score, 6) if score is not None else None,
+                "distance": round(dist, 3) if dist is not None else None,
+            }
+        )
 
     selected_payload: dict[str, float | int | str | None] = {
         "id": None,
@@ -374,6 +491,10 @@ def _log_inspect_click_diagnostics(
                     round(mapped_world[0], 3),
                     round(mapped_world[1], 3),
                 ],
+                "selected_candidate": selected_candidate,
+                "selected_score": round(selected_score, 6) if selected_score is not None else None,
+                "selected_distance": round(selected_distance, 3) if selected_distance is not None else None,
+                "candidates": candidates,
                 "selected": selected_payload,
             },
             sort_keys=True,
@@ -876,17 +997,11 @@ def main(
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
-                    display_x, display_y, disp_w, disp_h = _map_mouse_event_to_display(
+                    display_x, display_y, disp_w, disp_h, label, score, dist = _select_inspect_click(
                         event.pos[0],
                         event.pos[1],
-                        renderer,
-                    )
-                    renderer.inspect_mode.select_at_display_pos(
-                        display_x,
-                        display_y,
-                        disp_w,
-                        disp_h,
                         simulation,
+                        renderer,
                     )
                     if logger.isEnabledFor(logging.DEBUG):
                         _log_inspect_click_diagnostics(
@@ -895,6 +1010,9 @@ def main(
                             (disp_w, disp_h),
                             simulation,
                             renderer,
+                            label,
+                            score,
+                            dist,
                         )
 
             elif event.type == pygame.KEYDOWN:

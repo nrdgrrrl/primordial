@@ -26,6 +26,7 @@ from primordial.main import (
     _open_predator_prey_help,
     _resolve_snapshot_path,
     _run_profile_session,
+    _select_inspect_click,
     _simulation_timing_is_suppressed,
 )
 
@@ -93,6 +94,21 @@ class FakeScreen:
 
     def get_flags(self) -> int:
         return self._flags
+
+
+class FakeInspectMode:
+    def __init__(self) -> None:
+        self.selected_creature_id: int | None = None
+
+
+class FakeCreature:
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+        self.species = "none"
+
+    def get_radius(self) -> float:
+        return 5.0
 
 
 class FixedStepLoopTests(unittest.TestCase):
@@ -435,6 +451,36 @@ class FixedStepLoopTests(unittest.TestCase):
                 _get_display_window_size(renderer),
                 (2560, 1440, 1280, 720),
             )
+
+    def test_select_inspect_click_compares_raw_and_scaled_candidates_by_score(self) -> None:
+        raw_target = FakeCreature(795.0, 311.0)
+        scaled_candidate = FakeCreature(1192.5, 510.0)
+        simulation = SimpleNamespace(
+            width=1920,
+            height=1080,
+            creatures=[raw_target, scaled_candidate],
+        )
+        renderer = SimpleNamespace(
+            display_width=1920,
+            display_height=1080,
+            inspect_mode=FakeInspectMode(),
+        )
+
+        with patch(
+            "primordial.main.pygame.display.get_window_size",
+            return_value=(1280, 720),
+        ):
+            display_x, display_y, _w, _h, label, score, _dist = _select_inspect_click(
+                795,
+                311,
+                simulation,
+                renderer,
+            )
+
+        self.assertEqual(renderer.inspect_mode.selected_creature_id, id(raw_target))
+        self.assertEqual(label, "raw_display")
+        self.assertEqual((display_x, display_y), (795.0, 311.0))
+        self.assertEqual(score, 0.0)
 
 
 if __name__ == "__main__":
