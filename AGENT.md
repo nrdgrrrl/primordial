@@ -2,6 +2,10 @@
 
 This document is for AI coding agents tasked with extending or modifying the Primordial codebase.
 
+## Agent instructions
+Whenever you make code changes you MUST make a meaningful git commit
+Whenever you make code changes you MUST update CHANGELOG.md with and explanation of the change.
+
 ## Project Summary
 
 Primordial is a fullscreen Python screensaver featuring a cellular evolution simulation with bioluminescent visuals. Creatures with heritable genomes compete for food, reproduce with mutations, and evolve over time. The app is designed to run indefinitely on a monitor.

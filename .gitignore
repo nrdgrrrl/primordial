@@ -34,3 +34,4 @@ htmlcov/
 run_logs/
 analysis
 benchmark_outputs
+audit_runs
