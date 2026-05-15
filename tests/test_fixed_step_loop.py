@@ -482,6 +482,35 @@ class FixedStepLoopTests(unittest.TestCase):
         self.assertEqual((display_x, display_y), (795.0, 311.0))
         self.assertEqual(score, 0.0)
 
+    def test_select_inspect_click_allows_mixed_axis_candidate(self) -> None:
+        mixed_target = FakeCreature(835.0, 636.0)
+        simulation = SimpleNamespace(
+            width=1920,
+            height=1080,
+            creatures=[mixed_target],
+        )
+        renderer = SimpleNamespace(
+            display_width=1920,
+            display_height=1080,
+            inspect_mode=FakeInspectMode(),
+        )
+
+        with patch(
+            "primordial.main.pygame.display.get_window_size",
+            return_value=(1280, 720),
+        ):
+            display_x, display_y, _w, _h, label, score, _dist = _select_inspect_click(
+                835,
+                424,
+                simulation,
+                renderer,
+            )
+
+        self.assertEqual(renderer.inspect_mode.selected_creature_id, id(mixed_target))
+        self.assertEqual(label, "raw_x_window_y")
+        self.assertEqual((display_x, display_y), (835.0, 636.0))
+        self.assertEqual(score, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

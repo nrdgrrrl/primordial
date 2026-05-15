@@ -255,8 +255,19 @@ def _iter_mouse_display_candidates(
     ]
     scaled_x = mouse_x * (display_width / max(1, window_width))
     scaled_y = mouse_y * (display_height / max(1, window_height))
-    if not (math.isclose(scaled_x, mouse_x) and math.isclose(scaled_y, mouse_y)):
-        candidates.append(("window_to_display", scaled_x, scaled_y, display_width, display_height))
+    axis_candidates = [
+        ("window_to_display", scaled_x, scaled_y),
+        ("raw_x_window_y", float(mouse_x), scaled_y),
+        ("window_x_raw_y", scaled_x, float(mouse_y)),
+    ]
+    for label, candidate_x, candidate_y in axis_candidates:
+        if any(
+            math.isclose(candidate_x, existing_x)
+            and math.isclose(candidate_y, existing_y)
+            for _existing_label, existing_x, existing_y, _existing_w, _existing_h in candidates
+        ):
+            continue
+        candidates.append((label, candidate_x, candidate_y, display_width, display_height))
     return candidates
 
 

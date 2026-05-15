@@ -9,9 +9,9 @@ All notable changes to Primordial are documented in this file.
 - Fixed windowed Inspect Mode selection on Linux OpenGL setups where SDL mouse
   events, the OpenGL drawable, and the apparent window size can disagree after
   a fullscreen/windowed transition.
-- Inspect click selection now evaluates raw display coordinates and
-  window-to-display scaled coordinates as complete candidate mappings, then
-  chooses the candidate with the best normalized pick score.
+- Inspect click selection now evaluates raw display, window-to-display scaled,
+  and mixed-axis coordinate candidates, then chooses the candidate with the
+  best normalized pick score.
 - Added debug-only JSON diagnostics for Inspect Mode mouse clicks, including
   raw event coordinates, `pygame.mouse.get_pos()`, display/window/screen/world
   sizes, renderer backend and flags, mapped world coordinates, and selected
