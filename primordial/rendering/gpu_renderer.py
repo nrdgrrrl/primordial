@@ -92,11 +92,24 @@ from .renderer import _ZONE_BG_COLORS
 from .settings_overlay import SettingsOverlay
 from .snapshot import (
     GlyphSprite,
+    KinLineStyle,
+    KinLineRenderData,
     LineSprite,
     PredatorPreyRenderSnapshot,
     RadialSprite,
+    build_gpu_kin_line_diagnostics,
     build_gpu_kin_line_sprites,
+    build_kin_line_render_data,
+    kin_line_style_from_settings,
     resolve_gpu_predator_prey_kin_line_distance,
+    _GPU_PREDATOR_PREY_KIN_LINE_ALPHA_NEAR,
+    _GPU_PREDATOR_PREY_KIN_LINE_ALPHA_FAR,
+    _GPU_PREDATOR_PREY_KIN_LINE_WIDTH,
+    _GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_ALPHA_NEAR,
+    _GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_ALPHA_FAR,
+    _GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_WIDTH,
+    KIN_LINE_STYLE_FILAMENT,
+    KIN_LINE_STYLE_PLAIN,
 )
 from .themes import OceanTheme
 
@@ -624,7 +637,18 @@ class PredatorPreyGpuRenderer:
         timings["trails_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
-        self._draw_lines(snapshot.kin_lines, width=1.0)
+        kin_width = (
+            _GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_WIDTH
+            if bool(getattr(self.settings, "kin_line_debug_boost", False))
+            else _GPU_PREDATOR_PREY_KIN_LINE_WIDTH
+        )
+        kin_style = kin_line_style_from_settings(self.settings)
+        if kin_style.style == KIN_LINE_STYLE_FILAMENT and snapshot.kin_glow_lines:
+            glow_width = kin_width * kin_style.glow_width_scale
+            self._draw_lines(snapshot.kin_glow_lines, width=glow_width)
+        self._draw_lines(snapshot.kin_lines, width=kin_width)
+        if snapshot.kin_shimmer_sprites:
+            self._draw_radials(snapshot.kin_shimmer_sprites, blend="additive")
         timings["kin_lines_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
@@ -799,16 +823,38 @@ class PredatorPreyGpuRenderer:
 
         kin_t0 = time.perf_counter()
         kin_distance = resolve_gpu_predator_prey_kin_line_distance(self.settings)
-        kin_lines = build_gpu_kin_line_sprites(
+        kin_min_group = max(2, int(self.settings.kin_line_min_group))
+        kin_debug_boost = bool(getattr(self.settings, "kin_line_debug_boost", False))
+        kin_alpha_near = (
+            _GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_ALPHA_NEAR
+            if kin_debug_boost
+            else _GPU_PREDATOR_PREY_KIN_LINE_ALPHA_NEAR
+        )
+        kin_alpha_far = (
+            _GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_ALPHA_FAR
+            if kin_debug_boost
+            else _GPU_PREDATOR_PREY_KIN_LINE_ALPHA_FAR
+        )
+        kin_style = kin_line_style_from_settings(self.settings)
+        kin_line_diagnostics: dict[str, int | float] = {}
+        kin_render = build_kin_line_render_data(
             simulation.creatures,
             world_width=self.width,
             world_height=self.height,
             max_distance=kin_distance,
-            min_group=max(2, int(self.settings.kin_line_min_group)),
+            min_group=kin_min_group,
             color_for_member=lambda creature: _rgb3(
                 self.theme.resolve_color_for_creature(creature)
             ),
+            anim_time=anim_time,
+            style=kin_style,
+            alpha_near=kin_alpha_near,
+            alpha_far=kin_alpha_far,
+            diagnostics=kin_line_diagnostics,
         )
+        kin_lines = kin_render.core_lines
+        kin_glow_lines = kin_render.glow_lines
+        kin_shimmer_sprites = kin_render.shimmer_sprites
         kin_ms = (time.perf_counter() - kin_t0) * 1000.0
 
         attack_lines = [
@@ -817,7 +863,14 @@ class PredatorPreyGpuRenderer:
         ]
         self._snapshot_debug_metrics = {
             "kin_lines_build_ms": kin_ms,
-            "kin_line_count": float(len(kin_lines)),
+            "kin_line_count": float(kin_line_diagnostics.get("kin_line_count", 0)),
+            "kin_line_segment_count": float(kin_line_diagnostics.get("kin_line_segment_count", 0)),
+            "kin_line_shimmer_count": float(kin_line_diagnostics.get("kin_line_shimmer_count", 0)),
+            "kin_line_max_distance": kin_distance,
+            "kin_line_min_group": float(kin_min_group),
+            "kin_line_qualifying_lineages": float(kin_line_diagnostics.get("qualifying_lineages", 0)),
+            "kin_line_largest_lineage": float(kin_line_diagnostics.get("largest_lineage_size", 0)),
+            "kin_line_debug_boost": 1.0 if kin_debug_boost else 0.0,
         }
         highlights = self._build_predator_highlights(simulation, anim_time)
         return PredatorPreyRenderSnapshot(
@@ -827,6 +880,8 @@ class PredatorPreyGpuRenderer:
             food=tuple(food),
             trails=tuple(trails),
             kin_lines=tuple(kin_lines),
+            kin_glow_lines=tuple(kin_glow_lines),
+            kin_shimmer_sprites=tuple(kin_shimmer_sprites),
             glows=tuple(glows),
             bodies=tuple(bodies),
             glyphs=tuple(glyphs),
@@ -948,7 +1003,8 @@ class PredatorPreyGpuRenderer:
         if not should_draw:
             return
         self._ui_surface.fill((0, 0, 0, 0))
-        self.hud.render(self._ui_surface, simulation, self.fps)
+        debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
+        self.hud.render(self._ui_surface, simulation, self.fps, debug_lines=debug_lines)
         if simulation.predator_prey_game_over_active:
             self._draw_game_over_overlay(simulation)
         self._draw_inspect_overlay(simulation)
@@ -1035,6 +1091,70 @@ class PredatorPreyGpuRenderer:
                 )
             )
         return lines
+
+    def _build_debug_lines(self, timings: dict[str, float]) -> list[str]:
+        """Build compact debug timing lines for the HUD (GPU renderer)."""
+        ext = self._external_debug_metrics
+        event_ms = ext.get("event_ms", 0.0)
+        sim_ms = ext.get("sim_ms", 0.0)
+        draw_ms = timings.get("draw_total_ms", self._debug_timing.get("draw_total_ms", 0.0))
+        present_ms = ext.get("present_ms", 0.0)
+        pacing_ms = ext.get("pacing_ms", 0.0)
+        frame_ms = ext.get("frame_ms", 0.0)
+        eff_fps = ext.get("effective_fps", 0.0)
+        sim_steps = int(ext.get("sim_steps", 0.0))
+        clamp_frames = int(ext.get("clamp_frames", 0.0))
+        dropped_ms = ext.get("dropped_ms", 0.0)
+        result = [
+            "Dbg frame: evt {evt:.2f}ms  sim {sim:.2f}ms  draw {draw:.2f}ms  "
+            "flip {flip:.2f}ms".format(
+                evt=event_ms,
+                sim=sim_ms,
+                draw=draw_ms,
+                flip=present_ms,
+            ),
+            "Dbg loop: frame {frame:.2f}ms  pace {pace:.2f}ms  fps {fps:.1f}  "
+            "steps {steps}  drops {drops}".format(
+                frame=frame_ms,
+                pace=pacing_ms,
+                fps=eff_fps,
+                steps=sim_steps,
+                drops=clamp_frames,
+            ),
+            f"Dbg debt: dropped {dropped_ms:.2f}ms",
+            "Dbg render: snap {snap:.2f}  clear {clear:.2f}  zones {zones:.2f}  "
+            "amb {amb:.2f}  food {food:.2f}".format(
+                snap=timings.get("snapshot_ms", 0.0),
+                clear=timings.get("clear_ms", 0.0),
+                zones=timings.get("zones_ms", 0.0),
+                amb=timings.get("ambient_ms", 0.0),
+                food=timings.get("food_ms", 0.0),
+            ),
+            "Dbg render: trails {trails:.2f}  creatures {creatures:.2f}  "
+            "attacks {attacks:.2f}  hud {hud:.2f}".format(
+                trails=timings.get("trails_ms", 0.0),
+                creatures=timings.get("creatures_ms", 0.0),
+                attacks=timings.get("attacks_ms", 0.0),
+                hud=timings.get("hud_ms", 0.0),
+            ),
+        ]
+        kin_count = int(timings.get("kin_line_count", 0.0))
+        kin_segs = int(timings.get("kin_line_segment_count", 0.0))
+        kin_shimmers = int(timings.get("kin_line_shimmer_count", 0.0))
+        kin_dist = timings.get("kin_line_max_distance", 0.0)
+        kin_min_grp = int(timings.get("kin_line_min_group", 0.0))
+        kin_qual = int(timings.get("kin_line_qualifying_lineages", 0.0))
+        kin_largest = int(timings.get("kin_line_largest_lineage", 0.0))
+        kin_build_ms = timings.get("kin_lines_build_ms", 0.0)
+        kin_boost = bool(timings.get("kin_line_debug_boost", 0.0))
+        boost_tag = " [BOOST]" if kin_boost else ""
+        result.append(
+            f"Dbg kin: {kin_count} lines  {kin_segs} segs  "
+            f"{kin_shimmers} shimmer  dist={kin_dist:.0f}  "
+            f"min_grp={kin_min_grp}  qual={kin_qual}  "
+            f"largest={kin_largest}  {kin_build_ms:.2f}ms{boost_tag}"
+        )
+        return result
 
     def _draw_game_over_overlay(self, simulation) -> None:
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)

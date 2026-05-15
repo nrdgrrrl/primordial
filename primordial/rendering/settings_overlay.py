@@ -68,6 +68,17 @@ class SettingsOverlay:
             Field("Food Cycle Length", "food_cycle_period", "int", 60, 5000, 30, section="Evolution"),
             Field("Zone Count", "zone_count", "int", 0, 12, 1, section="Evolution"),
             Field("Zone Strength", "zone_strength", "float", 0.0, 1.0, 0.05, section="Evolution", use_active_mode_param=True),
+            Field("Kin Line Style", "kin_line_style", "enum", options=["plain", "filament"], section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Distance", "kin_line_max_distance", "float", 0.0, 400.0, 10.0, section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Min Group", "kin_line_min_group", "int", 2, 10, 1, section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Width", "kin_line_width", "float", 0.5, 6.0, 0.5, section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Wave Amp", "kin_line_wave_amplitude", "float", 0.0, 15.0, 0.5, section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Wave Segs", "kin_line_wave_segments", "int", 1, 12, 1, section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Wave Speed", "kin_line_wave_speed", "float", 0.0, 3.0, 0.1, section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Glow", "kin_line_glow", "bool", section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Shimmer", "kin_line_shimmer", "bool", section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Shimmer Str", "kin_line_shimmer_strength", "float", 0.0, 1.0, 0.05, section="Rendering", visible_modes=["predator_prey"]),
+            Field("Kin Line Debug Boost", "kin_line_debug_boost", "bool", section="Rendering", visible_modes=["predator_prey"]),
         ]
         self._panel = pygame.Surface((600, 650), pygame.SRCALPHA)
         self._shade: pygame.Surface | None = None

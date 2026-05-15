@@ -2,18 +2,217 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
+logger = logging.getLogger(__name__)
+
 
 _GPU_PREDATOR_PREY_KIN_LINE_DEFAULT_DISTANCE = 110.0
-_GPU_PREDATOR_PREY_KIN_LINE_ALPHA_NEAR = 0.20
-_GPU_PREDATOR_PREY_KIN_LINE_ALPHA_FAR = 0.05
+_GPU_PREDATOR_PREY_KIN_LINE_ALPHA_NEAR = 0.35
+_GPU_PREDATOR_PREY_KIN_LINE_ALPHA_FAR = 0.12
+_GPU_PREDATOR_PREY_KIN_LINE_WIDTH = 1.5
 _GPU_PREDATOR_PREY_KIN_LINE_MAX_NEIGHBORS_PER_CREATURE = 2
 _GPU_PREDATOR_PREY_KIN_LINE_MAX_LINES_PER_LINEAGE = 96
 _GPU_PREDATOR_PREY_KIN_LINE_MAX_TOTAL_LINES = 512
+_GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_ALPHA_NEAR = 0.75
+_GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_ALPHA_FAR = 0.35
+_GPU_PREDATOR_PREY_KIN_LINE_DEBUG_BOOST_WIDTH = 3.0
+
+KIN_LINE_STYLE_FILAMENT = "filament"
+KIN_LINE_STYLE_PLAIN = "plain"
+KIN_LINE_DEFAULT_WAVE_AMPLITUDE = 3.0
+KIN_LINE_DEFAULT_WAVE_SEGMENTS = 6
+KIN_LINE_DEFAULT_WAVE_SPEED = 1.0
+KIN_LINE_DEFAULT_GLOW_ENABLED = True
+KIN_LINE_DEFAULT_SHIMMER_ENABLED = True
+KIN_LINE_DEFAULT_SHIMMER_STRENGTH = 0.35
+KIN_LINE_DEFAULT_GLOW_WIDTH_SCALE = 2.5
+KIN_LINE_DEFAULT_GLOW_ALPHA_SCALE = 0.35
+KIN_LINE_DEFAULT_SHIMMER_RADIUS = 2.5
+KIN_LINE_DEFAULT_SHIMMER_MAX_COUNT = 1
+
+
+@dataclass(frozen=True, slots=True)
+class KinLineStyle:
+    style: str = KIN_LINE_STYLE_FILAMENT
+    wave_amplitude: float = KIN_LINE_DEFAULT_WAVE_AMPLITUDE
+    wave_segments: int = KIN_LINE_DEFAULT_WAVE_SEGMENTS
+    wave_speed: float = KIN_LINE_DEFAULT_WAVE_SPEED
+    glow_enabled: bool = KIN_LINE_DEFAULT_GLOW_ENABLED
+    shimmer_enabled: bool = KIN_LINE_DEFAULT_SHIMMER_ENABLED
+    shimmer_strength: float = KIN_LINE_DEFAULT_SHIMMER_STRENGTH
+    glow_width_scale: float = KIN_LINE_DEFAULT_GLOW_WIDTH_SCALE
+    glow_alpha_scale: float = KIN_LINE_DEFAULT_GLOW_ALPHA_SCALE
+    shimmer_radius: float = KIN_LINE_DEFAULT_SHIMMER_RADIUS
+    shimmer_max_count: int = KIN_LINE_DEFAULT_SHIMMER_MAX_COUNT
+
+
+@dataclass(frozen=True, slots=True)
+class KinLineRenderData:
+    core_lines: tuple[LineSprite, ...]
+    glow_lines: tuple[LineSprite, ...]
+    shimmer_sprites: tuple[RadialSprite, ...]
+    diagnostics: dict[str, int | float] | None
+
+
+def kin_line_style_from_settings(settings: object) -> KinLineStyle:
+    return KinLineStyle(
+        style=str(getattr(settings, "kin_line_style", KIN_LINE_STYLE_FILAMENT)),
+        wave_amplitude=float(getattr(settings, "kin_line_wave_amplitude", KIN_LINE_DEFAULT_WAVE_AMPLITUDE)),
+        wave_segments=int(getattr(settings, "kin_line_wave_segments", KIN_LINE_DEFAULT_WAVE_SEGMENTS)),
+        wave_speed=float(getattr(settings, "kin_line_wave_speed", KIN_LINE_DEFAULT_WAVE_SPEED)),
+        glow_enabled=bool(getattr(settings, "kin_line_glow", KIN_LINE_DEFAULT_GLOW_ENABLED)),
+        shimmer_enabled=bool(getattr(settings, "kin_line_shimmer", KIN_LINE_DEFAULT_SHIMMER_ENABLED)),
+        shimmer_strength=float(getattr(settings, "kin_line_shimmer_strength", KIN_LINE_DEFAULT_SHIMMER_STRENGTH)),
+        glow_width_scale=float(getattr(settings, "kin_line_glow_width_scale", KIN_LINE_DEFAULT_GLOW_WIDTH_SCALE)),
+        glow_alpha_scale=float(getattr(settings, "kin_line_glow_alpha_scale", KIN_LINE_DEFAULT_GLOW_ALPHA_SCALE)),
+        shimmer_radius=float(getattr(settings, "kin_line_shimmer_radius", KIN_LINE_DEFAULT_SHIMMER_RADIUS)),
+        shimmer_max_count=int(getattr(settings, "kin_line_shimmer_max_count", KIN_LINE_DEFAULT_SHIMMER_MAX_COUNT)),
+    )
+
+
+def _wave_segments_for_line(
+    line: LineSprite,
+    *,
+    segment_count: int,
+    amplitude: float,
+    wave_speed: float,
+    anim_time: float,
+    length_scale: float = 50.0,
+) -> list[LineSprite]:
+    if segment_count < 1:
+        segment_count = 1
+    dx = line.bx - line.ax
+    dy = line.by - line.ay
+    length = math.sqrt(dx * dx + dy * dy)
+    if length < 0.01:
+        return [line]
+    amp = amplitude * min(1.0, length / length_scale)
+    perp_x = -dy / length
+    perp_y = dx / length
+    phase = (line.ax * 127.1 + line.ay * 311.7 + line.bx * 74.7 + line.by * 269.5) % 6283.185
+    points: list[tuple[float, float]] = []
+    for i in range(segment_count + 1):
+        t = i / segment_count
+        offset = amp * math.sin(
+            2.0 * math.pi * t + phase / 1000.0 + anim_time * 2.0 * math.pi * wave_speed
+        )
+        px = line.ax + dx * t + perp_x * offset
+        py = line.ay + dy * t + perp_y * offset
+        points.append((px, py))
+    segments: list[LineSprite] = []
+    for i in range(len(points) - 1):
+        segments.append(
+            LineSprite(
+                points[i][0], points[i][1],
+                points[i + 1][0], points[i + 1][1],
+                line.color,
+            )
+        )
+    return segments
+
+
+def _shimmer_for_line(
+    line: LineSprite,
+    *,
+    style: KinLineStyle,
+    anim_time: float,
+) -> RadialSprite | None:
+    phase = (line.ax * 127.1 + line.ay * 311.7 + line.bx * 74.7 + line.by * 269.5) % 6283.185
+    t = (math.sin(phase / 500.0 + anim_time * 1.5) * 0.5 + 0.5)
+    sx = line.ax + (line.bx - line.ax) * t
+    sy = line.ay + (line.by - line.ay) * t
+    r, g, b, a = line.color
+    bright_r = min(1.0, r + 0.15)
+    bright_g = min(1.0, g + 0.15)
+    bright_b = min(1.0, b + 0.15)
+    shimmer_alpha = a * style.shimmer_strength
+    return RadialSprite(
+        sx, sy,
+        style.shimmer_radius, style.shimmer_radius,
+        (bright_r, bright_g, bright_b, shimmer_alpha),
+        0.8, 1.2,
+    )
+
+
+def build_kin_line_render_data(
+    creatures: Iterable[object],
+    *,
+    world_width: float,
+    world_height: float,
+    max_distance: float,
+    min_group: int,
+    color_for_member: Callable[[object], tuple[float, float, float]],
+    anim_time: float,
+    style: KinLineStyle,
+    alpha_near: float = _GPU_PREDATOR_PREY_KIN_LINE_ALPHA_NEAR,
+    alpha_far: float = _GPU_PREDATOR_PREY_KIN_LINE_ALPHA_FAR,
+    max_neighbors_per_creature: int = _GPU_PREDATOR_PREY_KIN_LINE_MAX_NEIGHBORS_PER_CREATURE,
+    max_lines_per_lineage: int = _GPU_PREDATOR_PREY_KIN_LINE_MAX_LINES_PER_LINEAGE,
+    max_total_lines: int = _GPU_PREDATOR_PREY_KIN_LINE_MAX_TOTAL_LINES,
+    diagnostics: dict[str, int | float] | None = None,
+) -> KinLineRenderData:
+    logical_lines = build_gpu_kin_line_sprites(
+        creatures,
+        world_width=world_width,
+        world_height=world_height,
+        max_distance=max_distance,
+        min_group=min_group,
+        color_for_member=color_for_member,
+        alpha_near=alpha_near,
+        alpha_far=alpha_far,
+        max_neighbors_per_creature=max_neighbors_per_creature,
+        max_lines_per_lineage=max_lines_per_lineage,
+        max_total_lines=max_total_lines,
+        diagnostics=diagnostics,
+    )
+    if not logical_lines or style.style == KIN_LINE_STYLE_PLAIN:
+        return KinLineRenderData(
+            core_lines=logical_lines,
+            glow_lines=(),
+            shimmer_sprites=(),
+            diagnostics=diagnostics,
+        )
+    core_segments: list[LineSprite] = []
+    glow_segments: list[LineSprite] = []
+    shimmer_list: list[RadialSprite] = []
+    for line in logical_lines:
+        segments = _wave_segments_for_line(
+            line,
+            segment_count=style.wave_segments,
+            amplitude=style.wave_amplitude,
+            wave_speed=style.wave_speed,
+            anim_time=anim_time,
+        )
+        core_segments.extend(segments)
+        if style.glow_enabled:
+            r, g, b, a = line.color
+            glow_alpha = a * style.glow_alpha_scale
+            glow_color = (r, g, b, glow_alpha)
+            for seg in segments:
+                glow_segments.append(
+                    LineSprite(seg.ax, seg.ay, seg.bx, seg.by, glow_color)
+                )
+        if style.shimmer_enabled and len(shimmer_list) < max_total_lines * style.shimmer_max_count:
+            shimmer = _shimmer_for_line(line, style=style, anim_time=anim_time)
+            if shimmer is not None:
+                shimmer_list.append(shimmer)
+    render_diag: dict[str, int | float] = {}
+    if diagnostics is not None:
+        render_diag.update(diagnostics)
+    render_diag["kin_line_count"] = len(logical_lines)
+    render_diag["kin_line_segment_count"] = len(core_segments)
+    render_diag["kin_line_shimmer_count"] = len(shimmer_list)
+    return KinLineRenderData(
+        core_lines=tuple(core_segments),
+        glow_lines=tuple(glow_segments),
+        shimmer_sprites=tuple(shimmer_list),
+        diagnostics=render_diag,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +254,8 @@ class PredatorPreyRenderSnapshot:
     food: tuple[RadialSprite, ...]
     trails: tuple[RadialSprite, ...]
     kin_lines: tuple[LineSprite, ...]
+    kin_glow_lines: tuple[LineSprite, ...]
+    kin_shimmer_sprites: tuple[RadialSprite, ...]
     glows: tuple[RadialSprite, ...]
     bodies: tuple[RadialSprite, ...]
     glyphs: tuple[GlyphSprite, ...]
@@ -63,16 +264,62 @@ class PredatorPreyRenderSnapshot:
 
 
 def resolve_gpu_predator_prey_kin_line_distance(settings: object) -> float:
-    """Return the effective GPU predator/prey kin-line distance."""
+    """Return the effective GPU predator/prey kin-line distance.
+
+    Resolution order:
+    1. If kin_line_max_distance > 0.0 -> use it directly.
+    2. If 0.0 is truly explicit (user set it AND it differs from the canonical
+       default) -> disabled (0.0). User deliberately chose 0.0.
+    3. If 0.0 matches the canonical default (likely auto-saved, not user
+       intent) -> fall through to mode-specific defaults.
+    4. If sim_mode is predator_prey -> default 110.0.
+    5. Otherwise -> disabled (0.0).
+    """
     configured = max(0.0, float(getattr(settings, "kin_line_max_distance", 0.0)))
     if configured > 0.0:
+        logger.debug("kin_line: using configured distance %.1f", configured)
         return configured
-    explicit = getattr(settings, "is_render_setting_explicit", None)
-    if callable(explicit) and explicit("kin_line_max_distance"):
+    explicit_fn = getattr(settings, "is_render_setting_explicit", None)
+    is_explicit = callable(explicit_fn) and explicit_fn("kin_line_max_distance")
+    canonical_fn = getattr(settings, "canonical_render_default", None)
+    if is_explicit and callable(canonical_fn):
+        canonical_val = canonical_fn("kin_line_max_distance")
+        if canonical_val != configured:
+            logger.debug("kin_line: explicitly disabled (user chose 0.0, canonical default differs)")
+            return 0.0
+        logger.debug(
+            "kin_line: 0.0 matches canonical default; assuming auto-saved, not explicit"
+        )
+    elif is_explicit:
+        logger.debug("kin_line: explicitly disabled (user set 0.0)")
         return 0.0
     if getattr(settings, "sim_mode", None) == "predator_prey":
+        logger.debug(
+            "kin_line: predator_prey mode default distance %.1f",
+            _GPU_PREDATOR_PREY_KIN_LINE_DEFAULT_DISTANCE,
+        )
         return _GPU_PREDATOR_PREY_KIN_LINE_DEFAULT_DISTANCE
+    logger.debug("kin_line: disabled (not predator_prey mode)")
     return 0.0
+
+
+def build_gpu_kin_line_diagnostics(
+    creatures: Iterable[object],
+    *,
+    min_group: int,
+) -> dict[str, int | float]:
+    """Return lineage diagnostics for kin-line debugging without building lines."""
+    lineage_buckets: dict[int, list[object]] = defaultdict(list)
+    for creature in creatures:
+        lineage_buckets[int(getattr(creature, "lineage_id", -1))].append(creature)
+    total_lineages = len(lineage_buckets)
+    qualifying = sum(1 for members in lineage_buckets.values() if len(members) >= min_group)
+    largest = max((len(members) for members in lineage_buckets.values()), default=0)
+    return {
+        "total_lineages": total_lineages,
+        "qualifying_lineages": qualifying,
+        "largest_lineage_size": largest,
+    }
 
 
 def build_gpu_kin_line_sprites(
@@ -88,9 +335,16 @@ def build_gpu_kin_line_sprites(
     max_neighbors_per_creature: int = _GPU_PREDATOR_PREY_KIN_LINE_MAX_NEIGHBORS_PER_CREATURE,
     max_lines_per_lineage: int = _GPU_PREDATOR_PREY_KIN_LINE_MAX_LINES_PER_LINEAGE,
     max_total_lines: int = _GPU_PREDATOR_PREY_KIN_LINE_MAX_TOTAL_LINES,
+    diagnostics: dict[str, int | float] | None = None,
 ) -> tuple[LineSprite, ...]:
     """Build bounded, deterministic kin-line sprites for the GPU renderer."""
     if max_distance <= 0.0 or min_group <= 1:
+        if diagnostics is not None:
+            diagnostics.update(
+                qualifying_lineages=0,
+                largest_lineage_size=0,
+                total_lineages=0,
+            )
         return ()
 
     safe_width = max(1.0, float(world_width))
@@ -105,12 +359,19 @@ def build_gpu_kin_line_sprites(
     for index, creature in indexed_creatures:
         lineage_buckets[int(getattr(creature, "lineage_id", -1))].append((index, creature))
 
+    qualifying_lineages = 0
+    largest_lineage_size = 0
+
     lines: list[LineSprite] = []
     total_seen_pairs: set[tuple[int, int]] = set()
     for lineage_id in sorted(lineage_buckets):
         members = lineage_buckets[lineage_id]
-        if len(members) < min_group:
+        member_count = len(members)
+        if member_count > largest_lineage_size:
+            largest_lineage_size = member_count
+        if member_count < min_group:
             continue
+        qualifying_lineages += 1
 
         cell_buckets: dict[tuple[int, int], list[tuple[int, object]]] = defaultdict(list)
         for item in members:
@@ -177,6 +438,12 @@ def build_gpu_kin_line_sprites(
                 break
         if len(lines) >= max_total_lines:
             break
+    if diagnostics is not None:
+        diagnostics.update(
+            qualifying_lineages=qualifying_lineages,
+            largest_lineage_size=largest_lineage_size,
+            total_lineages=len(lineage_buckets),
+        )
     return tuple(lines)
 
 

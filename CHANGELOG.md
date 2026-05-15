@@ -2,6 +2,80 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — render: filament-style kin lines with glow, wave, and shimmer
+
+**What changed** (`primordial/rendering/snapshot.py`,
+`primordial/rendering/gpu_renderer.py`, `primordial/config/config.py`,
+`primordial/config/defaults.toml`, `config.toml`,
+`tests/test_gpu_kin_lines.py`, `CHANGELOG.md`):
+
+- Kin lines now support a **filament** style that replaces plain straight debug
+  lines with soft, organic-looking connective threads between related organisms.
+- `KinLineStyle` dataclass controls wave amplitude, segment count, wave speed,
+  glow layer, and shimmer particles — all configurable via `[rendering]` config.
+- Wave segments break each logical kin line into 6 (configurable) short line
+  segments offset perpendicular to the line using a deterministic sine wave
+  animated by `anim_time`. Phase is derived from endpoint coordinates, not RNG.
+- Amplitude fades down for very short lines (< 50px) so tiny connections don't
+  over-wave.
+- Glow pass draws the same wave segments at wider width and reduced alpha
+  (`glow_width_scale=2.5`, `glow_alpha_scale=0.35`) beneath the core line,
+  creating a soft bloom effect.
+- Shimmer places 1 tiny radial glow per line that moves deterministically along
+  the curve, giving a living filament shimmer without glitter.
+- Debug boost still works: it boosts alpha values while preserving wave/glow/shimmer.
+- New config keys: `kin_line_style`, `kin_line_width`, `kin_line_wave_amplitude`,
+  `kin_line_wave_segments`, `kin_line_wave_speed`, `kin_line_glow`,
+  `kin_line_shimmer`, `kin_line_shimmer_strength`.
+- Plain mode (`kin_line_style = "plain"`) is available and returns simple straight
+  lines for debugging or minimal rendering.
+- `PredatorPreyRenderSnapshot` now includes `kin_glow_lines` and
+  `kin_shimmer_sprites` fields alongside `kin_lines`.
+- GPU renderer draws glow lines first (wider), then core lines, then shimmer
+  sprites with additive blending.
+- Diagnostics now include `kin_line_segment_count` and `kin_line_shimmer_count`
+  in the debug HUD.
+- 17 new pure tests covering wave determinism, zero amplitude, segment count,
+  shimmer positions, glow on/off, style builder, max caps, plain mode,
+  debug boost non-interference, and config default/override.
+- Visual hierarchy preserved: kin lines remain softer than attack lines and
+  inspect highlights.
+- No simulation, lineage, reproduction, or ecology behavior was changed.
+
+**Suggested normal config:**
+
+```toml
+[rendering]
+kin_line_max_distance = 140.0
+kin_line_min_group = 3
+kin_line_width = 1.5
+kin_line_debug_boost = false
+kin_line_style = "filament"
+kin_line_wave_amplitude = 2.5
+kin_line_wave_segments = 6
+kin_line_wave_speed = 1.0
+kin_line_glow = true
+kin_line_shimmer = true
+kin_line_shimmer_strength = 0.35
+```
+
+**Suggested visible test config:**
+
+```toml
+[rendering]
+kin_line_max_distance = 220.0
+kin_line_min_group = 2
+kin_line_width = 3.0
+kin_line_debug_boost = true
+kin_line_style = "filament"
+kin_line_wave_amplitude = 5.0
+kin_line_wave_segments = 6
+kin_line_wave_speed = 1.0
+kin_line_glow = true
+kin_line_shimmer = true
+kin_line_shimmer_strength = 0.35
+```
+
 ## [2026-05-15] — render: restore gpu kin lines
 
 **What changed** (`primordial/rendering/snapshot.py`,

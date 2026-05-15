@@ -47,6 +47,15 @@ _SECTION_FIELDS: dict[str, dict[str, tuple[str, str]]] = {
         "glyph_size_base": ("glyph_size_base", "int"),
         "kin_line_max_distance": ("kin_line_max_distance", "float"),
         "kin_line_min_group": ("kin_line_min_group", "int"),
+        "kin_line_debug_boost": ("kin_line_debug_boost", "bool"),
+        "kin_line_style": ("kin_line_style", "str"),
+        "kin_line_width": ("kin_line_width", "float"),
+        "kin_line_wave_amplitude": ("kin_line_wave_amplitude", "float"),
+        "kin_line_wave_segments": ("kin_line_wave_segments", "int"),
+        "kin_line_wave_speed": ("kin_line_wave_speed", "float"),
+        "kin_line_glow": ("kin_line_glow", "bool"),
+        "kin_line_shimmer": ("kin_line_shimmer", "bool"),
+        "kin_line_shimmer_strength": ("kin_line_shimmer_strength", "float"),
         "territory_top_n": ("territory_top_n", "int"),
         "territory_shimmer_lerp": ("territory_shimmer_lerp", "float"),
         "territory_fade_seconds": ("territory_fade_seconds", "float"),
@@ -230,6 +239,7 @@ class Config:
         self.mode_params = {mode_name: {} for mode_name in _CANONICAL_MODE_KEYS}
         self.default_mode_params = deepcopy(self.mode_params)
         self._explicit_rendering_keys: set[str] = set()
+        self._canonical_render_defaults: dict[str, Any] = {}
         self._config_migrated = False
 
     def _load_canonical_defaults(self) -> None:
@@ -245,6 +255,11 @@ class Config:
         self._initialize_state()
         self._merge_from_dict(data)
         self._explicit_rendering_keys.clear()
+        self._canonical_render_defaults = {
+            key: getattr(self, attr_name)
+            for key, (attr_name, _kind) in _SECTION_FIELDS["rendering"].items()
+            if getattr(self, attr_name) is not _MISSING
+        }
         self._ensure_canonical_defaults_complete(defaults_path)
         self.default_mode_params = deepcopy(self.mode_params)
         self._validate()
@@ -388,6 +403,14 @@ class Config:
         self.glyph_size_base = max(8, self.glyph_size_base)
         self.kin_line_max_distance = max(0.0, self.kin_line_max_distance)
         self.kin_line_min_group = max(2, self.kin_line_min_group)
+        if self.kin_line_style not in ("plain", "filament"):
+            logger.warning("Invalid kin_line_style '%s'; falling back to 'filament'.", self.kin_line_style)
+            self.kin_line_style = "filament"
+        self.kin_line_width = max(0.5, min(10.0, self.kin_line_width))
+        self.kin_line_wave_amplitude = max(0.0, min(20.0, self.kin_line_wave_amplitude))
+        self.kin_line_wave_segments = max(1, min(16, self.kin_line_wave_segments))
+        self.kin_line_wave_speed = max(0.0, min(5.0, self.kin_line_wave_speed))
+        self.kin_line_shimmer_strength = max(0.0, min(1.0, self.kin_line_shimmer_strength))
         self.territory_top_n = max(0, self.territory_top_n)
         self.territory_shimmer_lerp = max(0.001, min(1.0, self.territory_shimmer_lerp))
         self.territory_fade_seconds = max(0.1, self.territory_fade_seconds)
@@ -416,6 +439,10 @@ class Config:
     def is_render_setting_explicit(self, key: str) -> bool:
         """Return whether a rendering key was explicitly present in user config."""
         return key in self._explicit_rendering_keys
+
+    def canonical_render_default(self, key: str):
+        """Return the canonical default value for a rendering key, or _MISSING."""
+        return self._canonical_render_defaults.get(key, _MISSING)
 
     def reset_to_defaults(self) -> None:
         self._load_canonical_defaults()
@@ -464,6 +491,15 @@ render_backend = "{self.render_backend}"
 glyph_size_base = {self.glyph_size_base}
 kin_line_max_distance = {self.kin_line_max_distance:.1f}
 kin_line_min_group = {self.kin_line_min_group}
+kin_line_debug_boost = {str(self.kin_line_debug_boost).lower()}
+kin_line_style = "{self.kin_line_style}"
+kin_line_width = {self.kin_line_width:.1f}
+kin_line_wave_amplitude = {self.kin_line_wave_amplitude:.1f}
+kin_line_wave_segments = {self.kin_line_wave_segments}
+kin_line_wave_speed = {self.kin_line_wave_speed:.1f}
+kin_line_glow = {str(self.kin_line_glow).lower()}
+kin_line_shimmer = {str(self.kin_line_shimmer).lower()}
+kin_line_shimmer_strength = {self.kin_line_shimmer_strength:.2f}
 territory_top_n = {self.territory_top_n}
 territory_shimmer_lerp = {self.territory_shimmer_lerp:.4f}
 territory_fade_seconds = {self.territory_fade_seconds:.2f}
