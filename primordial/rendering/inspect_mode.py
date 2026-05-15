@@ -185,18 +185,18 @@ _INSPECT_LABELS: dict[str, str] = {
     "depth": "Depth",
     "age": "Age",
     "vel": "Moving",
-    "behavior": "Behavior mode",
+    "behavior": "Mode",
     "attention": "Focus",
     "attention_conf": "Confidence",
-    "motion": "Motion style",
-    "depth_pref": "Preferred depth",
+    "motion": "Motion",
+    "depth_pref": "Prefers",
     "speed": "Speed",
     "size": "Size",
     "sense": "Sense",
     "aggr": "Aggression",
     "eff": "Efficiency",
     "pos": "Position",
-    "recent_animal_e": "Recent prey energy",
+    "recent_animal_e": "Recent prey E",
     "satiety": "Satiety",
     "tags": "Temperament",
     "likely_goal": "Likely goal",
@@ -229,7 +229,7 @@ _BEHAVIOR_GOALS: dict[str, str] = {
 }
 
 _INSPECT_MARGIN = 24
-_INSPECT_PANEL_WIDTH = 304
+_INSPECT_PANEL_WIDTH = 400
 _INSPECT_PANEL_BG = (7, 13, 24, 230)
 _INSPECT_PANEL_BORDER = (88, 156, 198, 168)
 _INSPECT_DIVIDER = (48, 78, 104, 164)
@@ -461,14 +461,6 @@ def build_inspect_panel_lines(
         [
             InspectPanelLine(kind="section", text="Temperament"),
             _build_row("tags", card.get("tags", "—")),
-            _build_row_pair(
-                "motion",
-                card.get("motion", "—"),
-                "depth_pref",
-                card.get("depth_pref", "—"),
-                removable=True,
-                priority=20,
-            ),
         ]
     )
 
@@ -476,6 +468,20 @@ def build_inspect_panel_lines(
         lines.extend(
             [
                 InspectPanelLine(kind="section", text="Details", removable=True, priority=80),
+                _build_row(
+                    "motion",
+                    card.get("motion", "—"),
+                    style="detail",
+                    removable=True,
+                    priority=85,
+                ),
+                _build_row(
+                    "depth_pref",
+                    card.get("depth_pref", "—"),
+                    style="detail",
+                    removable=True,
+                    priority=85,
+                ),
                 _build_row_pair(
                     "speed",
                     card.get("speed", "—"),
@@ -804,7 +810,7 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
     import pygame
 
     if line.kind == "divider":
-        return {"kind": "divider", "parts": [], "height": 12}
+        return {"kind": "divider", "parts": [], "height": 14}
 
     if line.kind in {"mode", "meta", "title", "summary", "section"}:
         font = {
@@ -829,7 +835,7 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
             surf = font.render(text_line, True, color)
             parts.append((surf, 0, y))
             y += surf.get_height() + 1
-        extra_space = 8 if line.kind == "title" else 6 if line.kind == "summary" else 2
+        extra_space = 10 if line.kind == "title" else 8 if line.kind == "summary" else 4
         rule = None
         if line.kind == "section" and parts:
             label_width = parts[0][0].get_width()
@@ -854,19 +860,23 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
         wrapped_values = _wrap_comma_separated_text(
             value_font,
             line.value,
-            max(64, content_width - label_surf.get_width() - 10),
-            max_lines=2,
+            content_width - 14,
+            max_lines=3,
         )
+        return _render_wrapped_row(label_surf, value_font, wrapped_values, content_width)
+    value_space = content_width - label_surf.get_width() - 10
+    if value_space < 80:
+        wrapped_values = _wrap_text(value_font, line.value, content_width - 14, max_lines=3)
         return _render_wrapped_row(label_surf, value_font, wrapped_values, content_width)
     single_value = _truncate_text(
         value_font,
         line.value,
-        max(40, content_width - label_surf.get_width() - 10),
+        value_space,
     )
     value_surf = value_font.render(single_value, True, _INSPECT_VALUE)
 
     if label_surf.get_width() + 10 + value_surf.get_width() <= content_width:
-        height = max(label_surf.get_height(), value_surf.get_height()) + 4
+        height = max(label_surf.get_height(), value_surf.get_height()) + 6
         return {
             "kind": "row",
             "parts": [
@@ -883,7 +893,7 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
 def _render_row_pair(line: InspectPanelLine, fonts, content_width: int) -> dict[str, object]:
     label_font = fonts["label"]
     value_font = fonts["body"] if line.style == "body" else fonts["detail"]
-    half_width = max(48, (content_width - 16) // 2)
+    half_width = max(80, (content_width - 16) // 2)
     left_text = _truncate_text(
         value_font,
         f"{line.label}: {line.value}",
@@ -897,7 +907,7 @@ def _render_row_pair(line: InspectPanelLine, fonts, content_width: int) -> dict[
     left_surf = value_font.render(left_text, True, _INSPECT_VALUE)
     right_surf = value_font.render(right_text, True, _INSPECT_VALUE)
     if left_surf.get_width() + 16 + right_surf.get_width() <= content_width:
-        height = max(left_surf.get_height(), right_surf.get_height()) + 4
+        height = max(left_surf.get_height(), right_surf.get_height()) + 6
         return {
             "kind": "row_pair",
             "parts": [
@@ -916,7 +926,7 @@ def _render_row_pair(line: InspectPanelLine, fonts, content_width: int) -> dict[
     )
     parts.append((left_label, 0, 0))
     parts.append((left_value, left_label.get_width() + 10, 0))
-    y = max(left_label.get_height(), left_value.get_height()) + 4
+    y = max(left_label.get_height(), left_value.get_height()) + 6
     right_label = label_font.render(f"{line.secondary_label}:", True, _INSPECT_LABEL)
     parts.append((right_label, 0, y))
     y += right_label.get_height() + 1
@@ -930,11 +940,11 @@ def _render_row_pair(line: InspectPanelLine, fonts, content_width: int) -> dict[
 
 def _render_wrapped_row(label_surf, value_font, wrapped_values: list[str], content_width: int) -> dict[str, object]:
     parts = [(label_surf, 0, 0)]
-    y = label_surf.get_height() + 1
+    y = label_surf.get_height() + 2
     for wrapped in wrapped_values:
         surf = value_font.render(_truncate_text(value_font, wrapped, content_width - 14), True, _INSPECT_VALUE)
         parts.append((surf, 14, y))
-        y += surf.get_height() + 1
+        y += surf.get_height() + 2
     return {"kind": "row", "parts": parts, "height": y + 3}
 
 
@@ -942,18 +952,18 @@ def _inspect_fonts() -> dict[str, object]:
     import pygame
 
     return {
-        "mode": pygame.font.Font(None, 18),
-        "meta": pygame.font.Font(None, 17),
-        "title": pygame.font.Font(None, 27),
-        "summary": pygame.font.Font(None, 22),
-        "section": pygame.font.Font(None, 19),
-        "label": pygame.font.Font(None, 18),
-        "body": pygame.font.Font(None, 20),
-        "detail": pygame.font.Font(None, 17),
+        "mode": pygame.font.Font(None, 22),
+        "meta": pygame.font.Font(None, 20),
+        "title": pygame.font.Font(None, 32),
+        "summary": pygame.font.Font(None, 26),
+        "section": pygame.font.Font(None, 22),
+        "label": pygame.font.Font(None, 22),
+        "body": pygame.font.Font(None, 24),
+        "detail": pygame.font.Font(None, 20),
     }
 
 
-def _wrap_text(font, text: str, max_width: int, *, max_lines: int) -> list[str]:
+def wrap_text(font, text: str, max_width: int, *, max_lines: int) -> list[str]:
     if not text:
         return ["—"]
     safe_width = max(20, max_width)
@@ -978,18 +988,7 @@ def _wrap_text(font, text: str, max_width: int, *, max_lines: int) -> list[str]:
     return trimmed
 
 
-def _truncate_text(font, text: str, max_width: int) -> str:
-    safe_width = max(8, max_width)
-    if font.size(text)[0] <= safe_width:
-        return text
-    ellipsis = "..."
-    trimmed = text
-    while trimmed and font.size(trimmed + ellipsis)[0] > safe_width:
-        trimmed = trimmed[:-1]
-    return (trimmed + ellipsis) if trimmed else ellipsis
-
-
-def _wrap_comma_separated_text(font, text: str, max_width: int, *, max_lines: int) -> list[str]:
+def wrap_comma_separated_text(font, text: str, max_width: int, *, max_lines: int) -> list[str]:
     if not text:
         return ["—"]
     tokens = [token.strip() for token in text.split(",") if token.strip()]
@@ -1015,10 +1014,25 @@ def _wrap_comma_separated_text(font, text: str, max_width: int, *, max_lines: in
     return kept
 
 
+_wrap_text = wrap_text
+_wrap_comma_separated_text = wrap_comma_separated_text
+
+
+def _truncate_text(font, text: str, max_width: int) -> str:
+    safe_width = max(8, max_width)
+    if font.size(text)[0] <= safe_width:
+        return text
+    ellipsis = "..."
+    trimmed = text
+    while trimmed and font.size(trimmed + ellipsis)[0] > safe_width:
+        trimmed = trimmed[:-1]
+    return (trimmed + ellipsis) if trimmed else ellipsis
+
+
 def _inspect_panel_width(target_width: int) -> int:
-    desired_width = min(_INSPECT_PANEL_WIDTH, max(220, int(target_width * 0.26)))
-    desired_width = min(desired_width, max(180, target_width - (_INSPECT_MARGIN * 2)))
-    return max(120, min(target_width, desired_width))
+    desired_width = min(_INSPECT_PANEL_WIDTH, max(280, int(target_width * 0.40)))
+    desired_width = min(desired_width, max(200, target_width - (_INSPECT_MARGIN * 2)))
+    return max(160, min(target_width, desired_width))
 
 
 def _story_stage_label(stage: str) -> str:
@@ -1056,7 +1070,7 @@ def _format_velocity_value(value: str) -> str:
         label = "Fast"
     else:
         label = "Bursting"
-    return f"{label} ({speed:.2f}/tick)"
+    return f"{label} ({speed:.2f})"
 
 
 def _format_energy_value(value: str) -> str:

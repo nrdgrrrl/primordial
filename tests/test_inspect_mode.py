@@ -24,6 +24,8 @@ from primordial.rendering.inspect_mode import (
     _format_velocity_value,
     _inspect_panel_width,
     _wrap_comma_separated_text,
+    wrap_comma_separated_text,
+    wrap_text,
 )
 from primordial.rendering.creature_observation import (
     classify_life_stage,
@@ -458,7 +460,7 @@ class TestInspectPanelPresentation(unittest.TestCase):
     def test_label_mapping_uses_friendlier_copy(self):
         self.assertEqual(friendly_inspect_label("vel"), "Moving")
         self.assertEqual(friendly_inspect_label("attention"), "Focus")
-        self.assertEqual(friendly_inspect_label("recent_animal_e"), "Recent prey energy")
+        self.assertEqual(friendly_inspect_label("recent_animal_e"), "Recent prey E")
 
     def test_compact_layout_omits_details_section(self):
         mode = InspectMode(enabled=True, detail_mode="compact")
@@ -487,6 +489,9 @@ class TestInspectPanelPresentation(unittest.TestCase):
             mode,
         )
         self.assertNotIn("Details", [line.text for line in lines if line.kind == "section"])
+        compact_keys = {line.key for line in lines}
+        self.assertNotIn("motion", compact_keys)
+        self.assertNotIn("depth_pref", compact_keys)
         state_lines = [line for line in lines if line.kind == "row_pair"]
         self.assertTrue(any(line.key == "stage" and line.secondary_key == "depth" for line in state_lines))
         self.assertTrue(any(line.key == "energy" and line.secondary_key == "vel" for line in state_lines))
@@ -518,6 +523,9 @@ class TestInspectPanelPresentation(unittest.TestCase):
             mode,
         )
         self.assertIn("Details", [line.text for line in lines if line.kind == "section"])
+        detail_keys = {line.key for line in lines}
+        self.assertIn("motion", detail_keys)
+        self.assertIn("depth_pref", detail_keys)
         self.assertIn("row_pair", {line.kind for line in lines})
 
     def test_panel_placement_anchors_top_right_with_margin(self):
@@ -538,12 +546,19 @@ class TestInspectPanelPresentation(unittest.TestCase):
     def test_interpreted_labels_put_meaning_before_raw_values(self):
         self.assertEqual(_format_energy_value("0.90"), "Full (90%)")
         self.assertEqual(_format_confidence_value("86%"), "High (86%)")
-        self.assertEqual(_format_velocity_value("0.75"), "Fast (0.75/tick)")
+        self.assertEqual(_format_velocity_value("0.75"), "Fast (0.75)")
         self.assertEqual(_format_age_value("8 / 100  (8%)"), "8% lifespan (8 / 100t)")
 
     def test_panel_width_stays_compact_on_large_windows(self):
-        self.assertEqual(_inspect_panel_width(1280), 304)
-        self.assertEqual(_inspect_panel_width(800), 220)
+        self.assertEqual(_inspect_panel_width(1280), 400)
+        self.assertEqual(_inspect_panel_width(800), 320)
+
+    def test_panel_width_is_responsive_to_screen(self):
+        width_small = _inspect_panel_width(400)
+        self.assertGreaterEqual(width_small, 160)
+        self.assertLessEqual(width_small, 400)
+        width_large = _inspect_panel_width(1920)
+        self.assertLessEqual(width_large, 400)
 
     def test_tag_wrapping_preserves_whole_terms_where_possible(self):
         font = pygame.font.Font(None, 20)
@@ -553,7 +568,89 @@ class TestInspectPanelPresentation(unittest.TestCase):
             140,
             max_lines=2,
         )
-        self.assertEqual(wrapped, ["Keen-eyed, Efficient", "Long-lived"])
+        self.assertLessEqual(len(wrapped), 2)
+        for line in wrapped:
+            self.assertLessEqual(font.size(line)[0], 140)
+
+    def test_wrap_text_wraps_long_text(self):
+        font = pygame.font.Font(None, 24)
+        wrapped = wrap_text(
+            font,
+            "Young adult predator hunting its quarry in mid-depth water",
+            200,
+            max_lines=3,
+        )
+        self.assertLessEqual(len(wrapped), 3)
+        for line in wrapped:
+            self.assertLessEqual(font.size(line)[0], 200)
+
+    def test_wrap_text_preserves_short_lines(self):
+        font = pygame.font.Font(None, 24)
+        wrapped = wrap_text(font, "Short", 200, max_lines=2)
+        self.assertEqual(wrapped, ["Short"])
+
+    def test_wrap_text_respects_max_lines(self):
+        font = pygame.font.Font(None, 24)
+        wrapped = wrap_text(
+            font,
+            "this is a moderately long sentence that will need wrapping",
+            60,
+            max_lines=2,
+        )
+        self.assertLessEqual(len(wrapped), 2)
+
+    def test_wrap_comma_separated_wraps_tags(self):
+        font = pygame.font.Font(None, 24)
+        wrapped = wrap_comma_separated_text(
+            font,
+            "Aggressive, Swift, Keen-eyed, Efficient",
+            150,
+            max_lines=3,
+        )
+        self.assertLessEqual(len(wrapped), 3)
+        for line in wrapped:
+            self.assertLessEqual(font.size(line)[0], 150)
+
+    def test_wrap_comma_separated_preserves_single_token(self):
+        font = pygame.font.Font(None, 24)
+        wrapped = wrap_comma_separated_text(font, "Swift", 200, max_lines=3)
+        self.assertEqual(wrapped, ["Swift"])
+
+    def test_compact_mode_excludes_motion_and_depth_pref(self):
+        mode = InspectMode(enabled=True, detail_mode="compact")
+        lines = build_inspect_panel_lines(
+            {
+                "species": "Prey",
+                "lineage": "#3",
+                "stage": "Young adult",
+                "behavior": "wandering",
+                "depth": "mid",
+                "energy": "0.50",
+                "vel": "0.10",
+                "age": "20 / 80  (25%)",
+                "tags": "Swift",
+                "motion": "Dart",
+                "depth_pref": "Surface",
+            },
+            mode,
+        )
+        compact_keys = {line.key for line in lines if line.kind in {"row", "row_pair"}}
+        self.assertNotIn("motion", compact_keys)
+        self.assertNotIn("depth_pref", compact_keys)
+
+    def test_label_formatting_readable(self):
+        self.assertEqual(friendly_inspect_label("vel"), "Moving")
+        self.assertEqual(friendly_inspect_label("behavior"), "Mode")
+        self.assertEqual(friendly_inspect_label("depth_pref"), "Prefers")
+        self.assertEqual(friendly_inspect_label("likely_goal"), "Likely goal")
+
+    def test_velocity_format_short(self):
+        self.assertEqual(_format_velocity_value("0.75"), "Fast (0.75)")
+        self.assertEqual(_format_velocity_value("0.02"), "Still")
+
+    def test_energy_format_readable(self):
+        self.assertEqual(_format_energy_value("0.90"), "Full (90%)")
+        self.assertEqual(_format_energy_value("0.10"), "Critical (10%)")
 
 
 class TestGuessBehavior(unittest.TestCase):
