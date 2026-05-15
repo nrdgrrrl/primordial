@@ -7,6 +7,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pygame
+
 from primordial.rendering.inspect_mode import (
     InspectMode,
     build_creature_card,
@@ -16,6 +18,12 @@ from primordial.rendering.inspect_mode import (
     display_to_world,
     find_nearest_creature_at_display_pos,
     friendly_inspect_label,
+    _format_age_value,
+    _format_confidence_value,
+    _format_energy_value,
+    _format_velocity_value,
+    _inspect_panel_width,
+    _wrap_comma_separated_text,
 )
 from primordial.rendering.creature_observation import (
     classify_life_stage,
@@ -431,6 +439,10 @@ class TestBuildCreatureCard(unittest.TestCase):
 
 
 class TestInspectPanelPresentation(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        pygame.font.init()
+
     def test_summary_builds_narrative_story(self):
         summary = build_creature_summary(
             {
@@ -475,6 +487,9 @@ class TestInspectPanelPresentation(unittest.TestCase):
             mode,
         )
         self.assertNotIn("Details", [line.text for line in lines if line.kind == "section"])
+        state_lines = [line for line in lines if line.kind == "row_pair"]
+        self.assertTrue(any(line.key == "stage" and line.secondary_key == "depth" for line in state_lines))
+        self.assertTrue(any(line.key == "energy" and line.secondary_key == "vel" for line in state_lines))
 
     def test_detail_layout_includes_details_section(self):
         mode = InspectMode(enabled=True, detail_mode="detail")
@@ -503,6 +518,7 @@ class TestInspectPanelPresentation(unittest.TestCase):
             mode,
         )
         self.assertIn("Details", [line.text for line in lines if line.kind == "section"])
+        self.assertIn("row_pair", {line.kind for line in lines})
 
     def test_panel_placement_anchors_top_right_with_margin(self):
         placement = compute_inspect_panel_placement(1280, 720, 320, 280)
@@ -513,6 +529,31 @@ class TestInspectPanelPresentation(unittest.TestCase):
         placement = compute_inspect_panel_placement(320, 140, 280, 220)
         self.assertEqual((placement.x, placement.y), (16, 24))
         self.assertEqual(placement.height, 92)
+
+    def test_status_line_uses_readable_separators(self):
+        mode = InspectMode(enabled=True, pause_mode="pause", detail_mode="compact")
+        lines = build_inspect_panel_lines(None, mode)
+        self.assertEqual(lines[1].text, "Paused · M: slow · D: details")
+
+    def test_interpreted_labels_put_meaning_before_raw_values(self):
+        self.assertEqual(_format_energy_value("0.90"), "Full (90%)")
+        self.assertEqual(_format_confidence_value("86%"), "High (86%)")
+        self.assertEqual(_format_velocity_value("0.75"), "Fast (0.75/tick)")
+        self.assertEqual(_format_age_value("8 / 100  (8%)"), "8% lifespan (8 / 100t)")
+
+    def test_panel_width_stays_compact_on_large_windows(self):
+        self.assertEqual(_inspect_panel_width(1280), 304)
+        self.assertEqual(_inspect_panel_width(800), 220)
+
+    def test_tag_wrapping_preserves_whole_terms_where_possible(self):
+        font = pygame.font.Font(None, 20)
+        wrapped = _wrap_comma_separated_text(
+            font,
+            "Keen-eyed, Efficient, Long-lived",
+            140,
+            max_lines=2,
+        )
+        self.assertEqual(wrapped, ["Keen-eyed, Efficient", "Long-lived"])
 
 
 class TestGuessBehavior(unittest.TestCase):

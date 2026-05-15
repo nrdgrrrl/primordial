@@ -229,7 +229,7 @@ _BEHAVIOR_GOALS: dict[str, str] = {
 }
 
 _INSPECT_MARGIN = 24
-_INSPECT_PANEL_WIDTH = 320
+_INSPECT_PANEL_WIDTH = 304
 _INSPECT_PANEL_BG = (7, 13, 24, 230)
 _INSPECT_PANEL_BORDER = (88, 156, 198, 168)
 _INSPECT_DIVIDER = (48, 78, 104, 164)
@@ -237,7 +237,7 @@ _INSPECT_TITLE = (228, 239, 250)
 _INSPECT_SUMMARY = (192, 214, 232)
 _INSPECT_MODE = (154, 188, 214)
 _INSPECT_META = (119, 145, 170)
-_INSPECT_SECTION = (108, 136, 158)
+_INSPECT_SECTION = (152, 186, 208)
 _INSPECT_LABEL = (130, 154, 177)
 _INSPECT_VALUE = (219, 231, 244)
 
@@ -247,9 +247,13 @@ class InspectPanelLine:
     """One logical line in the inspect overlay presentation model."""
 
     kind: str
+    key: str = ""
     text: str = ""
     label: str = ""
     value: str = ""
+    secondary_key: str = ""
+    secondary_label: str = ""
+    secondary_value: str = ""
     style: str = "body"
     removable: bool = False
     priority: int = 0
@@ -417,11 +421,24 @@ def build_inspect_panel_lines(
             InspectPanelLine(kind="summary", text=build_creature_summary(card), style="summary"),
             InspectPanelLine(kind="divider"),
             InspectPanelLine(kind="section", text="State"),
-            _build_row("stage", card.get("stage", "—")),
-            _build_row("energy", card.get("energy", "—")),
-            _build_row("depth", _titleize(card.get("depth", "—"))),
-            _build_row("vel", _format_velocity_value(card.get("vel", "0"))),
-            _build_row("age", card.get("age", "—"), removable=True, priority=35),
+            _build_row_pair(
+                "stage",
+                card.get("stage", "—"),
+                "depth",
+                _titleize(card.get("depth", "—")),
+            ),
+            _build_row_pair(
+                "energy",
+                _format_energy_value(card.get("energy", "—")),
+                "vel",
+                _format_velocity_value(card.get("vel", "0")),
+            ),
+            _build_row(
+                "age",
+                _format_age_value(card.get("age", "—")),
+                removable=True,
+                priority=35,
+            ),
             InspectPanelLine(kind="section", text="Behavior"),
             _build_row("behavior", _titleize(card.get("behavior", "unknown"))),
         ]
@@ -431,7 +448,12 @@ def build_inspect_panel_lines(
         lines.append(_build_row("attention", _titleize(card["attention"])))
     if "attention_conf" in card:
         lines.append(
-            _build_row("attention_conf", card["attention_conf"], removable=True, priority=25)
+            _build_row(
+                "attention_conf",
+                _format_confidence_value(card["attention_conf"]),
+                removable=True,
+                priority=25,
+            )
         )
     lines.append(_build_row("likely_goal", _behavior_goal(card)))
 
@@ -439,12 +461,13 @@ def build_inspect_panel_lines(
         [
             InspectPanelLine(kind="section", text="Temperament"),
             _build_row("tags", card.get("tags", "—")),
-            _build_row("motion", card.get("motion", "—"), removable=True, priority=20),
-            _build_row(
+            _build_row_pair(
+                "motion",
+                card.get("motion", "—"),
                 "depth_pref",
                 card.get("depth_pref", "—"),
                 removable=True,
-                priority=15,
+                priority=20,
             ),
         ]
     )
@@ -453,10 +476,24 @@ def build_inspect_panel_lines(
         lines.extend(
             [
                 InspectPanelLine(kind="section", text="Details", removable=True, priority=80),
-                _build_row("speed", card.get("speed", "—"), style="detail", removable=True, priority=90),
-                _build_row("size", card.get("size", "—"), style="detail", removable=True, priority=90),
-                _build_row("sense", card.get("sense", "—"), style="detail", removable=True, priority=90),
-                _build_row("aggr", card.get("aggr", "—"), style="detail", removable=True, priority=90),
+                _build_row_pair(
+                    "speed",
+                    card.get("speed", "—"),
+                    "size",
+                    card.get("size", "—"),
+                    style="detail",
+                    removable=True,
+                    priority=90,
+                ),
+                _build_row_pair(
+                    "sense",
+                    card.get("sense", "—"),
+                    "aggr",
+                    card.get("aggr", "—"),
+                    style="detail",
+                    removable=True,
+                    priority=90,
+                ),
                 _build_row("eff", card.get("eff", "—"), style="detail", removable=True, priority=90),
                 _build_row("pos", card.get("pos", "—"), style="detail", removable=True, priority=95),
             ]
@@ -596,9 +633,9 @@ def find_nearest_creature_at_display_pos(
 
 def _inspect_status_line(inspect_mode: InspectMode) -> str:
     pace = "Paused" if inspect_mode.pause_mode == "pause" else f"Slow {inspect_mode.slow_hz:.0f} Hz"
-    next_pace = "M slow" if inspect_mode.pause_mode == "pause" else "M pause"
-    next_detail = "D detail" if inspect_mode.detail_mode == "compact" else "D compact"
-    return f"{pace}  {next_pace}  {next_detail}"
+    next_pace = "M: slow" if inspect_mode.pause_mode == "pause" else "M: pause"
+    next_detail = "D: details" if inspect_mode.detail_mode == "compact" else "D: compact"
+    return f"{pace} · {next_pace} · {next_detail}"
 
 
 def _build_row(
@@ -611,8 +648,33 @@ def _build_row(
 ) -> InspectPanelLine:
     return InspectPanelLine(
         kind="row",
+        key=key,
         label=friendly_inspect_label(key),
         value=value,
+        style=style,
+        removable=removable,
+        priority=priority,
+    )
+
+
+def _build_row_pair(
+    left_key: str,
+    left_value: str,
+    right_key: str,
+    right_value: str,
+    *,
+    style: str = "body",
+    removable: bool = False,
+    priority: int = 0,
+) -> InspectPanelLine:
+    return InspectPanelLine(
+        kind="row_pair",
+        key=left_key,
+        label=friendly_inspect_label(left_key),
+        value=left_value,
+        secondary_key=right_key,
+        secondary_label=friendly_inspect_label(right_key),
+        secondary_value=right_value,
         style=style,
         removable=removable,
         priority=priority,
@@ -681,7 +743,7 @@ def _remove_empty_sections(lines: tuple[InspectPanelLine, ...]) -> tuple[Inspect
         for lookahead in lines[index + 1 : total]:
             if lookahead.kind == "section":
                 break
-            if lookahead.kind == "row":
+            if lookahead.kind in {"row", "row_pair"}:
                 keep_section = True
                 break
         if keep_section:
@@ -720,6 +782,15 @@ def _render_inspect_panel_surface(
             pygame.draw.line(surface, _INSPECT_DIVIDER, (padding, draw_y), (panel_width - padding, draw_y), 1)
             y += block["height"]
             continue
+        if kind == "section" and block.get("rule") is not None:
+            rule_start, rule_y, rule_end = block["rule"]
+            pygame.draw.line(
+                surface,
+                _INSPECT_DIVIDER,
+                (padding + rule_start, y + rule_y),
+                (padding + rule_end, y + rule_y),
+                1,
+            )
         for text_surface, offset_x, offset_y in block["parts"]:
             blit_y = y + offset_y
             if blit_y >= panel_height - padding:
@@ -759,13 +830,39 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
             parts.append((surf, 0, y))
             y += surf.get_height() + 1
         extra_space = 8 if line.kind == "title" else 6 if line.kind == "summary" else 2
-        return {"kind": line.kind, "parts": parts, "height": max(0, y - 1) + extra_space}
+        rule = None
+        if line.kind == "section" and parts:
+            label_width = parts[0][0].get_width()
+            rule_start = min(content_width, label_width + 10)
+            if rule_start < content_width:
+                rule = (rule_start, max(7, parts[0][0].get_height() // 2 + 1), content_width)
+        return {
+            "kind": line.kind,
+            "parts": parts,
+            "height": max(0, y - 1) + extra_space,
+            "rule": rule,
+        }
+
+    if line.kind == "row_pair":
+        return _render_row_pair(line, fonts, content_width)
 
     label_font = fonts["label"]
     value_font = fonts["body"] if line.style == "body" else fonts["detail"]
     label_text = f"{line.label}:"
     label_surf = label_font.render(label_text, True, _INSPECT_LABEL)
-    single_value = _truncate_text(value_font, line.value, max(40, content_width - label_surf.get_width() - 10))
+    if line.key == "tags":
+        wrapped_values = _wrap_comma_separated_text(
+            value_font,
+            line.value,
+            max(64, content_width - label_surf.get_width() - 10),
+            max_lines=2,
+        )
+        return _render_wrapped_row(label_surf, value_font, wrapped_values, content_width)
+    single_value = _truncate_text(
+        value_font,
+        line.value,
+        max(40, content_width - label_surf.get_width() - 10),
+    )
     value_surf = value_font.render(single_value, True, _INSPECT_VALUE)
 
     if label_surf.get_width() + 10 + value_surf.get_width() <= content_width:
@@ -780,10 +877,62 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
         }
 
     wrapped_values = _wrap_text(value_font, line.value, content_width - 14, max_lines=3)
+    return _render_wrapped_row(label_surf, value_font, wrapped_values, content_width)
+
+
+def _render_row_pair(line: InspectPanelLine, fonts, content_width: int) -> dict[str, object]:
+    label_font = fonts["label"]
+    value_font = fonts["body"] if line.style == "body" else fonts["detail"]
+    half_width = max(48, (content_width - 16) // 2)
+    left_text = _truncate_text(
+        value_font,
+        f"{line.label}: {line.value}",
+        half_width,
+    )
+    right_text = _truncate_text(
+        value_font,
+        f"{line.secondary_label}: {line.secondary_value}",
+        half_width,
+    )
+    left_surf = value_font.render(left_text, True, _INSPECT_VALUE)
+    right_surf = value_font.render(right_text, True, _INSPECT_VALUE)
+    if left_surf.get_width() + 16 + right_surf.get_width() <= content_width:
+        height = max(left_surf.get_height(), right_surf.get_height()) + 4
+        return {
+            "kind": "row_pair",
+            "parts": [
+                (left_surf, 0, 0),
+                (right_surf, content_width - right_surf.get_width(), 0),
+            ],
+            "height": height,
+        }
+
+    parts = []
+    left_label = label_font.render(f"{line.label}:", True, _INSPECT_LABEL)
+    left_value = value_font.render(
+        _truncate_text(value_font, line.value, max(40, content_width - left_label.get_width() - 10)),
+        True,
+        _INSPECT_VALUE,
+    )
+    parts.append((left_label, 0, 0))
+    parts.append((left_value, left_label.get_width() + 10, 0))
+    y = max(left_label.get_height(), left_value.get_height()) + 4
+    right_label = label_font.render(f"{line.secondary_label}:", True, _INSPECT_LABEL)
+    parts.append((right_label, 0, y))
+    y += right_label.get_height() + 1
+    right_values = _wrap_text(value_font, line.secondary_value, max(40, content_width - 14), max_lines=2)
+    for wrapped in right_values:
+        surf = value_font.render(wrapped, True, _INSPECT_VALUE)
+        parts.append((surf, 14, y))
+        y += surf.get_height() + 1
+    return {"kind": "row_pair", "parts": parts, "height": y + 3}
+
+
+def _render_wrapped_row(label_surf, value_font, wrapped_values: list[str], content_width: int) -> dict[str, object]:
     parts = [(label_surf, 0, 0)]
     y = label_surf.get_height() + 1
     for wrapped in wrapped_values:
-        surf = value_font.render(wrapped, True, _INSPECT_VALUE)
+        surf = value_font.render(_truncate_text(value_font, wrapped, content_width - 14), True, _INSPECT_VALUE)
         parts.append((surf, 14, y))
         y += surf.get_height() + 1
     return {"kind": "row", "parts": parts, "height": y + 3}
@@ -795,9 +944,9 @@ def _inspect_fonts() -> dict[str, object]:
     return {
         "mode": pygame.font.Font(None, 18),
         "meta": pygame.font.Font(None, 17),
-        "title": pygame.font.Font(None, 28),
+        "title": pygame.font.Font(None, 27),
         "summary": pygame.font.Font(None, 22),
-        "section": pygame.font.Font(None, 18),
+        "section": pygame.font.Font(None, 19),
         "label": pygame.font.Font(None, 18),
         "body": pygame.font.Font(None, 20),
         "detail": pygame.font.Font(None, 17),
@@ -840,8 +989,35 @@ def _truncate_text(font, text: str, max_width: int) -> str:
     return (trimmed + ellipsis) if trimmed else ellipsis
 
 
+def _wrap_comma_separated_text(font, text: str, max_width: int, *, max_lines: int) -> list[str]:
+    if not text:
+        return ["—"]
+    tokens = [token.strip() for token in text.split(",") if token.strip()]
+    if not tokens:
+        return [text]
+
+    lines: list[str] = []
+    current = tokens[0]
+    for token in tokens[1:]:
+        candidate = f"{current}, {token}"
+        if font.size(candidate)[0] <= max_width:
+            current = candidate
+            continue
+        lines.append(_truncate_text(font, current, max_width))
+        current = token
+    lines.append(_truncate_text(font, current, max_width))
+    if len(lines) <= max_lines:
+        return lines
+
+    kept = lines[: max_lines - 1]
+    remaining_tokens = tokens[len(", ".join(kept).split(", ")) :]
+    kept.append(_truncate_text(font, ", ".join(remaining_tokens), max_width))
+    return kept
+
+
 def _inspect_panel_width(target_width: int) -> int:
-    desired_width = min(_INSPECT_PANEL_WIDTH, max(180, target_width - (_INSPECT_MARGIN * 2)))
+    desired_width = min(_INSPECT_PANEL_WIDTH, max(220, int(target_width * 0.26)))
+    desired_width = min(desired_width, max(180, target_width - (_INSPECT_MARGIN * 2)))
     return max(120, min(target_width, desired_width))
 
 
@@ -872,7 +1048,62 @@ def _format_velocity_value(value: str) -> str:
         return value
     if speed < 0.05:
         return "Still"
-    return f"{speed:.2f}/tick"
+    if speed < 0.25:
+        label = "Slow"
+    elif speed < 0.55:
+        label = "Cruising"
+    elif speed < 0.90:
+        label = "Fast"
+    else:
+        label = "Bursting"
+    return f"{label} ({speed:.2f}/tick)"
+
+
+def _format_energy_value(value: str) -> str:
+    try:
+        energy = float(value)
+    except (TypeError, ValueError):
+        return value
+    pct = max(0, min(100, round(energy * 100)))
+    if energy < 0.15:
+        label = "Critical"
+    elif energy < 0.35:
+        label = "Low"
+    elif energy < 0.70:
+        label = "Steady"
+    elif energy < 0.90:
+        label = "High"
+    else:
+        label = "Full"
+    return f"{label} ({pct}%)"
+
+
+def _format_confidence_value(value: str) -> str:
+    try:
+        pct = int(str(value).strip().rstrip("%"))
+    except (TypeError, ValueError):
+        return value
+    if pct < 45:
+        label = "Low"
+    elif pct < 75:
+        label = "Medium"
+    elif pct < 90:
+        label = "High"
+    else:
+        label = "Very high"
+    return f"{label} ({pct}%)"
+
+
+def _format_age_value(value: str) -> str:
+    try:
+        raw_ticks, raw_rest = str(value).split("/", 1)
+        max_life, raw_pct = raw_rest.split("(", 1)
+        age_ticks = int(raw_ticks.strip())
+        lifespan_ticks = int(max_life.strip())
+        pct = int(raw_pct.rstrip(") ").rstrip("%"))
+    except (AttributeError, TypeError, ValueError):
+        return value
+    return f"{pct}% lifespan ({age_ticks} / {lifespan_ticks}t)"
 
 
 def _titleize(value: str) -> str:
