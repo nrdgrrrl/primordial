@@ -713,12 +713,21 @@ def main(
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
+                    disp_w = renderer.display_width
+                    disp_h = renderer.display_height
                     wx, wy = _display_to_world(
                         event.pos[0], event.pos[1],
-                        renderer.display_width, renderer.display_height,
+                        disp_w, disp_h,
                         simulation.width, simulation.height,
                     )
-                    renderer.inspect_mode.select_at_world_pos(wx, wy, simulation)
+                    scale = max(
+                        simulation.width / max(1, disp_w),
+                        simulation.height / max(1, disp_h),
+                    )
+                    pick_radius = max(48.0, 24.0 * scale)
+                    renderer.inspect_mode.select_at_world_pos(
+                        wx, wy, simulation, pick_radius=pick_radius
+                    )
 
             elif event.type == pygame.KEYDOWN:
                 if renderer.settings_overlay.visible:
