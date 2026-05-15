@@ -36,12 +36,10 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
-from primordial.main import (
-    LoopTimingCollector,
-    _create_fixed_step_loop_state,
-    run_bounded_session,
-)
 from primordial.rendering import Renderer
+from primordial.runtime.fixed_step import _create_fixed_step_loop_state
+from primordial.runtime.session import run_bounded_session
+from primordial.runtime.timing import LoopTimingCollector
 from primordial.scenarios import build_settings_for_scenario, list_scenarios
 from primordial.settings import Settings
 from primordial.simulation import Simulation

@@ -11,24 +11,26 @@ import pygame
 
 from primordial.main import (
     DEFAULT_WINDOWED_SIZE,
-    FIXED_SIM_TIMESTEP_SECONDS,
-    MAX_ACCUMULATED_SIM_SECONDS,
-    MAX_SIM_STEPS_PER_OUTER_FRAME,
-    LoopTimingCollector,
     _apply_display_mode,
-    _advance_fixed_step_frame,
-    _create_fixed_step_loop_state,
     _default_snapshot_path,
     _force_windowed_mode,
     _get_display_window_size,
     _get_fullscreen_resolution,
     _open_predator_prey_help,
     _resolve_snapshot_path,
-    _run_profile_session,
-    _simulation_timing_is_suppressed,
     window_to_world,
     world_to_window,
 )
+from primordial.runtime.fixed_step import (
+    FIXED_SIM_TIMESTEP_SECONDS,
+    MAX_ACCUMULATED_SIM_SECONDS,
+    MAX_SIM_STEPS_PER_OUTER_FRAME,
+    _advance_fixed_step_frame,
+    _create_fixed_step_loop_state,
+    _simulation_timing_is_suppressed,
+)
+from primordial.runtime.profile import _run_profile_session
+from primordial.runtime.timing import LoopTimingCollector
 
 
 class FakeSimulation:
@@ -264,12 +266,15 @@ class FixedStepLoopTests(unittest.TestCase):
             )
 
             with patch(
-                "primordial.main.pygame.event.get",
+                "primordial.runtime.session.pygame.event.get",
                 return_value=[],
             ), patch(
-                "primordial.main.pygame.display.flip",
+                "primordial.runtime.session.pygame.display.flip",
             ), patch(
-                "primordial.main.time.perf_counter",
+                "primordial.runtime.session.time.perf_counter",
+                side_effect=lambda: next(perf_counter_values),
+            ), patch(
+                "primordial.runtime.fixed_step.time.perf_counter",
                 side_effect=lambda: next(perf_counter_values),
             ):
                 profile_base = _run_profile_session(

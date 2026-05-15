@@ -14,10 +14,7 @@ import pygame
 
 from .main import (
     DEFAULT_WINDOWED_SIZE,
-    _advance_fixed_step_frame,
     _apply_display_mode,
-    _create_fixed_step_loop_state,
-    _get_effective_target_fps,
     _get_fullscreen_resolution,
 )
 from .rendering import (
@@ -25,6 +22,11 @@ from .rendering import (
     create_renderer,
     display_flags_for_settings,
     save_renderer_screenshot,
+)
+from .runtime.fixed_step import (
+    _advance_fixed_step_frame,
+    _create_fixed_step_loop_state,
+    _get_effective_target_fps,
 )
 from .settings import Settings
 from .simulation import Simulation

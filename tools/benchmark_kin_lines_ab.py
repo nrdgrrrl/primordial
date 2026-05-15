@@ -36,15 +36,14 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame
 
-from primordial.main import (
-    LoopFrameMetrics,
-    LoopTimingCollector,
+from primordial.rendering import create_renderer, display_flags_for_settings, renderer_backend_name
+from primordial.runtime.fixed_step import (
     _advance_fixed_step_frame,
     _create_fixed_step_loop_state,
     _get_effective_target_fps,
     _simulation_timing_is_suppressed,
 )
-from primordial.rendering import create_renderer, display_flags_for_settings, renderer_backend_name
+from primordial.runtime.timing import LoopFrameMetrics, LoopTimingCollector
 from primordial.scenarios import apply_scenario_settings, get_scenario
 from primordial.settings import Settings
 from primordial.simulation import Simulation

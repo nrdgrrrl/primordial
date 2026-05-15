@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — refactor: split runtime loop out of main module
+
+Moved fixed-step loop state, frame timing collection, bounded runtime sessions,
+and profile-session output into `primordial/runtime/`. `primordial/main.py` now
+keeps high-level application orchestration while benchmarks, probes, parity
+audit tooling, and tests import runtime internals from their focused modules.
+
 ## [2026-05-15] — refactor: split AGENTS.md into focused files
 
 Moved design/system reference content out of AGENTS.md into

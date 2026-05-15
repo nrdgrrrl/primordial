@@ -32,15 +32,8 @@ import pygame
 from .graphics_probe import _build_edge_counts, _hash_zone_state
 from .main import (
     DEFAULT_WINDOWED_SIZE,
-    LoopTimingCollector,
-    _advance_fixed_step_frame,
     _apply_display_mode,
-    _build_frame_metrics,
-    _create_fixed_step_loop_state,
-    _get_effective_target_fps,
     _get_fullscreen_resolution,
-    _get_simulation_tick_hz,
-    _simulation_timing_is_suppressed,
 )
 from .rendering import (
     Renderer,
@@ -50,6 +43,14 @@ from .rendering import (
     renderer_gpu_info,
     save_renderer_screenshot,
 )
+from .runtime.fixed_step import (
+    _advance_fixed_step_frame,
+    _create_fixed_step_loop_state,
+    _get_effective_target_fps,
+    _get_simulation_tick_hz,
+    _simulation_timing_is_suppressed,
+)
+from .runtime.timing import LoopTimingCollector, _build_frame_metrics
 from .settings import Settings
 from .simulation import Simulation
 

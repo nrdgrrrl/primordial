@@ -17,13 +17,13 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
-from .main import (
-    LoopTimingCollector,
+from .runtime.fixed_step import (
     _create_fixed_step_loop_state,
     _get_effective_target_fps,
     _get_simulation_tick_hz,
-    run_bounded_session,
 )
+from .runtime.session import run_bounded_session
+from .runtime.timing import LoopTimingCollector
 from .rendering import create_renderer
 from .scenarios import (
     SCENARIOS,

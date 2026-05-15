@@ -19,9 +19,9 @@ from primordial.main import (
     _load_predator_prey_tuning_state,
     _predator_prey_tuning_state_path,
     _save_predator_prey_tuning_state,
-    _create_fixed_step_loop_state,
     handle_keydown,
 )
+from primordial.runtime.fixed_step import _create_fixed_step_loop_state
 from primordial.simulation import Simulation, build_snapshot, load_snapshot_payload
 from primordial.simulation.creature import Creature
 from primordial.simulation.genome import Genome
