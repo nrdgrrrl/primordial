@@ -218,6 +218,27 @@ def _get_fullscreen_resolution() -> tuple[int, int]:
     return display_info.current_w, display_info.current_h
 
 
+def _get_mouse_input_size(renderer: object) -> tuple[int, int]:
+    """Return the mouse-event coordinate space for the active SDL window.
+
+    On some platforms, especially high-DPI windowed setups, the display surface
+    size can differ from the window coordinate space used by mouse events.
+    Inspect picking must use the latter to avoid vertical/horizontal offsets.
+    """
+    get_window_size = getattr(pygame.display, "get_window_size", None)
+    if callable(get_window_size):
+        try:
+            window_width, window_height = get_window_size()
+        except pygame.error:
+            window_width, window_height = 0, 0
+        if window_width > 0 and window_height > 0:
+            return int(window_width), int(window_height)
+
+    display_width = int(getattr(renderer, "display_width", 0))
+    display_height = int(getattr(renderer, "display_height", 0))
+    return max(1, display_width), max(1, display_height)
+
+
 @dataclass(frozen=True)
 class LoopFrameMetrics:
     """Stable outer-loop timing payload for debug and summary consumers."""
@@ -713,8 +734,7 @@ def main(
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
-                    disp_w = renderer.display_width
-                    disp_h = renderer.display_height
+                    disp_w, disp_h = _get_mouse_input_size(renderer)
                     wx, wy = _display_to_world(
                         event.pos[0], event.pos[1],
                         disp_w, disp_h,

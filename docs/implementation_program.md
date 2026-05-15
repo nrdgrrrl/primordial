@@ -249,9 +249,10 @@ When working a milestone, an agent should:
 3. Implement the smallest coherent change that satisfies the milestone.
 4. Add or update automated tests as part of the milestone, not afterward.
 5. Run `python tools/run_milestone.py` before declaring completion.
-6. Make meaningful, reviewable git commits as coherent chunks of progress land.
-7. Avoid unrelated cleanup and speculative refactors.
-8. Stop and report if the work appears to require broader architectural change than the current spec allows.
+6. Update `CHANGELOG.md` in the same change for user-visible or behavior-affecting work; if the repository does not already have a changelog, create `CHANGELOG.md`.
+7. Make meaningful, reviewable git commits as coherent chunks of progress land.
+8. Avoid unrelated cleanup and speculative refactors.
+9. Stop and report if the work appears to require broader architectural change than the current spec allows.
 
 Agents should not invent unrelated task hierarchies or broad new workflows unless the repository deliberately chooses to reintroduce them.
 
@@ -548,4 +549,3 @@ Use the implementation program for sequencing and anti-drift rules.
 Use milestone specs for constraints.
 Use acceptance files and the runner for verification.
 Use human review gates where the project’s deeper intent cannot yet be reduced safely to automation.
-

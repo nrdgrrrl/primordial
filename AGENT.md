@@ -545,6 +545,15 @@ Supported flags:
 
 The parser is tolerant (`parse_known_args`) so Windows screensaver args (`/s`, `/p`, `/c`) continue to work.
 
+## Change Log And Commit Hygiene
+
+- When a change is user-visible or alters behaviour, update the repository root
+  `CHANGELOG.md` in the same change.
+- If the repository does not yet have a changelog, create `CHANGELOG.md`
+  instead of skipping the record.
+- Make meaningful, reviewable git commits that keep the code, tests, and
+  changelog entry together as one coherent unit.
+
 ### Logging
 
 `primordial/main.py` configures stdlib logging on startup:
