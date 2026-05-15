@@ -398,8 +398,20 @@ class PredatorPreyGpuRenderer:
         self._initialize_gl()
         self._log_gpu_coordinate_diagnostics("startup")
 
+    def _is_fullscreen(self) -> bool:
+        return bool(self.screen.get_flags() & pygame.FULLSCREEN)
+
+    def _active_gl_viewport_size(self) -> tuple[int, int]:
+        if self._is_fullscreen():
+            return self.drawable_width, self.drawable_height
+        return self.window_width, self.window_height
+
+    def _active_gl_viewport_policy(self) -> str:
+        return "drawable_fullscreen" if self._is_fullscreen() else "logical_window"
+
     def _initialize_gl(self) -> None:
-        glViewport(0, 0, self.drawable_width, self.drawable_height)
+        viewport_w, viewport_h = self._active_gl_viewport_size()
+        glViewport(0, 0, viewport_w, viewport_h)
         glEnable(GL_BLEND)
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
         self.gpu_info = {
@@ -473,6 +485,7 @@ class PredatorPreyGpuRenderer:
             return None
 
     def _log_gpu_coordinate_diagnostics(self, phase: str) -> None:
+        active_viewport_w, active_viewport_h = self._active_gl_viewport_size()
         logger.debug(
             "GPU_COORDINATE_DIAGNOSTIC %s",
             json.dumps(
@@ -483,6 +496,8 @@ class PredatorPreyGpuRenderer:
                     "renderer_size": [self.width, self.height],
                     "renderer_display_size": [self.display_width, self.display_height],
                     "drawable_size": [self.drawable_width, self.drawable_height],
+                    "active_gl_viewport_policy": self._active_gl_viewport_policy(),
+                    "active_gl_viewport_size": [active_viewport_w, active_viewport_h],
                     "simulation_size": [self.width, self.height],
                     "gl_viewport": self._current_gl_viewport(),
                 },

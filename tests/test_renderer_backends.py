@@ -17,8 +17,16 @@ from primordial.rendering import (
     display_flags_for_settings,
     wants_gpu_renderer,
 )
-from primordial.rendering.gpu_renderer import _TEXTURE_FRAGMENT_SHADER
+from primordial.rendering.gpu_renderer import PredatorPreyGpuRenderer, _TEXTURE_FRAGMENT_SHADER
 from primordial.settings import Settings
+
+
+class FakeGpuScreen:
+    def __init__(self, flags: int) -> None:
+        self._flags = flags
+
+    def get_flags(self) -> int:
+        return self._flags
 
 
 class RendererBackendTests(unittest.TestCase):
@@ -70,6 +78,28 @@ class RendererBackendTests(unittest.TestCase):
     def test_gpu_ui_texture_shader_does_not_double_flip_uploaded_surface(self) -> None:
         self.assertIn("texture(u_texture, v_uv)", _TEXTURE_FRAGMENT_SHADER)
         self.assertNotIn("1.0 - v_uv.y", _TEXTURE_FRAGMENT_SHADER)
+
+    def test_gpu_windowed_viewport_policy_uses_logical_window_size(self) -> None:
+        renderer = PredatorPreyGpuRenderer.__new__(PredatorPreyGpuRenderer)
+        renderer.screen = FakeGpuScreen(0)
+        renderer.window_width = 1280
+        renderer.window_height = 720
+        renderer.drawable_width = 1920
+        renderer.drawable_height = 1080
+
+        self.assertEqual(renderer._active_gl_viewport_policy(), "logical_window")
+        self.assertEqual(renderer._active_gl_viewport_size(), (1280, 720))
+
+    def test_gpu_fullscreen_viewport_policy_uses_drawable_size(self) -> None:
+        renderer = PredatorPreyGpuRenderer.__new__(PredatorPreyGpuRenderer)
+        renderer.screen = FakeGpuScreen(pygame.FULLSCREEN)
+        renderer.window_width = 1280
+        renderer.window_height = 720
+        renderer.drawable_width = 1920
+        renderer.drawable_height = 1080
+
+        self.assertEqual(renderer._active_gl_viewport_policy(), "drawable_fullscreen")
+        self.assertEqual(renderer._active_gl_viewport_size(), (1920, 1080))
 
 
 if __name__ == "__main__":
