@@ -20,6 +20,7 @@ from primordial.main import (
     _create_fixed_step_loop_state,
     _default_snapshot_path,
     _force_windowed_mode,
+    _get_display_window_size,
     _get_fullscreen_resolution,
     _map_mouse_event_to_display,
     _open_predator_prey_help,
@@ -421,6 +422,18 @@ class FixedStepLoopTests(unittest.TestCase):
             self.assertEqual(
                 _map_mouse_event_to_display(640, 360, renderer),
                 (640.0, 360.0, 2560, 1440),
+            )
+
+    def test_get_display_window_size_reports_display_and_window(self) -> None:
+        renderer = SimpleNamespace(display_width=2560, display_height=1440)
+
+        with patch(
+            "primordial.main.pygame.display.get_window_size",
+            return_value=(1280, 720),
+        ):
+            self.assertEqual(
+                _get_display_window_size(renderer),
+                (2560, 1440, 1280, 720),
             )
 
 

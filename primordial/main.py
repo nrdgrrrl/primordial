@@ -242,6 +242,145 @@ def _map_mouse_event_to_display(
     return display_x, display_y, display_width, display_height
 
 
+def _get_display_window_size(renderer: object) -> tuple[int, int, int, int]:
+    """Return renderer display size and SDL window size for diagnostics."""
+    display_width = max(1, int(getattr(renderer, "display_width", 0)))
+    display_height = max(1, int(getattr(renderer, "display_height", 0)))
+    window_width = display_width
+    window_height = display_height
+    get_window_size = getattr(pygame.display, "get_window_size", None)
+    if callable(get_window_size):
+        try:
+            queried_width, queried_height = get_window_size()
+        except pygame.error:
+            queried_width, queried_height = 0, 0
+        if queried_width > 0 and queried_height > 0:
+            window_width = int(queried_width)
+            window_height = int(queried_height)
+    return display_width, display_height, window_width, window_height
+
+
+def _world_from_display_pos(
+    display_x: float,
+    display_y: float,
+    display_width: int,
+    display_height: int,
+    simulation: Simulation,
+) -> tuple[float, float]:
+    """Convert a presentation-space point into simulation world coordinates."""
+    return (
+        display_x * (simulation.width / max(1, display_width)),
+        display_y * (simulation.height / max(1, display_height)),
+    )
+
+
+def _log_inspect_click_diagnostics(
+    event_pos: tuple[int, int],
+    mapped_display_pos: tuple[float, float],
+    mapped_display_size: tuple[int, int],
+    simulation: Simulation,
+    renderer: object,
+) -> None:
+    """Emit enough inspect-click data to diagnose platform coordinate offsets."""
+    display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
+    selected = renderer.inspect_mode.get_selected_creature(simulation)
+    mouse_pos = pygame.mouse.get_pos()
+    flags = int(renderer.screen.get_flags()) if hasattr(renderer, "screen") else 0
+    backend = renderer_backend_name(renderer)
+
+    raw_as_display_world = _world_from_display_pos(
+        event_pos[0],
+        event_pos[1],
+        display_width,
+        display_height,
+        simulation,
+    )
+    raw_as_window_world = _world_from_display_pos(
+        event_pos[0],
+        event_pos[1],
+        window_width,
+        window_height,
+        simulation,
+    )
+    mapped_world = _world_from_display_pos(
+        mapped_display_pos[0],
+        mapped_display_pos[1],
+        mapped_display_size[0],
+        mapped_display_size[1],
+        simulation,
+    )
+
+    selected_payload: dict[str, float | int | str | None] = {
+        "id": None,
+        "species": None,
+        "world_x": None,
+        "world_y": None,
+        "render_display_x": None,
+        "render_display_y": None,
+        "render_window_x": None,
+        "render_window_y": None,
+        "delta_from_event_x": None,
+        "delta_from_event_y": None,
+        "delta_from_mapped_x": None,
+        "delta_from_mapped_y": None,
+    }
+    if selected is not None:
+        render_display_x = selected.x * display_width / max(1, simulation.width)
+        render_display_y = selected.y * display_height / max(1, simulation.height)
+        render_window_x = selected.x * window_width / max(1, simulation.width)
+        render_window_y = selected.y * window_height / max(1, simulation.height)
+        selected_payload = {
+            "id": id(selected),
+            "species": selected.species,
+            "world_x": round(float(selected.x), 3),
+            "world_y": round(float(selected.y), 3),
+            "render_display_x": round(render_display_x, 3),
+            "render_display_y": round(render_display_y, 3),
+            "render_window_x": round(render_window_x, 3),
+            "render_window_y": round(render_window_y, 3),
+            "delta_from_event_x": round(render_window_x - event_pos[0], 3),
+            "delta_from_event_y": round(render_window_y - event_pos[1], 3),
+            "delta_from_mapped_x": round(render_display_x - mapped_display_pos[0], 3),
+            "delta_from_mapped_y": round(render_display_y - mapped_display_pos[1], 3),
+        }
+
+    logger.debug(
+        "INSPECT_CLICK_DIAGNOSTIC %s",
+        json.dumps(
+            {
+                "backend": backend,
+                "fullscreen": bool(flags & pygame.FULLSCREEN),
+                "opengl": bool(flags & pygame.OPENGL),
+                "scaled": bool(flags & pygame.SCALED),
+                "event_pos": [int(event_pos[0]), int(event_pos[1])],
+                "mouse_get_pos": [int(mouse_pos[0]), int(mouse_pos[1])],
+                "mapped_display_pos": [
+                    round(float(mapped_display_pos[0]), 3),
+                    round(float(mapped_display_pos[1]), 3),
+                ],
+                "display_size": [display_width, display_height],
+                "window_size": [window_width, window_height],
+                "screen_size": list(renderer.screen.get_size()) if hasattr(renderer, "screen") else None,
+                "world_size": [int(simulation.width), int(simulation.height)],
+                "raw_as_display_world": [
+                    round(raw_as_display_world[0], 3),
+                    round(raw_as_display_world[1], 3),
+                ],
+                "raw_as_window_world": [
+                    round(raw_as_window_world[0], 3),
+                    round(raw_as_window_world[1], 3),
+                ],
+                "mapped_world": [
+                    round(mapped_world[0], 3),
+                    round(mapped_world[1], 3),
+                ],
+                "selected": selected_payload,
+            },
+            sort_keys=True,
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class LoopFrameMetrics:
     """Stable outer-loop timing payload for debug and summary consumers."""
@@ -749,6 +888,14 @@ def main(
                         disp_h,
                         simulation,
                     )
+                    if logger.isEnabledFor(logging.DEBUG):
+                        _log_inspect_click_diagnostics(
+                            event.pos,
+                            (display_x, display_y),
+                            (disp_w, disp_h),
+                            simulation,
+                            renderer,
+                        )
 
             elif event.type == pygame.KEYDOWN:
                 if renderer.settings_overlay.visible:
