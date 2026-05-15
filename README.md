@@ -84,7 +84,7 @@ make clean     # remove build/dist and __pycache__ dirs
 | `F` | Toggle fullscreen/windowed mode |
 | `R` | Reset simulation (new population) |
 | `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
-| `D` | In the settings overlay, reset predator-prey adaptive dials to baseline and clear the max tick record |
+| `D` | While in Inspect Mode, toggle the creature card between compact/detail; in the settings overlay, reset predator-prey adaptive dials to baseline and clear the max tick record |
 | Hold `P` | Add a stronger locator highlight to predators while held in `predator_prey` mode |
 | `I` | Toggle Inspect Mode (read-only creature observability; see below) |
 | `M` | While in Inspect Mode, toggle between pause and slow-motion (2 Hz) sub-modes |
@@ -98,7 +98,8 @@ Press **I** to toggle Inspect Mode, a read-only observability overlay that does 
 
 - **Pause sub-mode** (default): simulation is frozen; you can click creatures at leisure.
 - **Slow sub-mode** (press **M** to switch): simulation advances at 2 ticks/second so you can watch behaviour unfold slowly.
-- **Mouse click**: selects the nearest creature and displays a detail card showing species, lineage, age, energy, depth band, genome traits, position, velocity, and a guessed behavior label. Predators also show recent animal energy and satiety.
+- **Mouse click**: selects the nearest creature and displays a polished top-right microscope card with the creature title, a short behavior summary, state, focus, and temperament.
+- **Detail toggle** (press **D**): switches the inspect card between compact and detailed layouts. Detail mode adds raw genome values, exact age, position, and predator-only satiety / recent prey energy.
 - Exiting Inspect Mode (press **I** again) restores the prior paused/running state.
 
 ## Performance

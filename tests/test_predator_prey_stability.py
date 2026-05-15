@@ -913,6 +913,26 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertFalse(simulation.predator_prey_game_over_active)
         self.assertEqual(simulation.get_predator_prey_stability_stats()["current_seed"], 777)
 
+    def test_d_toggles_inspect_detail_mode(self) -> None:
+        simulation = self._build_simulation()
+        renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
+        runtime_loop = _create_fixed_step_loop_state()
+        renderer.inspect_mode.toggle(simulation_paused=False)
+
+        keep_running = handle_keydown(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d),
+            simulation,
+            renderer,
+            simulation.settings,
+            renderer.screen,
+            "normal",
+            runtime_loop,
+            inspect_mode=renderer.inspect_mode,
+        )
+
+        self.assertTrue(keep_running)
+        self.assertEqual(renderer.inspect_mode.detail_mode, "detail")
+
     def test_predator_prey_tuning_state_persists_across_launches(self) -> None:
         simulation = self._build_simulation()
         simulation._predator_prey_state.run_history.extend([25, 50, 75])

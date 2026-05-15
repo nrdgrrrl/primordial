@@ -2,6 +2,30 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — inspect: polish creature card layout
+
+**What changed** (`primordial/rendering/inspect_mode.py`,
+`primordial/rendering/renderer.py`, `primordial/rendering/gpu_renderer.py`,
+`primordial/main.py`, `README.md`, `docs/predator_prey_system_guide.md`,
+`tests/test_inspect_mode.py`, `tests/test_predator_prey_stability.py`):
+
+- Moved the Inspect Mode card to the top-right in both pygame and GPU render
+  paths with a stable `24px` screen margin and shared positioning logic.
+- Replaced the debug-style card rendering with a calmer microscope-style panel:
+  darker translucent background, restrained luminous border, better padding,
+  clearer typography hierarchy, and subtle divider lines.
+- Added a presentation layer on top of the existing read-only creature
+  observation builder so the card now leads with title, narrative summary,
+  state, behavior, and temperament before lower-priority details.
+- Added friendlier labels for rendered fields, compacted the default layout,
+  and gracefully pruned lower-priority rows when the card would exceed the
+  available screen height.
+- Added an optional Inspect Mode detail toggle on `D`: compact mode keeps the
+  story/state view prominent, while detail mode adds raw genome values,
+  position, exact age, and predator-only satiety / recent prey energy.
+- Updated controls/docs and added regression tests for narrative summary,
+  label mapping, top-right placement, height clamping, and the `D` key toggle.
+
 ## [2026-05-15] — fix: inspect click selection compares Linux coordinate spaces
 
 **What changed** (`primordial/main.py`, `tests/test_fixed_step_loop.py`):

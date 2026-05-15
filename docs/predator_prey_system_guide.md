@@ -399,6 +399,10 @@ the max survival tick record, and starts a fresh run.
 | F | Toggle fullscreen/windowed |
 | R | Reset simulation |
 | S | Open settings overlay |
+| I | Toggle Inspect Mode |
+| M | While in Inspect Mode, switch between pause and slow motion |
+| D | While in Inspect Mode, toggle the card between compact and detailed views |
+| Mouse click | While in Inspect Mode, select a creature |
 | Hold P | Highlight predators (pulsing accent rings with crosshair ticks) |
 | + / = | Increase food spawn rate |
 | - / _ | Decrease food spawn rate |

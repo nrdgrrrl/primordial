@@ -1551,6 +1551,9 @@ def handle_keydown(
                 simulation.paused = False
             inspect_mode._slow_accumulator = 0.0
             runtime_loop.reset_timing_debt()
+    elif key == pygame.K_d:
+        if inspect_mode is not None and inspect_mode.enabled:
+            inspect_mode.toggle_detail_level()
     elif key == pygame.K_s and mode != "screensaver":
         renderer.toggle_settings_overlay()
     elif key == pygame.K_SPACE:

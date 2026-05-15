@@ -10,8 +10,12 @@ from unittest.mock import MagicMock
 from primordial.rendering.inspect_mode import (
     InspectMode,
     build_creature_card,
+    build_creature_summary,
+    build_inspect_panel_lines,
+    compute_inspect_panel_placement,
     display_to_world,
     find_nearest_creature_at_display_pos,
+    friendly_inspect_label,
 )
 from primordial.rendering.creature_observation import (
     classify_life_stage,
@@ -171,6 +175,26 @@ class TestTogglePauseSlow(unittest.TestCase):
         mode._slow_accumulator = 99.0
         mode.toggle_pause_slow()
         self.assertAlmostEqual(mode._slow_accumulator, 0.0)
+
+
+class TestToggleDetailLevel(unittest.TestCase):
+    def test_switches_compact_to_detail(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.toggle_detail_level()
+        self.assertEqual(mode.detail_mode, "detail")
+
+    def test_switches_detail_to_compact(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.toggle_detail_level()
+        mode.toggle_detail_level()
+        self.assertEqual(mode.detail_mode, "compact")
+
+    def test_no_op_when_not_enabled(self):
+        mode = InspectMode()
+        mode.toggle_detail_level()
+        self.assertEqual(mode.detail_mode, "compact")
 
 
 class TestShouldSuppressSim(unittest.TestCase):
@@ -404,6 +428,91 @@ class TestBuildCreatureCard(unittest.TestCase):
         sim = _make_simulation([c1])
         card = build_creature_card(c1, sim)
         self.assertNotIn("attention", card)
+
+
+class TestInspectPanelPresentation(unittest.TestCase):
+    def test_summary_builds_narrative_story(self):
+        summary = build_creature_summary(
+            {
+                "species": "Prey",
+                "stage": "Larva",
+                "behavior": "fleeing",
+                "depth": "surface",
+                "attention": "threat",
+            }
+        )
+        self.assertEqual(summary, "Larval prey fleeing a threat near the surface")
+
+    def test_label_mapping_uses_friendlier_copy(self):
+        self.assertEqual(friendly_inspect_label("vel"), "Moving")
+        self.assertEqual(friendly_inspect_label("attention"), "Focus")
+        self.assertEqual(friendly_inspect_label("recent_animal_e"), "Recent prey energy")
+
+    def test_compact_layout_omits_details_section(self):
+        mode = InspectMode(enabled=True, detail_mode="compact")
+        lines = build_inspect_panel_lines(
+            {
+                "species": "Predator",
+                "lineage": "#12",
+                "stage": "Adult",
+                "behavior": "hunting",
+                "depth": "mid",
+                "energy": "0.81",
+                "vel": "0.44",
+                "age": "80 / 100  (80%)",
+                "tags": "Swift, Keen-eyed",
+                "motion": "Dart",
+                "depth_pref": "Deep",
+                "speed": "0.90",
+                "size": "0.40",
+                "sense": "0.80",
+                "aggr": "0.88",
+                "eff": "0.35",
+                "pos": "(120, 44)",
+                "attention": "prey",
+                "attention_conf": "78%",
+            },
+            mode,
+        )
+        self.assertNotIn("Details", [line.text for line in lines if line.kind == "section"])
+
+    def test_detail_layout_includes_details_section(self):
+        mode = InspectMode(enabled=True, detail_mode="detail")
+        lines = build_inspect_panel_lines(
+            {
+                "species": "Predator",
+                "lineage": "#12",
+                "stage": "Adult",
+                "behavior": "hunting",
+                "depth": "mid",
+                "energy": "0.81",
+                "vel": "0.44",
+                "age": "80 / 100  (80%)",
+                "tags": "Swift, Keen-eyed",
+                "motion": "Dart",
+                "depth_pref": "Deep",
+                "speed": "0.90",
+                "size": "0.40",
+                "sense": "0.80",
+                "aggr": "0.88",
+                "eff": "0.35",
+                "pos": "(120, 44)",
+                "attention": "prey",
+                "attention_conf": "78%",
+            },
+            mode,
+        )
+        self.assertIn("Details", [line.text for line in lines if line.kind == "section"])
+
+    def test_panel_placement_anchors_top_right_with_margin(self):
+        placement = compute_inspect_panel_placement(1280, 720, 320, 280)
+        self.assertEqual((placement.x, placement.y), (936, 24))
+        self.assertEqual(placement.height, 280)
+
+    def test_panel_placement_clamps_height_on_small_screens(self):
+        placement = compute_inspect_panel_placement(320, 140, 280, 220)
+        self.assertEqual((placement.x, placement.y), (16, 24))
+        self.assertEqual(placement.height, 92)
 
 
 class TestGuessBehavior(unittest.TestCase):

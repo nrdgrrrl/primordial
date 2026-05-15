@@ -927,78 +927,9 @@ class PredatorPreyGpuRenderer:
 
     def _draw_inspect_overlay(self, simulation) -> None:
         """Draw the creature card overlay on the UI surface."""
-        if not self.inspect_mode.enabled:
-            return
-        creature = self.inspect_mode.get_selected_creature(simulation)
-        if creature is None:
-            mode_label = "INSPECT  (I: exit)"
-            if self.inspect_mode.pause_mode == "slow":
-                mode_label += f"  [Slow {self.inspect_mode.slow_hz:.0f}Hz  M: toggle]"
-            else:
-                mode_label += "  [Paused  M: slow]"
-            from .inspect_mode import build_creature_card
-            label_surf = self._overlay_small_font.render(mode_label, True, (140, 180, 220))
-            self._ui_surface.blit(label_surf, (12, 12))
-            return
-        from .inspect_mode import build_creature_card
-        card = build_creature_card(creature, simulation)
-        card_font = pygame.font.Font(None, 18)
-        card_title_font = pygame.font.Font(None, 22)
-        section_font = pygame.font.Font(None, 17)
-        line_height = 20
-        padding = 10
-        card_width = 220
+        from .inspect_mode import draw_inspect_overlay
 
-        card_lines = list(card.items())
-        row_count = 0
-        for k, v in card_lines:
-            if k == "species":
-                row_count += 1
-            elif k.startswith("section_"):
-                row_count += 1
-            else:
-                row_count += 1
-        card_height = padding * 2 + row_count * line_height + line_height
-
-        surface = pygame.Surface((card_width, card_height), pygame.SRCALPHA)
-        surface.fill((8, 12, 24, 200))
-        pygame.draw.rect(surface, (80, 160, 240, 180), (0, 0, card_width, card_height), 1, border_radius=4)
-        mode_label = "INSPECT  (I: exit)"
-        if self.inspect_mode.pause_mode == "slow":
-            mode_label += f"  [Slow {self.inspect_mode.slow_hz:.0f}Hz  M: toggle]"
-        else:
-            mode_label += "  [Paused  M: slow]"
-        mode_surf = card_font.render(mode_label, True, (140, 180, 220))
-        surface.blit(mode_surf, (padding, padding))
-        y = padding + line_height
-
-        _SECTION_LABELS = {
-            "section_identity": "IDENTITY",
-            "section_vitals": "VITALS",
-            "section_genome": "GENOME",
-            "section_behavior": "BEHAVIOR",
-        }
-
-        for key, value in card.items():
-            if key.startswith("section_"):
-                label = _SECTION_LABELS.get(key, key.replace("section_", "").upper())
-                header_surf = section_font.render(f"— {label} —", True, (100, 140, 180))
-                surface.blit(header_surf, (padding, y))
-                y += line_height
-                continue
-            if key == "species":
-                title_text = f"{value} #{creature.lineage_id}"
-                title_surf = card_title_font.render(title_text, True, (220, 240, 255))
-                surface.blit(title_surf, (padding, y))
-                y += line_height + 2
-                continue
-            display_key = key.replace("_", " ").capitalize()
-            label_surf = card_font.render(f"{display_key}: ", True, (140, 160, 180))
-            value_surf = card_font.render(value, True, (220, 240, 255))
-            surface.blit(label_surf, (padding, y))
-            surface.blit(value_surf, (padding + label_surf.get_width(), y))
-            y += line_height
-        self._ui_surface.blit(surface, (12, 12))
+        draw_inspect_overlay(self._ui_surface, self.inspect_mode, simulation)
 
     def _build_inspect_highlight(self, simulation, anim_time: float) -> list[LineSprite]:
         """Build line sprites for the inspect selection ring and attention target."""
