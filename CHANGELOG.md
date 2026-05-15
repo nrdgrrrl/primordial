@@ -2,6 +2,32 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — render: restore gpu kin lines
+
+**What changed** (`primordial/rendering/snapshot.py`,
+`primordial/rendering/gpu_renderer.py`, `primordial/config/config.py`,
+`tools/smoke_gpu_predator_prey.py`, `README.md`,
+`docs/predator_prey_system_guide.md`, `tests/test_gpu_kin_lines.py`,
+`tests/test_config_authority.py`):
+
+- Restored faint lineage connection lines in the GPU predator/prey renderer
+  with a pure snapshot-side builder that groups by `lineage_id`, uses local
+  spatial buckets, respects `kin_line_min_group`, fades alpha by distance,
+  and avoids naive whole-population `O(n^2)` scans.
+- Split GPU kin lines from attack lines so kin threads now draw beneath
+  creatures while attack lines remain brighter and above-creature.
+- Added conservative density caps for dense lineages and skipped screen-spanning
+  wraparound segments to keep the effect readable instead of turning into a
+  full-screen spiderweb.
+- Kept the global committed render default at `kin_line_max_distance = 0.0`,
+  but the GPU predator/prey renderer now uses a modest internal fallback when
+  that key was not explicitly set by the user. Explicitly setting
+  `kin_line_max_distance = 0.0` still disables kin lines.
+- Added snapshot timing/telemetry for GPU kin-line build and draw cost plus a
+  pure test suite covering disabled mode, minimum group size, same-lineage
+  generation, different-lineage exclusion, density caps, determinism, and
+  config-explicit disable handling.
+
 ## [2026-05-15] — inspect: polish creature card layout
 
 **What changed** (`primordial/rendering/inspect_mode.py`,

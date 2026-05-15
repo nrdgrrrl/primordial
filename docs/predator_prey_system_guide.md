@@ -310,7 +310,7 @@ This is appropriate for a screensaver — the goal is a living, shifting display
 The screen shows a dark deep-blue background with:
 - **Creatures**: glowing procedural glyphs, each a small constellation of strokes. Predators carry a persistent warm coral/amber tint, while prey stay in the cooler cyan/turquoise/blue side of the palette unless neutral hue drift takes them elsewhere.
 - **Food particles**: small twinkling cyan dots scattered across the world.
-- **Kin connection lines**: faint thin lines connecting creatures of the same lineage when 3+ kin are within 120px.
+- **Kin connection lines**: faint thin lines connecting nearby creatures of the same lineage. In the GPU predator/prey renderer they are restored with conservative defaults, remain controlled by `kin_line_max_distance` and `kin_line_min_group`, are purely visual, and can be disabled by setting `kin_line_max_distance = 0.0`.
 - **Territory shimmer**: soft pulsing elliptical glow at the centroid of the top 3 most populous lineages.
 - **Zone backgrounds**: very faint radial color gradients marking the 5 environmental zones. Zone labels appear when the HUD is visible.
 - **Ambient particles**: subtle drifting background dots for depth effect.

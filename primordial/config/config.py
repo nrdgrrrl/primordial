@@ -229,6 +229,7 @@ class Config:
             setattr(self, attr_name, _MISSING)
         self.mode_params = {mode_name: {} for mode_name in _CANONICAL_MODE_KEYS}
         self.default_mode_params = deepcopy(self.mode_params)
+        self._explicit_rendering_keys: set[str] = set()
         self._config_migrated = False
 
     def _load_canonical_defaults(self) -> None:
@@ -243,6 +244,7 @@ class Config:
 
         self._initialize_state()
         self._merge_from_dict(data)
+        self._explicit_rendering_keys.clear()
         self._ensure_canonical_defaults_complete(defaults_path)
         self.default_mode_params = deepcopy(self.mode_params)
         self._validate()
@@ -315,6 +317,9 @@ class Config:
         self._warn_unknown_keys("display", display, set(_SECTION_FIELDS["display"]))
         self._warn_unknown_keys("evolution", evolution, set(_EVOLUTION_COMPAT_FIELDS))
         self._warn_unknown_keys("rendering", rendering, set(_SECTION_FIELDS["rendering"]))
+        self._explicit_rendering_keys.update(
+            key for key in rendering.keys() if key in _SECTION_FIELDS["rendering"]
+        )
         self._migrate_legacy_render_defaults(rendering)
 
         self._merge_section_values(simulation, _SECTION_FIELDS["simulation"])
@@ -407,6 +412,10 @@ class Config:
             self.max_population,
             *(mode_capacities or [0]),
         )
+
+    def is_render_setting_explicit(self, key: str) -> bool:
+        """Return whether a rendering key was explicitly present in user config."""
+        return key in self._explicit_rendering_keys
 
     def reset_to_defaults(self) -> None:
         self._load_canonical_defaults()

@@ -89,6 +89,7 @@ def main() -> int:
         loaded = pygame.image.load(str(args.screenshot))
         required_metric_keys = (
             "snapshot_ms",
+            "kin_lines_ms",
             "trails_ms",
             "creatures_ms",
             "draw_total_ms",
@@ -110,6 +111,8 @@ def main() -> int:
             "ticks": max(1, args.ticks),
             "timing_ms": {
                 "snapshot_ms": metrics["snapshot_ms"],
+                "kin_lines_ms": metrics["kin_lines_ms"],
+                "kin_lines_build_ms": metrics.get("kin_lines_build_ms", 0.0),
                 "trails_ms": metrics["trails_ms"],
                 "creatures_ms": metrics["creatures_ms"],
                 "render_ms": metrics["draw_total_ms"],

@@ -281,6 +281,8 @@ territory_top_n = 0
 
         self.assertEqual(settings.kin_line_max_distance, 0.0)
         self.assertEqual(settings.territory_top_n, 0)
+        self.assertTrue(settings.is_render_setting_explicit("kin_line_max_distance"))
+        self.assertTrue(settings.is_render_setting_explicit("territory_top_n"))
 
     def test_legacy_render_defaults_are_migrated_to_disabled_effects(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -304,6 +306,16 @@ territory_top_n = 3
         self.assertEqual(settings.territory_top_n, 0)
         self.assertEqual(migrated["rendering"]["kin_line_max_distance"], 0.0)
         self.assertEqual(migrated["rendering"]["territory_top_n"], 0)
+        self.assertTrue(settings.is_render_setting_explicit("kin_line_max_distance"))
+        self.assertTrue(settings.is_render_setting_explicit("territory_top_n"))
+
+    def test_canonical_defaults_do_not_count_as_explicit_render_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Config()
+
+        self.assertFalse(settings.is_render_setting_explicit("kin_line_max_distance"))
 
 
 if __name__ == "__main__":

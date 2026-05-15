@@ -90,7 +90,14 @@ from .hud import HUD
 from .inspect_mode import InspectMode
 from .renderer import _ZONE_BG_COLORS
 from .settings_overlay import SettingsOverlay
-from .snapshot import GlyphSprite, LineSprite, PredatorPreyRenderSnapshot, RadialSprite
+from .snapshot import (
+    GlyphSprite,
+    LineSprite,
+    PredatorPreyRenderSnapshot,
+    RadialSprite,
+    build_gpu_kin_line_sprites,
+    resolve_gpu_predator_prey_kin_line_distance,
+)
 from .themes import OceanTheme
 
 GL_TEXTURE0 = 0x84C0
@@ -390,6 +397,7 @@ class PredatorPreyGpuRenderer:
         self._overlay_font = pygame.font.Font(None, 72)
         self._overlay_small_font = pygame.font.Font(None, 24)
         self._debug_timing: dict[str, float] = {}
+        self._snapshot_debug_metrics: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
         self._debug_inspect_click_marker: tuple[float, float, float] | None = None
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
@@ -592,6 +600,7 @@ class PredatorPreyGpuRenderer:
         t0 = time.perf_counter()
         snapshot = self._build_snapshot(simulation, anim_time)
         timings["snapshot_ms"] = (time.perf_counter() - t0) * 1000.0
+        timings.update(self._snapshot_debug_metrics)
         bg = snapshot.background_color
         t0 = time.perf_counter()
         glClearColor(bg[0], bg[1], bg[2], bg[3])
@@ -615,13 +624,17 @@ class PredatorPreyGpuRenderer:
         timings["trails_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
+        self._draw_lines(snapshot.kin_lines, width=1.0)
+        timings["kin_lines_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        t0 = time.perf_counter()
         self._draw_radials(snapshot.glows, blend="additive")
         self._draw_radials(snapshot.bodies, blend="normal")
         self._draw_glyphs(snapshot.glyphs)
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
-        self._draw_lines(snapshot.lines, width=1.0)
+        self._draw_lines(snapshot.attack_lines, width=1.0)
         timings["attacks_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
@@ -644,7 +657,7 @@ class PredatorPreyGpuRenderer:
         self._drain_visual_events(simulation)
         timings.setdefault("events_ms", 0.0)
         timings.setdefault("territory_ms", 0.0)
-        timings.setdefault("links_ms", 0.0)
+        timings.setdefault("links_ms", timings.get("kin_lines_ms", 0.0))
         timings.setdefault("anim_ms", 0.0)
         timings.setdefault("stub_ms", 0.0)
         timings.setdefault("overlay_ms", 0.0)
@@ -784,10 +797,28 @@ class PredatorPreyGpuRenderer:
                 )
             )
 
-        lines = [
+        kin_t0 = time.perf_counter()
+        kin_distance = resolve_gpu_predator_prey_kin_line_distance(self.settings)
+        kin_lines = build_gpu_kin_line_sprites(
+            simulation.creatures,
+            world_width=self.width,
+            world_height=self.height,
+            max_distance=kin_distance,
+            min_group=max(2, int(self.settings.kin_line_min_group)),
+            color_for_member=lambda creature: _rgb3(
+                self.theme.resolve_color_for_creature(creature)
+            ),
+        )
+        kin_ms = (time.perf_counter() - kin_t0) * 1000.0
+
+        attack_lines = [
             LineSprite(ax, ay, tx, ty, (*_rgb01(self.theme.resolve_color_for_species(species, hue, saturation), 0.28),))
             for ax, ay, tx, ty, species, hue, saturation in simulation.active_attacks
         ]
+        self._snapshot_debug_metrics = {
+            "kin_lines_build_ms": kin_ms,
+            "kin_line_count": float(len(kin_lines)),
+        }
         highlights = self._build_predator_highlights(simulation, anim_time)
         return PredatorPreyRenderSnapshot(
             background_color=(0.008, 0.031, 0.094, 1.0),
@@ -795,10 +826,11 @@ class PredatorPreyGpuRenderer:
             ambient=tuple(ambient),
             food=tuple(food),
             trails=tuple(trails),
+            kin_lines=tuple(kin_lines),
             glows=tuple(glows),
             bodies=tuple(bodies),
             glyphs=tuple(glyphs),
-            lines=tuple(lines),
+            attack_lines=tuple(attack_lines),
             predator_highlights=tuple(highlights),
         )
 
@@ -1078,6 +1110,14 @@ def _rgb01(color: tuple[int, int, int], alpha: float) -> tuple[float, float, flo
         max(0.0, min(1.0, color[1] / 255.0)),
         max(0.0, min(1.0, color[2] / 255.0)),
         max(0.0, min(1.0, alpha)),
+    )
+
+
+def _rgb3(color: tuple[int, int, int]) -> tuple[float, float, float]:
+    return (
+        max(0.0, min(1.0, color[0] / 255.0)),
+        max(0.0, min(1.0, color[1] / 255.0)),
+        max(0.0, min(1.0, color[2] / 255.0)),
     )
 
 

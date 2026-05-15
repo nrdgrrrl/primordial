@@ -165,7 +165,7 @@ Glyphs are built from a **stroke vocabulary**: arcs, straight lines, loops (smal
 
 ### What to Look For Visually
 
-- **Kin connection lines**: faint thin lines connect creatures of the same lineage when 3+ kin are within 120 pixels. Watch these webs form, drift, and dissolve as lineages evolve.
+- **Kin connection lines**: faint thin lines connect creatures of the same lineage when enough kin are nearby. In GPU predator/prey mode they are restored by default with conservative spacing, remain controlled by `kin_line_max_distance` and `kin_line_min_group`, and can be disabled by explicitly setting `kin_line_max_distance = 0.0`.
 - **Territory shimmer**: the top 3 most populous lineages get a soft pulsing elliptical glow at their centroid. This "presence" shifts as lineages grow and shrink. It pulses on a 4–6 second sine wave.
 - **Birth budding**: new creatures pop into existence at 0.2× scale and ease out to full size over 30 frames — a smooth "budding" effect.
 - **Death dissolution**: dying creatures flash white, then shrink and fade over 40 frames, scattering 4–6 dim particles outward.
