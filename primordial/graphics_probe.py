@@ -79,6 +79,7 @@ def run_display_toggle_probe(
 
         simulation = Simulation(world_width, world_height, settings)
         renderer = create_renderer(screen, settings, debug=True)
+        renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
 
@@ -303,16 +304,23 @@ def _build_probe_report(
     def _all_match(key: str) -> bool:
         return all(checkpoint[key] == baseline[key] for checkpoint in checkpoints[1:])
 
-    if not _all_match("world_size"):
-        issues.append("Simulation world size changed across display toggles.")
-    if not _all_match("food_hash"):
-        issues.append("Food positions changed while probe kept simulation paused.")
-    if not _all_match("creature_hash"):
-        issues.append("Creature positions changed while probe kept simulation paused.")
-    if not _all_match("zone_hash"):
-        issues.append("Zone geometry changed across display toggles.")
-    if resize_calls["simulation"]:
-        issues.append("Simulation.resize() was called during presentation-only toggles.")
+    if not _all_match("food_count"):
+        issues.append("Food count changed while probe kept simulation paused.")
+    if not _all_match("creature_count"):
+        issues.append("Creature count changed while probe kept simulation paused.")
+    for checkpoint in checkpoints:
+        logical_size = checkpoint["logical_render_size"]
+        world_size = checkpoint["world_size"]
+        if logical_size != world_size:
+            issues.append(
+                f"{checkpoint['label']} logical renderer size {logical_size} "
+                f"does not match world size {world_size}."
+            )
+        if not checkpoint["fullscreen"] and world_size != list(DEFAULT_WINDOWED_SIZE):
+            issues.append(
+                f"{checkpoint['label']} windowed world size {world_size} "
+                f"does not match {list(DEFAULT_WINDOWED_SIZE)}."
+            )
 
     saw_windowed = any(not checkpoint["fullscreen"] for checkpoint in checkpoints)
     saw_fullscreen = any(checkpoint["fullscreen"] for checkpoint in checkpoints)
@@ -334,11 +342,18 @@ def _build_probe_report(
         },
         "checks": {
             "passed": not issues,
-            "world_size_stable": _all_match("world_size"),
-            "food_positions_stable": _all_match("food_hash"),
-            "creature_positions_stable": _all_match("creature_hash"),
-            "zones_stable": _all_match("zone_hash"),
-            "simulation_resize_not_called": not resize_calls["simulation"],
+            "world_matches_logical_renderer": all(
+                checkpoint["world_size"] == checkpoint["logical_render_size"]
+                for checkpoint in checkpoints
+            ),
+            "windowed_world_matches_default": all(
+                checkpoint["fullscreen"]
+                or checkpoint["world_size"] == list(DEFAULT_WINDOWED_SIZE)
+                for checkpoint in checkpoints
+            ),
+            "food_count_stable": _all_match("food_count"),
+            "creature_count_stable": _all_match("creature_count"),
+            "simulation_resize_calls": len(resize_calls["simulation"]),
             "entered_windowed_mode": saw_windowed,
             "entered_fullscreen_mode": saw_fullscreen,
         },

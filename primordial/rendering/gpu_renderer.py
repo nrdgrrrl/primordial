@@ -391,6 +391,7 @@ class PredatorPreyGpuRenderer:
         self._overlay_small_font = pygame.font.Font(None, 24)
         self._debug_timing: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
+        self._debug_inspect_click_marker: tuple[float, float, float] | None = None
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
         self._zone_cache_key: tuple[object, ...] | None = None
         self._zone_cache: tuple[RadialSprite, ...] = ()
@@ -524,6 +525,12 @@ class PredatorPreyGpuRenderer:
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         self._external_debug_metrics = metrics
 
+    def mark_debug_inspect_click(self, world_x: float, world_y: float) -> None:
+        """Show the mapped inspect-click world position briefly in GPU debug mode."""
+        if not self.debug_enabled:
+            return
+        self._debug_inspect_click_marker = (float(world_x), float(world_y), time.time() + 2.0)
+
     def resize(self, width: int, height: int, screen: pygame.Surface | None = None) -> None:
         self.width = width
         self.height = height
@@ -543,6 +550,7 @@ class PredatorPreyGpuRenderer:
         self._glyph_atlas = _GlyphAtlas()
         self._zone_cache_key = None
         self._zone_cache = ()
+        self._debug_inspect_click_marker = None
 
     def toggle_hud(self) -> None:
         self.hud.toggle()
@@ -609,6 +617,9 @@ class PredatorPreyGpuRenderer:
         inspect_lines = self._build_inspect_highlight(simulation, anim_time)
         if inspect_lines:
             self._draw_lines(inspect_lines, width=2.0)
+        debug_click_lines = self._build_debug_inspect_click_marker(current_time)
+        if debug_click_lines:
+            self._draw_lines(debug_click_lines, width=2.0)
         timings["inspect_highlight_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
@@ -1012,6 +1023,39 @@ class PredatorPreyGpuRenderer:
             att_color = kind_colors.get(attention.kind, (1.0, 1.0, 1.0, t_pulse))
             lines.append(LineSprite(cx, cy, attention.x, attention.y, att_color))
 
+        return lines
+
+    def _build_debug_inspect_click_marker(self, current_time: float) -> list[LineSprite]:
+        """Build a short-lived debug marker at the inspect click's mapped world point."""
+        marker = self._debug_inspect_click_marker
+        if marker is None:
+            return []
+        x, y, expires_at = marker
+        if current_time >= expires_at:
+            self._debug_inspect_click_marker = None
+            return []
+
+        remaining = max(0.0, min(1.0, (expires_at - current_time) / 2.0))
+        color = (1.0, 0.92, 0.22, 0.88 * remaining)
+        radius = 14.0
+        tick = 24.0
+        segments = 24
+        lines = [
+            LineSprite(x - tick, y, x + tick, y, color),
+            LineSprite(x, y - tick, x, y + tick, color),
+        ]
+        for index in range(segments):
+            a0 = (math.tau * index) / segments
+            a1 = (math.tau * (index + 1)) / segments
+            lines.append(
+                LineSprite(
+                    x + math.cos(a0) * radius,
+                    y + math.sin(a0) * radius,
+                    x + math.cos(a1) * radius,
+                    y + math.sin(a1) * radius,
+                    color,
+                )
+            )
         return lines
 
     def _draw_game_over_overlay(self, simulation) -> None:

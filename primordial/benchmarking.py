@@ -106,6 +106,7 @@ def run_benchmark(
 
         simulation = Simulation(scenario.width, scenario.height, settings)
         renderer = create_renderer(screen, settings, debug=False)
+        renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)

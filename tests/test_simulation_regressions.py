@@ -48,6 +48,42 @@ class SimulationRegressionTests(unittest.TestCase):
         self.assertEqual(simulation._get_food_rate(), 0.0)
         self.assertEqual(len(simulation.food_manager.particles), 0)
 
+    def test_predator_prey_resize_rebuilds_world_dependent_state(self) -> None:
+        settings = self._build_settings("predator_prey")
+        settings.zone_count = 3
+        simulation = Simulation(1920, 1080, settings)
+        simulation.creatures.clear()
+        simulation.food_manager.clear()
+
+        creature = Creature(
+            x=1915.0,
+            y=1075.0,
+            genome=Genome(speed=0.0, sense_radius=0.0, aggression=0.0, longevity=0.0),
+            lineage_id=1,
+            species="prey",
+            energy=1.0,
+        )
+        simulation.creatures = [creature]
+        food = simulation.food_manager.spawn(x=1910.0, y=1070.0)
+        self.assertIsNotNone(food)
+
+        simulation.resize(1280, 720)
+
+        self.assertEqual((simulation.width, simulation.height), (1280, 720))
+        self.assertEqual(
+            (simulation.food_manager.world_width, simulation.food_manager.world_height),
+            (1280, 720),
+        )
+        self.assertTrue(0.0 <= creature.x < 1280)
+        self.assertTrue(0.0 <= creature.y < 720)
+        self.assertTrue(0.0 <= food.x < 1280)
+        self.assertTrue(0.0 <= food.y < 720)
+        self.assertEqual(len(simulation.zone_manager.zones), 3)
+        for zone in simulation.zone_manager.zones:
+            self.assertTrue(0.0 <= zone.x <= 1280)
+            self.assertTrue(0.0 <= zone.y <= 720)
+            self.assertLessEqual(zone.radius, 0.30 * 720)
+
     def test_predator_prey_removes_prey_killed_after_its_own_turn_in_same_frame(self) -> None:
         simulation = self._build_simulation("predator_prey")
         simulation.settings.mode_params["predator_prey"]["food_spawn_rate"] = 0.0

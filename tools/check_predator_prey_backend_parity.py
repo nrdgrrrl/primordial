@@ -227,6 +227,7 @@ def _run_backend(
             seed=seed,
         )
         renderer = create_renderer(screen, settings, debug=False)
+        renderer.resize(simulation.width, simulation.height, screen=screen)
         actual_backend = renderer_backend_name(renderer)
         if actual_backend != backend:
             raise RuntimeError(

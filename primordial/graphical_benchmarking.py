@@ -511,6 +511,7 @@ def _run_single_graphical_benchmark(
         else:
             simulation = Simulation(world_width, world_height, settings)
         renderer = create_renderer(screen, settings, debug=False)
+        renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
@@ -927,9 +928,9 @@ def _build_transition_structural_checks(
     if not spec.toggles:
         return {
             "expected_toggles": 0,
-            "world_size_stable": True,
+            "world_size_matches_mode": True,
             "zone_hash_stable": True,
-            "simulation_resize_not_called": not resize_calls["simulation"],
+            "simulation_resize_called_for_toggles": not resize_calls["simulation"],
             "fullscreen_sequence_ok": True,
         }
 
@@ -943,15 +944,25 @@ def _build_transition_structural_checks(
         relevant[0]["fullscreen"],
         *[checkpoint["fullscreen"] for checkpoint in relevant if checkpoint["label"].startswith("post_")],
     ] if relevant else []
-    world_size_stable = len({tuple(checkpoint["world_size"]) for checkpoint in relevant}) <= 1
+    world_size_matches_mode = all(
+        checkpoint["world_size"] == checkpoint["logical_render_size"]
+        and (
+            checkpoint["fullscreen"]
+            or checkpoint["world_size"] == list(DEFAULT_WINDOWED_SIZE)
+        )
+        for checkpoint in relevant
+    )
     zone_hash_stable = len({checkpoint["zone_hash"] for checkpoint in relevant}) <= 1
+    simulation_resize_called_for_toggles = (
+        len(resize_calls["simulation"]) == len(spec.toggles)
+    )
     fullscreen_sequence_ok = actual_sequence[: len(expected_sequence)] == expected_sequence[: len(actual_sequence)]
     return {
         "expected_toggles": len(spec.toggles),
         "captured_transition_checkpoints": len(relevant),
-        "world_size_stable": world_size_stable,
+        "world_size_matches_mode": world_size_matches_mode,
         "zone_hash_stable": zone_hash_stable,
-        "simulation_resize_not_called": not resize_calls["simulation"],
+        "simulation_resize_called_for_toggles": simulation_resize_called_for_toggles,
         "fullscreen_sequence_ok": fullscreen_sequence_ok,
     }
 
@@ -1017,6 +1028,7 @@ def _run_profile_capture(
         else:
             simulation = Simulation(world_width, world_height, settings)
         renderer = create_renderer(screen, settings, debug=False)
+        renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
         runtime_loop = _create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
@@ -1428,8 +1440,8 @@ def _build_transition_findings(run_results: list[dict[str, Any]]) -> str:
                 f"## {run['run_id']}",
                 "",
                 f"- Fullscreen sequence ok: {checks['fullscreen_sequence_ok']}",
-                f"- World size stable: {checks['world_size_stable']}",
-                f"- Simulation resize not called: {checks['simulation_resize_not_called']}",
+                f"- World size matches active mode: {checks['world_size_matches_mode']}",
+                f"- Simulation resize called for toggles: {checks['simulation_resize_called_for_toggles']}",
                 "- Zone hash stability is not used as a correctness verdict here because live runs evolve local zone state over time.",
                 f"- Toggle timing deltas: {timing_windows}",
                 "",
@@ -1445,29 +1457,30 @@ def _build_transition_summary(run_results: list[dict[str, Any]]) -> dict[str, An
             "run_count": 0,
             "structural_ok": False,
             "fullscreen_sequence_ok_runs": 0,
-            "world_size_stable_runs": 0,
-            "simulation_resize_clean_runs": 0,
+            "world_size_matches_mode_runs": 0,
+            "simulation_resize_for_toggle_runs": 0,
         }
     fullscreen_sequence_ok_runs = sum(
         1 for run in transition_runs if run["transition_checks"]["fullscreen_sequence_ok"]
     )
-    world_size_stable_runs = sum(
-        1 for run in transition_runs if run["transition_checks"]["world_size_stable"]
+    world_size_matches_mode_runs = sum(
+        1 for run in transition_runs if run["transition_checks"]["world_size_matches_mode"]
     )
-    simulation_resize_clean_runs = sum(
-        1 for run in transition_runs if run["transition_checks"]["simulation_resize_not_called"]
+    simulation_resize_for_toggle_runs = sum(
+        1 for run in transition_runs
+        if run["transition_checks"]["simulation_resize_called_for_toggles"]
     )
     structural_ok = (
         fullscreen_sequence_ok_runs == len(transition_runs)
-        and world_size_stable_runs == len(transition_runs)
-        and simulation_resize_clean_runs == len(transition_runs)
+        and world_size_matches_mode_runs == len(transition_runs)
+        and simulation_resize_for_toggle_runs == len(transition_runs)
     )
     return {
         "run_count": len(transition_runs),
         "structural_ok": structural_ok,
         "fullscreen_sequence_ok_runs": fullscreen_sequence_ok_runs,
-        "world_size_stable_runs": world_size_stable_runs,
-        "simulation_resize_clean_runs": simulation_resize_clean_runs,
+        "world_size_matches_mode_runs": world_size_matches_mode_runs,
+        "simulation_resize_for_toggle_runs": simulation_resize_for_toggle_runs,
     }
 
 

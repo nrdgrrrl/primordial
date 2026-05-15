@@ -373,6 +373,7 @@ class FixedStepLoopTests(unittest.TestCase):
         renderer = SimpleNamespace(
             screen=FakeScreen(pygame.FULLSCREEN),
             resize=unittest.mock.Mock(),
+            reset_runtime_state=unittest.mock.Mock(),
         )
         replacement_screen = object()
 
@@ -387,12 +388,13 @@ class FixedStepLoopTests(unittest.TestCase):
         self.assertFalse(settings.fullscreen)
         set_mode_mock.assert_called_once_with(DEFAULT_WINDOWED_SIZE, 0)
         set_visible_mock.assert_called_once_with(True)
+        simulation.resize.assert_called_once_with(1280, 720)
         renderer.resize.assert_called_once_with(
-            1920,
-            1080,
+            1280,
+            720,
             screen=replacement_screen,
         )
-        simulation.resize.assert_not_called()
+        renderer.reset_runtime_state.assert_called_once_with()
 
     def test_get_fullscreen_resolution_prefers_desktop_size_over_current_window(self) -> None:
         with patch(
@@ -411,7 +413,10 @@ class FixedStepLoopTests(unittest.TestCase):
             height=720,
             resize=unittest.mock.Mock(),
         )
-        renderer = SimpleNamespace(resize=unittest.mock.Mock())
+        renderer = SimpleNamespace(
+            resize=unittest.mock.Mock(),
+            reset_runtime_state=unittest.mock.Mock(),
+        )
         replacement_screen = object()
 
         with patch(
@@ -431,8 +436,44 @@ class FixedStepLoopTests(unittest.TestCase):
             pygame.FULLSCREEN | pygame.SCALED,
         )
         set_visible_mock.assert_called_once_with(False)
+        simulation.resize.assert_called_once_with(1920, 1080)
+        renderer.resize.assert_called_once_with(1920, 1080, screen=replacement_screen)
+        renderer.reset_runtime_state.assert_called_once_with()
+
+    def test_apply_display_mode_windowed_resizes_world_and_renderer_to_default(self) -> None:
+        settings = SimpleNamespace(fullscreen=False)
+
+        def resize_simulation(width: int, height: int) -> None:
+            simulation.width = width
+            simulation.height = height
+
+        def resize_renderer(width: int, height: int, *, screen: object) -> None:
+            renderer.width = width
+            renderer.height = height
+            renderer.screen = screen
+
+        simulation = SimpleNamespace(width=1920, height=1080)
+        simulation.resize = unittest.mock.Mock(side_effect=resize_simulation)
+        renderer = SimpleNamespace(width=1920, height=1080, screen=FakeScreen(pygame.FULLSCREEN))
+        renderer.resize = unittest.mock.Mock(side_effect=resize_renderer)
+        renderer.reset_runtime_state = unittest.mock.Mock()
+        replacement_screen = object()
+
+        with patch(
+            "primordial.main.pygame.display.set_mode",
+            return_value=replacement_screen,
+        ) as set_mode_mock, patch(
+            "primordial.main.pygame.mouse.set_visible",
+        ) as set_visible_mock:
+            _apply_display_mode(settings, simulation, renderer)
+
+        set_mode_mock.assert_called_once_with(DEFAULT_WINDOWED_SIZE, 0)
+        set_visible_mock.assert_called_once_with(True)
+        simulation.resize.assert_called_once_with(1280, 720)
         renderer.resize.assert_called_once_with(1280, 720, screen=replacement_screen)
-        simulation.resize.assert_not_called()
+        renderer.reset_runtime_state.assert_called_once_with()
+        self.assertEqual((simulation.width, simulation.height), DEFAULT_WINDOWED_SIZE)
+        self.assertEqual((renderer.width, renderer.height), DEFAULT_WINDOWED_SIZE)
 
     def test_window_to_world_maps_identity_when_window_matches_world(self) -> None:
         simulation = SimpleNamespace(width=1280, height=720)

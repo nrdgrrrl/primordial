@@ -65,6 +65,7 @@ def main() -> int:
             seed=args.seed,
         )
         renderer = create_renderer(screen, settings, debug=False)
+        renderer.resize(simulation.width, simulation.height, screen=screen)
         backend = renderer_backend_name(renderer)
         if backend != "gpu":
             raise RuntimeError(

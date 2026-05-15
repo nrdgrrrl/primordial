@@ -13,7 +13,7 @@ from primordial.graphics_probe import run_display_toggle_probe
 
 
 class GraphicsProbeTests(unittest.TestCase):
-    def test_probe_captures_screenshots_and_report_without_mutating_world(self) -> None:
+    def test_probe_captures_screenshots_and_report_with_mode_sized_worlds(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir, patch(
             "primordial.graphics_probe._get_fullscreen_resolution",
             return_value=(1920, 1080),
@@ -36,7 +36,13 @@ class GraphicsProbeTests(unittest.TestCase):
             )
 
             self.assertTrue(report["checks"]["passed"])
-            self.assertEqual(report["resize_calls"]["simulation"], [])
+            self.assertEqual(
+                report["resize_calls"]["simulation"],
+                [
+                    {"size_requested": [1280, 720]},
+                    {"size_requested": [1920, 1080]},
+                ],
+            )
             self.assertGreaterEqual(len(report["checkpoints"]), 3)
 
             initial = report["checkpoints"][0]
@@ -47,10 +53,12 @@ class GraphicsProbeTests(unittest.TestCase):
             self.assertTrue(initial["fullscreen"])
             self.assertFalse(windowed["fullscreen"])
             self.assertTrue(restored["fullscreen"])
+            self.assertEqual(windowed["world_size"], [1280, 720])
+            self.assertEqual(windowed["logical_render_size"], [1280, 720])
             self.assertEqual(restored["display_size"], initial["display_size"])
             self.assertEqual(initial["world_size"], restored["world_size"])
-            self.assertEqual(initial["food_hash"], restored["food_hash"])
-            self.assertEqual(initial["zone_hash"], restored["zone_hash"])
+            self.assertEqual(windowed["world_size"], windowed["logical_render_size"])
+            self.assertEqual(restored["world_size"], restored["logical_render_size"])
 
             report_path = Path(temp_dir) / "report.json"
             self.assertTrue(report_path.exists())

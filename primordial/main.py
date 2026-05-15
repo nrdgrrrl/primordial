@@ -846,6 +846,9 @@ def main(
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
                     world_x, world_y = window_to_world(event.pos[0], event.pos[1], simulation)
                     renderer.inspect_mode.select_at_world_pos(world_x, world_y, simulation)
+                    mark_debug_click = getattr(renderer, "mark_debug_inspect_click", None)
+                    if callable(mark_debug_click):
+                        mark_debug_click(world_x, world_y)
                     if logger.isEnabledFor(logging.DEBUG):
                         _log_inspect_click_diagnostics(
                             event.pos,
@@ -1602,6 +1605,58 @@ def _desired_renderer_backend_name(settings: Settings) -> str:
     return "gpu" if wants_gpu_renderer(settings) else "pygame"
 
 
+def _display_mode_size(settings: Settings) -> tuple[tuple[int, int], int]:
+    """Return the active logical world/window size plus pygame base flags."""
+    if settings.fullscreen:
+        return _get_fullscreen_resolution(), pygame.FULLSCREEN | pygame.SCALED
+    return DEFAULT_WINDOWED_SIZE, 0
+
+
+def _log_display_mode_coordinate_state(
+    settings: Settings,
+    simulation: Simulation,
+    renderer: object,
+    *,
+    phase: str,
+) -> None:
+    """Log coordinate-space invariants after display mode changes."""
+    display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
+    screen = getattr(renderer, "screen", None)
+    screen_size = list(screen.get_size()) if hasattr(screen, "get_size") else None
+    payload = {
+        "phase": phase,
+        "fullscreen": bool(settings.fullscreen),
+        "window_size": [window_width, window_height],
+        "drawable_size": [
+            int(getattr(renderer, "drawable_width", display_width)),
+            int(getattr(renderer, "drawable_height", display_height)),
+        ],
+        "screen_size": screen_size,
+        "renderer_size": [
+            int(getattr(renderer, "width", 0)),
+            int(getattr(renderer, "height", 0)),
+        ],
+        "simulation_size": [int(simulation.width), int(simulation.height)],
+        "gl_viewport": _get_gl_viewport(),
+    }
+    logger.debug("DISPLAY_MODE_COORDINATE_STATE %s", json.dumps(payload, sort_keys=True))
+
+    renderer_size = (int(getattr(renderer, "width", 0)), int(getattr(renderer, "height", 0)))
+    simulation_size = (int(simulation.width), int(simulation.height))
+    if renderer_size != simulation_size:
+        logger.warning(
+            "Display mode coordinate invariant mismatch: renderer_size=%s simulation_size=%s",
+            renderer_size,
+            simulation_size,
+        )
+    if not settings.fullscreen and simulation_size != DEFAULT_WINDOWED_SIZE:
+        logger.warning(
+            "Windowed mode world size mismatch: simulation_size=%s expected=%s",
+            simulation_size,
+            DEFAULT_WINDOWED_SIZE,
+        )
+
+
 def _recreate_renderer_for_backend(
     settings: Settings,
     simulation: Simulation,
@@ -1610,21 +1665,24 @@ def _recreate_renderer_for_backend(
     snapshot_path: Path,
 ) -> object:
     """Recreate the display and renderer when backend requirements change."""
-    if settings.fullscreen:
-        display_size = _get_fullscreen_resolution()
-        base_flags = pygame.FULLSCREEN | pygame.SCALED
-    else:
-        display_size = DEFAULT_WINDOWED_SIZE
-        base_flags = 0
+    display_size, base_flags = _display_mode_size(settings)
 
     screen = pygame.display.set_mode(
         display_size,
         display_flags_for_settings(settings, base_flags),
     )
     pygame.mouse.set_visible(not settings.fullscreen)
+    simulation.resize(*display_size)
     renderer = create_renderer(screen, settings, debug=debug)
-    renderer.resize(simulation.width, simulation.height, screen=screen)
+    renderer.resize(*display_size, screen=screen)
+    renderer.reset_runtime_state()
     renderer.settings_overlay.set_snapshot_path(str(snapshot_path))
+    _log_display_mode_coordinate_state(
+        settings,
+        simulation,
+        renderer,
+        phase="recreate_renderer_for_backend",
+    )
     return renderer
 
 
@@ -1633,18 +1691,21 @@ def _apply_display_mode(
     simulation: Simulation,
     renderer: Renderer,
 ) -> None:
-    """Apply the current display mode without mutating simulation world state."""
-    if settings.fullscreen:
-        width, height = _get_fullscreen_resolution()
-        base_flags = pygame.FULLSCREEN | pygame.SCALED
-    else:
-        width, height = DEFAULT_WINDOWED_SIZE
-        base_flags = 0
+    """Apply the current display mode and resize the simulation world to match."""
+    (width, height), base_flags = _display_mode_size(settings)
 
     flags = display_flags_for_settings(settings, base_flags)
     screen = pygame.display.set_mode((width, height), flags)
     pygame.mouse.set_visible(not settings.fullscreen)
-    renderer.resize(simulation.width, simulation.height, screen=screen)
+    simulation.resize(width, height)
+    renderer.resize(width, height, screen=screen)
+    renderer.reset_runtime_state()
+    _log_display_mode_coordinate_state(
+        settings,
+        simulation,
+        renderer,
+        phase="apply_display_mode",
+    )
 
 
 if __name__ == "__main__":
