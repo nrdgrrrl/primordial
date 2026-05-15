@@ -2,6 +2,14 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — refactor: split AGENTS.md into focused files
+
+Moved design/system reference content out of AGENTS.md into
+`docs/architecture_reference.md` and build/integration content into
+`docs/build_and_integration.md`. AGENTS.md now contains only agent-relevant
+instructions, contracts, and conventions. Also renamed AGENT.md to AGENTS.md
+so opencode picks it up correctly.
+
 ## [2026-05-15] — fix: kin_line_count always reported as 0 in GPU renderer metrics
 
 `gpu_renderer.py` read `kin_line_count`, `kin_line_segment_count`, and

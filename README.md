@@ -396,7 +396,7 @@ primordial/
 │       └── themes.py        # Visual themes (OceanTheme, StubTheme)
 ├── requirements.txt
 ├── README.md
-├── AGENT.md
+├── AGENTS.md
 ├── CHANGELOG.md
 └── .gitignore
 ```
@@ -417,7 +417,7 @@ All modes live inside the single `Simulation` class in `primordial/simulation/si
 5. Update config parsing/serialization in [`primordial/config/config.py`](/home/victoria/projects/primordial/primordial/config/config.py).
 6. Add the settings overlay option list and HUD lines in `hud.py` (`_lines_<name>()` + dispatch in `render()`).
 
-See AGENT.md for the full Sim Mode Contract.
+See AGENTS.md for the full Sim Mode Contract.
 
 ### Adding a New Visual Theme
 
