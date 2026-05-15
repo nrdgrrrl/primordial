@@ -8,12 +8,10 @@ All notable changes to Primordial are documented in this file.
 
 - Fixed a windowed-mode inspect selection bug where clicking a creature could
   select at the wrong on-screen position after switching away from fullscreen.
-- Inspect picking now uses the window presentation size directly, with a
-  display-surface fallback only when the window-size query is unavailable.
-- Removed the mixed-axis candidate logic so windowed inspect clicks stay in one
-  consistent scaled coordinate space.
-- Added regression tests covering the window-size path and the display-size
-  fallback path.
+- Inspect picking now evaluates whole presentation-size candidates
+  (`display_size`, plus `window_size` when distinct) and chooses the nearest
+  match, instead of forcing one global choice or mixing axes across spaces.
+- Added regression tests covering the candidate-pair helper and fallback path.
 
 ## [2026-05-14] — feat: Inspect Mode (read-only creature observability)
 
