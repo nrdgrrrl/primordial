@@ -37,13 +37,14 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame
 
 from primordial.rendering import create_renderer, display_flags_for_settings, renderer_backend_name
-from primordial.runtime.fixed_step import (
-    _advance_fixed_step_frame,
-    _create_fixed_step_loop_state,
-    _get_effective_target_fps,
-    _simulation_timing_is_suppressed,
+from primordial.runtime import (
+    LoopFrameMetrics,
+    LoopTimingCollector,
+    advance_fixed_step_frame,
+    create_fixed_step_loop_state,
+    get_effective_target_fps,
+    simulation_timing_is_suppressed,
 )
-from primordial.runtime.timing import LoopFrameMetrics, LoopTimingCollector
 from primordial.scenarios import apply_scenario_settings, get_scenario
 from primordial.settings import Settings
 from primordial.simulation import Simulation
@@ -170,7 +171,7 @@ def _run_scenario(
 
         renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
 
         render_breakdown_sums: dict[str, float] = {}
@@ -187,8 +188,8 @@ def _run_scenario(
                 if event.type == pygame.QUIT:
                     break
 
-            sim_suppressed = _simulation_timing_is_suppressed(simulation)
-            sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+            sim_suppressed = simulation_timing_is_suppressed(simulation)
+            sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
                 simulation,
                 runtime_loop,
                 allow_simulation=not sim_suppressed,
@@ -204,7 +205,7 @@ def _run_scenario(
             pygame.display.flip()
             present_ms = (time.perf_counter() - present_start) * 1000.0
             pacing_start = time.perf_counter()
-            clock.tick(max(1, _get_effective_target_fps(settings)))
+            clock.tick(max(1, get_effective_target_fps(settings)))
             pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
 
             frame_ms = render_ms + sim_ms + present_ms + pacing_ms

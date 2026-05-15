@@ -21,16 +21,16 @@ from primordial.main import (
     window_to_world,
     world_to_window,
 )
-from primordial.runtime.fixed_step import (
+from primordial.runtime import (
     FIXED_SIM_TIMESTEP_SECONDS,
+    LoopTimingCollector,
     MAX_ACCUMULATED_SIM_SECONDS,
     MAX_SIM_STEPS_PER_OUTER_FRAME,
-    _advance_fixed_step_frame,
-    _create_fixed_step_loop_state,
-    _simulation_timing_is_suppressed,
+    advance_fixed_step_frame,
+    create_fixed_step_loop_state,
+    simulation_timing_is_suppressed,
 )
 from primordial.runtime.profile import _run_profile_session
-from primordial.runtime.timing import LoopTimingCollector
 
 
 class FakeSimulation:
@@ -144,7 +144,7 @@ class FixedStepLoopTests(unittest.TestCase):
             },
         )
 
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
 
         self.assertAlmostEqual(
             runtime_loop.config.fixed_timestep_seconds,
@@ -158,11 +158,11 @@ class FixedStepLoopTests(unittest.TestCase):
         )
 
     def test_catch_up_runs_multiple_sim_steps_in_one_frame(self) -> None:
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = create_fixed_step_loop_state()
         runtime_loop.last_tick_seconds = 0.0
         simulation = FakeSimulation()
 
-        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+        sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
             simulation,
             runtime_loop,
             allow_simulation=True,
@@ -185,12 +185,12 @@ class FixedStepLoopTests(unittest.TestCase):
         epsilon = dt * 0.01
 
         def run_marks(marks: list[float]) -> int:
-            runtime_loop = _create_fixed_step_loop_state()
+            runtime_loop = create_fixed_step_loop_state()
             runtime_loop.last_tick_seconds = 0.0
             simulation = FakeSimulation()
             total_steps = 0
             for now in marks:
-                _, sim_steps, _, _ = _advance_fixed_step_frame(
+                _, sim_steps, _, _ = advance_fixed_step_frame(
                     simulation,
                     runtime_loop,
                     allow_simulation=True,
@@ -208,12 +208,12 @@ class FixedStepLoopTests(unittest.TestCase):
         self.assertEqual(slow_cadence_steps, 4)
 
     def test_clamp_drops_excess_time_and_reports_metrics(self) -> None:
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = create_fixed_step_loop_state()
         runtime_loop.last_tick_seconds = 0.0
         simulation = FakeSimulation()
         overflow_seconds = FIXED_SIM_TIMESTEP_SECONDS * 2.0
 
-        _, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+        _, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
             simulation,
             runtime_loop,
             allow_simulation=True,
@@ -229,12 +229,12 @@ class FixedStepLoopTests(unittest.TestCase):
     def test_mode_transition_suppresses_simulation_for_entire_fade(self) -> None:
         simulation = FakeSimulation()
 
-        self.assertTrue(_simulation_timing_is_suppressed(simulation, transition_dir=1, transition_alpha=4))
-        self.assertTrue(_simulation_timing_is_suppressed(simulation, transition_dir=-1, transition_alpha=120))
-        self.assertFalse(_simulation_timing_is_suppressed(simulation, transition_dir=0, transition_alpha=0))
+        self.assertTrue(simulation_timing_is_suppressed(simulation, transition_dir=1, transition_alpha=4))
+        self.assertTrue(simulation_timing_is_suppressed(simulation, transition_dir=-1, transition_alpha=120))
+        self.assertFalse(simulation_timing_is_suppressed(simulation, transition_dir=0, transition_alpha=0))
 
     def test_profile_loop_keeps_render_once_per_frame_with_fixed_step_catch_up(self) -> None:
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = create_fixed_step_loop_state()
         runtime_loop.last_tick_seconds = 0.0
         simulation = FakeSimulation()
         renderer = FakeRenderer()

@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-15] — cleanup: expose runtime helper API names
+
+Renamed shared fixed-step and frame-metrics runtime helpers to package-internal
+public names, re-exported the intended runtime API from `primordial.runtime`,
+and updated app code, benchmarks, probes, tools, and tests to use the cleaner
+imports. Removed stale parity-audit imports left behind by the runtime split.
+
 ## [2026-05-15] — refactor: split runtime loop out of main module
 
 Moved fixed-step loop state, frame timing collection, bounded runtime sessions,

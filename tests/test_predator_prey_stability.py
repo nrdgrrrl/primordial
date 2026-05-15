@@ -21,7 +21,7 @@ from primordial.main import (
     _save_predator_prey_tuning_state,
     handle_keydown,
 )
-from primordial.runtime.fixed_step import _create_fixed_step_loop_state
+from primordial.runtime import create_fixed_step_loop_state
 from primordial.simulation import Simulation, build_snapshot, load_snapshot_payload
 from primordial.simulation.creature import Creature
 from primordial.simulation.genome import Genome
@@ -896,7 +896,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
             now_seconds=10.0,
         )
         renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = create_fixed_step_loop_state()
 
         with patch.object(simulation, "_generate_predator_prey_seed", return_value=777):
             keep_running = handle_keydown(
@@ -916,7 +916,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
     def test_d_toggles_inspect_detail_mode(self) -> None:
         simulation = self._build_simulation()
         renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
-        runtime_loop = _create_fixed_step_loop_state()
+        runtime_loop = create_fixed_step_loop_state()
         renderer.inspect_mode.toggle(simulation_paused=False)
 
         keep_running = handle_keydown(

@@ -23,10 +23,10 @@ from .rendering import (
     display_flags_for_settings,
     save_renderer_screenshot,
 )
-from .runtime.fixed_step import (
-    _advance_fixed_step_frame,
-    _create_fixed_step_loop_state,
-    _get_effective_target_fps,
+from .runtime import (
+    advance_fixed_step_frame,
+    create_fixed_step_loop_state,
+    get_effective_target_fps,
 )
 from .settings import Settings
 from .simulation import Simulation
@@ -83,7 +83,7 @@ def run_display_toggle_probe(
         renderer = create_renderer(screen, settings, debug=True)
         renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
 
         original_renderer_resize = renderer.resize
         original_simulation_resize = simulation.resize
@@ -122,7 +122,7 @@ def run_display_toggle_probe(
             clock,
             runtime_loop,
             frame_count=max(1, settle_frames),
-            target_fps=_get_effective_target_fps(settings),
+            target_fps=get_effective_target_fps(settings),
         )
         checkpoints.append(
             _capture_checkpoint(
@@ -145,7 +145,7 @@ def run_display_toggle_probe(
                 clock,
                 runtime_loop,
                 frame_count=max(1, settle_frames),
-                target_fps=_get_effective_target_fps(settings),
+                target_fps=get_effective_target_fps(settings),
             )
             label = (
                 f"toggle_{toggle_index + 1}_fullscreen"
@@ -184,7 +184,7 @@ def _render_probe_frames(
     """Render a small number of live frames while keeping world state paused."""
     for _ in range(frame_count):
         pygame.event.get()
-        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+        sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
             simulation,
             runtime_loop,
             allow_simulation=not simulation.paused,

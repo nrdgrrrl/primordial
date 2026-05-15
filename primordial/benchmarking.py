@@ -17,13 +17,13 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
-from .runtime.fixed_step import (
-    _create_fixed_step_loop_state,
-    _get_effective_target_fps,
-    _get_simulation_tick_hz,
+from .runtime import (
+    LoopTimingCollector,
+    create_fixed_step_loop_state,
+    get_effective_target_fps,
+    get_simulation_tick_hz,
+    run_bounded_session,
 )
-from .runtime.session import run_bounded_session
-from .runtime.timing import LoopTimingCollector
 from .rendering import create_renderer
 from .scenarios import (
     SCENARIOS,
@@ -108,7 +108,7 @@ def run_benchmark(
         renderer = create_renderer(screen, settings, debug=False)
         renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
         observability = ObservabilityCollector(scenario.mode)
 
@@ -119,7 +119,7 @@ def run_benchmark(
             runtime_loop,
             timing_collector,
             duration_seconds=seconds,
-            target_fps=_get_effective_target_fps(settings),
+            target_fps=get_effective_target_fps(settings),
             frame_observer=observability.record_frame,
         )
         if timing_collector.frame_count == 0:
@@ -165,8 +165,8 @@ def _build_benchmark_payload(
             "started_at": started_at,
             "duration_seconds": elapsed_wall_seconds,
             "duration_seconds_requested": seconds_requested,
-            "target_fps": _get_effective_target_fps(settings),
-            "simulation_tick_hz": _get_simulation_tick_hz(settings),
+            "target_fps": get_effective_target_fps(settings),
+            "simulation_tick_hz": get_simulation_tick_hz(settings),
             "platform": platform.platform(),
             "python": sys.version.split()[0],
             "pygame": pygame.version.ver,

@@ -43,14 +43,15 @@ from .rendering import (
     renderer_gpu_info,
     save_renderer_screenshot,
 )
-from .runtime.fixed_step import (
-    _advance_fixed_step_frame,
-    _create_fixed_step_loop_state,
-    _get_effective_target_fps,
-    _get_simulation_tick_hz,
-    _simulation_timing_is_suppressed,
+from .runtime import (
+    LoopTimingCollector,
+    advance_fixed_step_frame,
+    build_frame_metrics,
+    create_fixed_step_loop_state,
+    get_effective_target_fps,
+    get_simulation_tick_hz,
+    simulation_timing_is_suppressed,
 )
-from .runtime.timing import LoopTimingCollector, _build_frame_metrics
 from .settings import Settings
 from .simulation import Simulation
 
@@ -514,7 +515,7 @@ def _run_single_graphical_benchmark(
         renderer = create_renderer(screen, settings, debug=False)
         renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
 
         original_renderer_resize = renderer.resize
@@ -563,8 +564,8 @@ def _run_single_graphical_benchmark(
                 renderer.reset_runtime_state()
                 runtime_loop.reset_timing_debt()
 
-            sim_suppressed = _simulation_timing_is_suppressed(simulation)
-            sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+            sim_suppressed = simulation_timing_is_suppressed(simulation)
+            sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
                 simulation,
                 runtime_loop,
                 allow_simulation=not sim_suppressed,
@@ -592,11 +593,11 @@ def _run_single_graphical_benchmark(
             pygame.display.flip()
             present_ms = (time.perf_counter() - present_start) * 1000.0
             pacing_start = time.perf_counter()
-            clock.tick(max(1, _get_effective_target_fps(settings)))
+            clock.tick(max(1, get_effective_target_fps(settings)))
             pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
             frame_end = time.perf_counter()
 
-            frame_metrics = _build_frame_metrics(
+            frame_metrics = build_frame_metrics(
                 event_ms=event_ms,
                 sim_ms=sim_ms,
                 render_ms=render_metrics.get("draw_total_ms", 0.0),
@@ -841,8 +842,8 @@ def _build_run_result(
         if values
     }
     current_display_size = [renderer.display_width, renderer.display_height]
-    effective_target_fps = _get_effective_target_fps(settings)
-    simulation_tick_hz = _get_simulation_tick_hz(settings)
+    effective_target_fps = get_effective_target_fps(settings)
+    simulation_tick_hz = get_simulation_tick_hz(settings)
     run_result = {
         "run_id": spec.run_id,
         "scenario": spec.scenario,
@@ -1031,7 +1032,7 @@ def _run_profile_capture(
         renderer = create_renderer(screen, settings, debug=False)
         renderer.resize(simulation.width, simulation.height, screen=screen)
         clock = pygame.time.Clock()
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
         profiler = cProfile.Profile()
 
@@ -1052,8 +1053,8 @@ def _run_profile_capture(
                 renderer.reset_runtime_state()
                 runtime_loop.reset_timing_debt()
 
-            sim_suppressed = _simulation_timing_is_suppressed(simulation)
-            sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+            sim_suppressed = simulation_timing_is_suppressed(simulation)
+            sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
                 simulation,
                 runtime_loop,
                 allow_simulation=not sim_suppressed,
@@ -1066,11 +1067,11 @@ def _run_profile_capture(
             pygame.display.flip()
             present_ms = (time.perf_counter() - present_start) * 1000.0
             pacing_start = time.perf_counter()
-            clock.tick(max(1, _get_effective_target_fps(settings)))
+            clock.tick(max(1, get_effective_target_fps(settings)))
             pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
             frame_end = time.perf_counter()
             timing_collector.record_frame(
-                _build_frame_metrics(
+                build_frame_metrics(
                     event_ms=event_ms,
                     sim_ms=sim_ms,
                     render_ms=render_metrics.get("draw_total_ms", 0.0),
@@ -1738,8 +1739,8 @@ def _build_settings_snapshot(settings: Settings, mode: str) -> dict[str, Any]:
         "visual_theme": settings.visual_theme,
         "render_backend": settings.render_backend,
         "fullscreen": settings.fullscreen,
-        "target_fps": _get_effective_target_fps(settings),
-        "simulation_tick_hz": _get_simulation_tick_hz(settings),
+        "target_fps": get_effective_target_fps(settings),
+        "simulation_tick_hz": get_simulation_tick_hz(settings),
         "show_hud": settings.show_hud,
         "initial_population": settings.initial_population,
         "max_population": settings.max_population,

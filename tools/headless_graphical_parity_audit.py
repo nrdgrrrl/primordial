@@ -3,11 +3,11 @@
 
 Compares ecological outcomes between:
   - "offline" path: direct simulation.step() loop (no rendering, no timing)
-  - "graphical" path: run_bounded_session() with dummy SDL (accumulator-driven)
+  - "graphical" path: direct simulation.step() loop with dummy SDL rendering
 
 Both paths use the same seed, same config, and the same step count.
-The graphical path is given generous wall-clock time so the accumulator
-does NOT clamp or drop steps, ensuring the same step budget is executed.
+The graphical path bypasses wall-clock accumulation so the same step budget is
+executed while still exercising renderer reads and attack buffering.
 
 If the simulation is truly decoupled from rendering, both paths must produce
 identical ecological outcomes for the same seed and step count.
@@ -37,9 +37,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame
 
 from primordial.rendering import Renderer
-from primordial.runtime.fixed_step import _create_fixed_step_loop_state
-from primordial.runtime.session import run_bounded_session
-from primordial.runtime.timing import LoopTimingCollector
+from primordial.runtime import create_fixed_step_loop_state
 from primordial.scenarios import build_settings_for_scenario, list_scenarios
 from primordial.settings import Settings
 from primordial.simulation import Simulation
@@ -175,7 +173,7 @@ def _run_graphical(
         screen = pygame.display.set_mode((scenario.width, scenario.height))
         simulation = Simulation(scenario.width, scenario.height, settings)
         renderer = Renderer(screen, settings, debug=False)
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
 
         t0 = time.perf_counter()
         for _ in range(steps):
@@ -244,7 +242,7 @@ def _run_graphical_full_rng_isolated(
         renderer = Renderer(screen, settings, debug=False)
         random.setstate(rng_state)
 
-        runtime_loop = _create_fixed_step_loop_state(settings)
+        runtime_loop = create_fixed_step_loop_state(settings)
 
         t0 = time.perf_counter()
         for _ in range(steps):

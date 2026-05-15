@@ -39,16 +39,17 @@ from .rendering import (
     wants_gpu_renderer,
 )
 from .rendering.inspect_mode import InspectMode as _InspectMode
-from .runtime.fixed_step import (
+from .runtime import (
     FixedStepLoopState,
-    _advance_fixed_step_frame,
-    _build_fixed_step_loop_config,
-    _create_fixed_step_loop_state,
-    _get_effective_target_fps,
-    _simulation_timing_is_suppressed,
+    LoopTimingCollector,
+    advance_fixed_step_frame,
+    build_fixed_step_loop_config,
+    build_frame_metrics,
+    create_fixed_step_loop_state,
+    get_effective_target_fps,
+    simulation_timing_is_suppressed,
 )
 from .runtime.profile import _run_profile_session
-from .runtime.timing import LoopTimingCollector, _build_frame_metrics
 from .milestone_logging import PredatorPreyMilestoneLogger
 from .run_logging import PredatorPreyCSVRunLogger
 from .settings import Settings
@@ -320,7 +321,7 @@ def main(
 
     # Clock for FPS limiting
     clock = pygame.time.Clock()
-    runtime_loop = _create_fixed_step_loop_state(settings)
+    runtime_loop = create_fixed_step_loop_state(settings)
     timing_collector = LoopTimingCollector(retain_samples=False)
 
     if runtime_args.profile:
@@ -407,7 +408,7 @@ def main(
                 if renderer.settings_overlay.visible:
                     action = renderer.settings_overlay.handle_event(event)
                     if action == "apply":
-                        runtime_loop.config = _build_fixed_step_loop_config(settings)
+                        runtime_loop.config = build_fixed_step_loop_config(settings)
                         backend_changed = (
                             renderer_backend_name(renderer)
                             != _desired_renderer_backend_name(settings)
@@ -496,7 +497,7 @@ def main(
                                     settings,
                                     renderer,
                                 )
-                                runtime_loop.config = _build_fixed_step_loop_config(settings)
+                                runtime_loop.config = build_fixed_step_loop_config(settings)
                                 simulation.paused = True
                                 runtime_loop.reset_timing_debt()
                                 renderer.settings_overlay.sync_from_settings()
@@ -575,7 +576,7 @@ def main(
             renderer.reset_runtime_state()
             runtime_loop.reset_timing_debt()
 
-        sim_suppressed = _simulation_timing_is_suppressed(
+        sim_suppressed = simulation_timing_is_suppressed(
             simulation,
             _transition_dir,
             _transition_alpha,
@@ -587,11 +588,11 @@ def main(
             if renderer.inspect_mode.pause_mode == "pause":
                 inspect_suppress = True
             elif renderer.inspect_mode.pause_mode == "slow":
-                frame_dt = max(0.0, 1.0 / max(1, _get_effective_target_fps(settings)))
+                frame_dt = max(0.0, 1.0 / max(1, get_effective_target_fps(settings)))
                 if not renderer.inspect_mode.should_step_slow(frame_dt):
                     inspect_suppress = True
 
-        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+        sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
             simulation,
             runtime_loop,
             allow_simulation=not sim_suppressed and not inspect_suppress,
@@ -627,7 +628,7 @@ def main(
         pygame.display.flip()
         present_ms = (time.perf_counter() - present_start) * 1000.0
 
-        effective_target_fps = _get_effective_target_fps(settings)
+        effective_target_fps = get_effective_target_fps(settings)
         target_fps = (
             max(1, effective_target_fps // 2)
             if scr_args.mode == "preview"
@@ -639,7 +640,7 @@ def main(
         frame_end = time.perf_counter()
 
         timing_collector.record_frame(
-            _build_frame_metrics(
+            build_frame_metrics(
                 event_ms=event_ms,
                 sim_ms=sim_ms,
                 render_ms=render_metrics.get("draw_total_ms", 0.0),
@@ -949,7 +950,7 @@ def _run_config_dialog() -> None:
             ("Sim Mode", settings.sim_mode),
             ("Visual Theme", settings.visual_theme),
             ("Population", str(settings.initial_population)),
-            ("Target FPS", str(_get_effective_target_fps(settings))),
+            ("Target FPS", str(get_effective_target_fps(settings))),
         ]
         y = 72
         for label, value in lines:

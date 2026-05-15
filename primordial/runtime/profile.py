@@ -15,7 +15,7 @@ from primordial.rendering import Renderer
 from primordial.settings import Settings
 from primordial.simulation import Simulation
 
-from .fixed_step import FixedStepLoopState, _get_effective_target_fps
+from .fixed_step import FixedStepLoopState, get_effective_target_fps
 from .session import run_bounded_session
 from .timing import LoopTimingCollector
 
@@ -47,7 +47,7 @@ def _run_profile_session(
         runtime_loop,
         timing_collector,
         duration_seconds=60.0,
-        target_fps=_get_effective_target_fps(settings),
+        target_fps=get_effective_target_fps(settings),
     )
     profiler.disable()
 

@@ -115,13 +115,13 @@ def _get_effective_mode_param(
     return fallback
 
 
-def _get_effective_target_fps(settings: Settings | object) -> int:
+def get_effective_target_fps(settings: Settings | object) -> int:
     """Return the active mode's effective presentation cap."""
     fallback = max(1, int(getattr(settings, "target_fps", 60)))
     return max(1, int(_get_effective_mode_param(settings, "target_fps", fallback)))
 
 
-def _get_simulation_tick_hz(settings: Settings | object) -> float:
+def get_simulation_tick_hz(settings: Settings | object) -> float:
     """Return the active mode's fixed simulation rate."""
     return max(
         1.0,
@@ -129,13 +129,13 @@ def _get_simulation_tick_hz(settings: Settings | object) -> float:
     )
 
 
-def _build_fixed_step_loop_config(
+def build_fixed_step_loop_config(
     settings: Settings | object | None = None,
 ) -> FixedStepLoopConfig:
     """Build timing config using the active mode's simulation rate when available."""
     if settings is None:
         return FixedStepLoopConfig()
-    fixed_timestep_seconds = 1.0 / _get_simulation_tick_hz(settings)
+    fixed_timestep_seconds = 1.0 / get_simulation_tick_hz(settings)
     return FixedStepLoopConfig(
         fixed_timestep_seconds=fixed_timestep_seconds,
         max_sim_steps_per_outer_frame=MAX_SIM_STEPS_PER_OUTER_FRAME,
@@ -145,14 +145,14 @@ def _build_fixed_step_loop_config(
     )
 
 
-def _create_fixed_step_loop_state(
+def create_fixed_step_loop_state(
     settings: Settings | object | None = None,
 ) -> FixedStepLoopState:
     """Build the shared loop scaffold used by runtime and profile paths."""
-    return FixedStepLoopState(config=_build_fixed_step_loop_config(settings))
+    return FixedStepLoopState(config=build_fixed_step_loop_config(settings))
 
 
-def _simulation_timing_is_suppressed(
+def simulation_timing_is_suppressed(
     simulation: Simulation,
     transition_dir: int = 0,
     transition_alpha: int = 0,
@@ -191,7 +191,7 @@ def _run_planned_simulation_steps(
     return (time.perf_counter() - sim_start) * 1000.0, sim_steps
 
 
-def _advance_fixed_step_frame(
+def advance_fixed_step_frame(
     simulation: Simulation,
     runtime_loop: FixedStepLoopState,
     *,
@@ -210,4 +210,3 @@ def _advance_fixed_step_frame(
     clamp_frames = runtime_loop.dropped_frame_count - dropped_frame_count_before
     dropped_seconds = runtime_loop.dropped_seconds_total - dropped_seconds_before
     return sim_ms, sim_steps, clamp_frames, dropped_seconds
-

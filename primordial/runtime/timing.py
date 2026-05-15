@@ -158,7 +158,7 @@ class LoopTimingCollector:
         }
 
 
-def _build_frame_metrics(
+def build_frame_metrics(
     *,
     event_ms: float,
     sim_ms: float,
@@ -188,4 +188,3 @@ def _build_frame_metrics(
         dropped_seconds=dropped_seconds,
         accumulator_seconds=accumulator_seconds,
     )
-

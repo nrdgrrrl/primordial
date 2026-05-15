@@ -10,8 +10,8 @@ import pygame
 from primordial.rendering import Renderer
 from primordial.simulation import Simulation
 
-from .fixed_step import FixedStepLoopState, _advance_fixed_step_frame
-from .timing import LoopTimingCollector, _build_frame_metrics
+from .fixed_step import FixedStepLoopState, advance_fixed_step_frame
+from .timing import LoopTimingCollector, build_frame_metrics
 
 
 def run_bounded_session(
@@ -41,7 +41,7 @@ def run_bounded_session(
                 break
         event_ms = (time.perf_counter() - event_start) * 1000.0
 
-        sim_ms, sim_steps, clamp_frames, dropped_seconds = _advance_fixed_step_frame(
+        sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
             simulation,
             runtime_loop,
             allow_simulation=True,
@@ -70,7 +70,7 @@ def run_bounded_session(
         pacing_ms = (time.perf_counter() - pacing_start) * 1000.0
         frame_end = time.perf_counter()
         timing_collector.record_frame(
-            _build_frame_metrics(
+            build_frame_metrics(
                 event_ms=event_ms,
                 sim_ms=sim_ms,
                 render_ms=render_metrics.get("draw_total_ms", 0.0),
@@ -90,4 +90,3 @@ def run_bounded_session(
             break
 
     return max(0.0, time.perf_counter() - start_time)
-
