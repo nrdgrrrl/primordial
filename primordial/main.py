@@ -11,7 +11,6 @@ from __future__ import annotations
 import cProfile
 import json
 import logging
-import math
 import platform
 import pstats
 import random
@@ -218,16 +217,10 @@ def _get_fullscreen_resolution() -> tuple[int, int]:
     return display_info.current_w, display_info.current_h
 
 
-def _map_mouse_event_to_display(
-    mouse_x: float,
-    mouse_y: float,
-    renderer: object,
-) -> tuple[float, float, int, int]:
-    """Map SDL mouse-event coordinates into renderer display coordinates."""
-    display_width = max(1, int(getattr(renderer, "display_width", 0)))
-    display_height = max(1, int(getattr(renderer, "display_height", 0)))
-    window_width = display_width
-    window_height = display_height
+def _get_window_size(fallback: tuple[int, int] = DEFAULT_WINDOWED_SIZE) -> tuple[int, int]:
+    """Return SDL logical window size used by mouse event coordinates."""
+    window_width = fallback[0]
+    window_height = fallback[1]
     get_window_size = getattr(pygame.display, "get_window_size", None)
     if callable(get_window_size):
         try:
@@ -237,154 +230,62 @@ def _map_mouse_event_to_display(
         if queried_width > 0 and queried_height > 0:
             window_width = int(queried_width)
             window_height = int(queried_height)
-
-    display_x = mouse_x * (display_width / max(1, window_width))
-    display_y = mouse_y * (display_height / max(1, window_height))
-    return display_x, display_y, display_width, display_height
+    return max(1, window_width), max(1, window_height)
 
 
-def _iter_mouse_display_candidates(
-    mouse_x: float,
-    mouse_y: float,
-    renderer: object,
-) -> list[tuple[str, float, float, int, int]]:
-    """Return complete candidate interpretations of a mouse click."""
-    display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
-    candidates = [
-        ("raw_display", float(mouse_x), float(mouse_y), display_width, display_height)
-    ]
-    scaled_x = mouse_x * (display_width / max(1, window_width))
-    scaled_y = mouse_y * (display_height / max(1, window_height))
-    axis_candidates = [
-        ("window_to_display", scaled_x, scaled_y),
-        ("raw_x_window_y", float(mouse_x), scaled_y),
-        ("window_x_raw_y", scaled_x, float(mouse_y)),
-    ]
-    for label, candidate_x, candidate_y in axis_candidates:
-        if any(
-            math.isclose(candidate_x, existing_x)
-            and math.isclose(candidate_y, existing_y)
-            for _existing_label, existing_x, existing_y, _existing_w, _existing_h in candidates
-        ):
-            continue
-        candidates.append((label, candidate_x, candidate_y, display_width, display_height))
-    return candidates
-
-
-def _score_nearest_creature_at_display_pos(
-    display_x: float,
-    display_y: float,
-    display_width: int,
-    display_height: int,
+def window_to_world(
+    event_x: float,
+    event_y: float,
     simulation: Simulation,
-) -> tuple[object | None, float | None, float | None]:
-    """Return nearest creature plus normalized score in one display space."""
-    world_width = max(1, int(simulation.width))
-    world_height = max(1, int(simulation.height))
-    safe_display_width = max(1, int(display_width))
-    safe_display_height = max(1, int(display_height))
-    scale_x = safe_display_width / world_width
-    scale_y = safe_display_height / world_height
-    uniform_scale = min(scale_x, scale_y)
-    base_pick_radius = max(1.0, 48.0 * uniform_scale)
-
-    best_creature = None
-    best_score: float | None = None
-    best_dist: float | None = None
-    for creature in simulation.creatures:
-        creature_display_x = creature.x * scale_x
-        creature_display_y = creature.y * scale_y
-        dx = creature_display_x - display_x
-        dy = creature_display_y - display_y
-        dist = math.sqrt(dx * dx + dy * dy)
-        displayed_radius = creature.get_radius() * uniform_scale
-        threshold = max(displayed_radius + 8.0, 16.0 * uniform_scale, base_pick_radius)
-        if dist >= threshold:
-            continue
-        score = dist / max(1.0, threshold)
-        if best_score is None or score < best_score:
-            best_creature = creature
-            best_score = score
-            best_dist = dist
-    return best_creature, best_score, best_dist
-
-
-def _select_inspect_click(
-    mouse_x: float,
-    mouse_y: float,
-    simulation: Simulation,
-    renderer: object,
-) -> tuple[float, float, int, int, str, float | None, float | None]:
-    """Select the best inspect target across plausible Linux mouse spaces."""
-    best_creature = None
-    best_score: float | None = None
-    best_dist: float | None = None
-    best_candidate = _iter_mouse_display_candidates(mouse_x, mouse_y, renderer)[0]
-    for candidate in _iter_mouse_display_candidates(mouse_x, mouse_y, renderer):
-        label, display_x, display_y, display_width, display_height = candidate
-        creature, score, dist = _score_nearest_creature_at_display_pos(
-            display_x,
-            display_y,
-            display_width,
-            display_height,
-            simulation,
-        )
-        if score is None:
-            continue
-        if best_score is None or score < best_score:
-            best_creature = creature
-            best_score = score
-            best_dist = dist
-            best_candidate = candidate
-
-    renderer.inspect_mode.selected_creature_id = (
-        id(best_creature) if best_creature is not None else None
+) -> tuple[float, float]:
+    """Map SDL mouse-event coordinates into simulation world coordinates."""
+    window_w, window_h = _get_window_size((simulation.width, simulation.height))
+    return (
+        event_x * simulation.width / max(1, window_w),
+        event_y * simulation.height / max(1, window_h),
     )
-    label, display_x, display_y, display_width, display_height = best_candidate
-    return display_x, display_y, display_width, display_height, label, best_score, best_dist
+
+
+def world_to_window(
+    world_x: float,
+    world_y: float,
+    simulation: Simulation,
+) -> tuple[float, float]:
+    """Map simulation world coordinates into SDL logical window coordinates."""
+    window_w, window_h = _get_window_size((simulation.width, simulation.height))
+    return (
+        world_x * max(1, window_w) / max(1, simulation.width),
+        world_y * max(1, window_h) / max(1, simulation.height),
+    )
 
 
 def _get_display_window_size(renderer: object) -> tuple[int, int, int, int]:
     """Return renderer display size and SDL window size for diagnostics."""
     display_width = max(1, int(getattr(renderer, "display_width", 0)))
     display_height = max(1, int(getattr(renderer, "display_height", 0)))
-    window_width = display_width
-    window_height = display_height
-    get_window_size = getattr(pygame.display, "get_window_size", None)
-    if callable(get_window_size):
-        try:
-            queried_width, queried_height = get_window_size()
-        except pygame.error:
-            queried_width, queried_height = 0, 0
-        if queried_width > 0 and queried_height > 0:
-            window_width = int(queried_width)
-            window_height = int(queried_height)
+    window_width, window_height = _get_window_size((display_width, display_height))
     return display_width, display_height, window_width, window_height
 
 
-def _world_from_display_pos(
-    display_x: float,
-    display_y: float,
-    display_width: int,
-    display_height: int,
-    simulation: Simulation,
-) -> tuple[float, float]:
-    """Convert a presentation-space point into simulation world coordinates."""
-    return (
-        display_x * (simulation.width / max(1, display_width)),
-        display_y * (simulation.height / max(1, display_height)),
-    )
+def _get_gl_viewport() -> list[int] | None:
+    """Return the current OpenGL viewport for diagnostics when a GL context exists."""
+    try:
+        from OpenGL.GL import GL_VIEWPORT, glGetIntegerv
+
+        viewport = glGetIntegerv(GL_VIEWPORT)
+    except Exception:
+        return None
+    try:
+        return [int(value) for value in viewport]
+    except TypeError:
+        return None
 
 
 def _log_inspect_click_diagnostics(
     event_pos: tuple[int, int],
-    mapped_display_pos: tuple[float, float],
-    mapped_display_size: tuple[int, int],
+    world_pos: tuple[float, float],
     simulation: Simulation,
     renderer: object,
-    selected_candidate: str,
-    selected_score: float | None,
-    selected_distance: float | None,
 ) -> None:
     """Emit enough inspect-click data to diagnose platform coordinate offsets."""
     display_width, display_height, window_width, window_height = _get_display_window_size(renderer)
@@ -393,83 +294,27 @@ def _log_inspect_click_diagnostics(
     flags = int(renderer.screen.get_flags()) if hasattr(renderer, "screen") else 0
     backend = renderer_backend_name(renderer)
 
-    raw_as_display_world = _world_from_display_pos(
-        event_pos[0],
-        event_pos[1],
-        display_width,
-        display_height,
-        simulation,
-    )
-    raw_as_window_world = _world_from_display_pos(
-        event_pos[0],
-        event_pos[1],
-        window_width,
-        window_height,
-        simulation,
-    )
-    mapped_world = _world_from_display_pos(
-        mapped_display_pos[0],
-        mapped_display_pos[1],
-        mapped_display_size[0],
-        mapped_display_size[1],
-        simulation,
-    )
-    candidates = []
-    for label, candidate_x, candidate_y, candidate_w, candidate_h in _iter_mouse_display_candidates(
-        event_pos[0],
-        event_pos[1],
-        renderer,
-    ):
-        creature, score, dist = _score_nearest_creature_at_display_pos(
-            candidate_x,
-            candidate_y,
-            candidate_w,
-            candidate_h,
-            simulation,
-        )
-        candidates.append(
-            {
-                "label": label,
-                "display_pos": [round(float(candidate_x), 3), round(float(candidate_y), 3)],
-                "display_size": [candidate_w, candidate_h],
-                "nearest_id": id(creature) if creature is not None else None,
-                "score": round(score, 6) if score is not None else None,
-                "distance": round(dist, 3) if dist is not None else None,
-            }
-        )
-
     selected_payload: dict[str, float | int | str | None] = {
         "id": None,
         "species": None,
         "world_x": None,
         "world_y": None,
-        "render_display_x": None,
-        "render_display_y": None,
         "render_window_x": None,
         "render_window_y": None,
         "delta_from_event_x": None,
         "delta_from_event_y": None,
-        "delta_from_mapped_x": None,
-        "delta_from_mapped_y": None,
     }
     if selected is not None:
-        render_display_x = selected.x * display_width / max(1, simulation.width)
-        render_display_y = selected.y * display_height / max(1, simulation.height)
-        render_window_x = selected.x * window_width / max(1, simulation.width)
-        render_window_y = selected.y * window_height / max(1, simulation.height)
+        render_window_x, render_window_y = world_to_window(selected.x, selected.y, simulation)
         selected_payload = {
             "id": id(selected),
             "species": selected.species,
             "world_x": round(float(selected.x), 3),
             "world_y": round(float(selected.y), 3),
-            "render_display_x": round(render_display_x, 3),
-            "render_display_y": round(render_display_y, 3),
             "render_window_x": round(render_window_x, 3),
             "render_window_y": round(render_window_y, 3),
             "delta_from_event_x": round(render_window_x - event_pos[0], 3),
             "delta_from_event_y": round(render_window_y - event_pos[1], 3),
-            "delta_from_mapped_x": round(render_display_x - mapped_display_pos[0], 3),
-            "delta_from_mapped_y": round(render_display_y - mapped_display_pos[1], 3),
         }
 
     logger.debug(
@@ -482,30 +327,20 @@ def _log_inspect_click_diagnostics(
                 "scaled": bool(flags & pygame.SCALED),
                 "event_pos": [int(event_pos[0]), int(event_pos[1])],
                 "mouse_get_pos": [int(mouse_pos[0]), int(mouse_pos[1])],
-                "mapped_display_pos": [
-                    round(float(mapped_display_pos[0]), 3),
-                    round(float(mapped_display_pos[1]), 3),
-                ],
+                "mapped_world_pos": [round(float(world_pos[0]), 3), round(float(world_pos[1]), 3)],
                 "display_size": [display_width, display_height],
                 "window_size": [window_width, window_height],
                 "screen_size": list(renderer.screen.get_size()) if hasattr(renderer, "screen") else None,
+                "renderer_size": [
+                    int(getattr(renderer, "width", 0)),
+                    int(getattr(renderer, "height", 0)),
+                ],
+                "renderer_display_size": [
+                    int(getattr(renderer, "display_width", 0)),
+                    int(getattr(renderer, "display_height", 0)),
+                ],
                 "world_size": [int(simulation.width), int(simulation.height)],
-                "raw_as_display_world": [
-                    round(raw_as_display_world[0], 3),
-                    round(raw_as_display_world[1], 3),
-                ],
-                "raw_as_window_world": [
-                    round(raw_as_window_world[0], 3),
-                    round(raw_as_window_world[1], 3),
-                ],
-                "mapped_world": [
-                    round(mapped_world[0], 3),
-                    round(mapped_world[1], 3),
-                ],
-                "selected_candidate": selected_candidate,
-                "selected_score": round(selected_score, 6) if selected_score is not None else None,
-                "selected_distance": round(selected_distance, 3) if selected_distance is not None else None,
-                "candidates": candidates,
+                "gl_viewport": _get_gl_viewport(),
                 "selected": selected_payload,
             },
             sort_keys=True,
@@ -930,6 +765,7 @@ def main(
         if settings.sim_mode == "predator_prey":
             milestone_logger.log_run_start(simulation)
     renderer = create_renderer(screen, settings, debug=runtime_args.debug)
+    renderer.resize(simulation.width, simulation.height, screen=screen)
     active_snapshot_path = _resolve_snapshot_path(
         settings,
         runtime_args.load or runtime_args.save,
@@ -1008,22 +844,14 @@ def main(
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
-                    display_x, display_y, disp_w, disp_h, label, score, dist = _select_inspect_click(
-                        event.pos[0],
-                        event.pos[1],
-                        simulation,
-                        renderer,
-                    )
+                    world_x, world_y = window_to_world(event.pos[0], event.pos[1], simulation)
+                    renderer.inspect_mode.select_at_world_pos(world_x, world_y, simulation)
                     if logger.isEnabledFor(logging.DEBUG):
                         _log_inspect_click_diagnostics(
                             event.pos,
-                            (display_x, display_y),
-                            (disp_w, disp_h),
+                            (world_x, world_y),
                             simulation,
                             renderer,
-                            label,
-                            score,
-                            dist,
                         )
 
             elif event.type == pygame.KEYDOWN:

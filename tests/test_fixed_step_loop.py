@@ -22,12 +22,12 @@ from primordial.main import (
     _force_windowed_mode,
     _get_display_window_size,
     _get_fullscreen_resolution,
-    _map_mouse_event_to_display,
     _open_predator_prey_help,
     _resolve_snapshot_path,
     _run_profile_session,
-    _select_inspect_click,
     _simulation_timing_is_suppressed,
+    window_to_world,
+    world_to_window,
 )
 
 
@@ -99,6 +99,24 @@ class FakeScreen:
 class FakeInspectMode:
     def __init__(self) -> None:
         self.selected_creature_id: int | None = None
+
+    def select_at_world_pos(
+        self,
+        world_x: float,
+        world_y: float,
+        simulation: object,
+        pick_radius: float = 48.0,
+    ) -> None:
+        best_creature = None
+        best_dist = pick_radius
+        for creature in simulation.creatures:
+            dx = creature.x - world_x
+            dy = creature.y - world_y
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist < best_dist:
+                best_creature = creature
+                best_dist = dist
+        self.selected_creature_id = id(best_creature) if best_creature is not None else None
 
 
 class FakeCreature:
@@ -416,29 +434,37 @@ class FixedStepLoopTests(unittest.TestCase):
         renderer.resize.assert_called_once_with(1280, 720, screen=replacement_screen)
         simulation.resize.assert_not_called()
 
-    def test_map_mouse_event_to_display_scales_window_coords_to_display_coords(self) -> None:
-        renderer = SimpleNamespace(display_width=2560, display_height=1440)
-
+    def test_window_to_world_maps_identity_when_window_matches_world(self) -> None:
+        simulation = SimpleNamespace(width=1280, height=720)
         with patch(
             "primordial.main.pygame.display.get_window_size",
             return_value=(1280, 720),
         ):
             self.assertEqual(
-                _map_mouse_event_to_display(640, 360, renderer),
-                (1280.0, 720.0, 2560, 1440),
+                window_to_world(640, 360, simulation),
+                (640.0, 360.0),
             )
 
-    def test_map_mouse_event_to_display_falls_back_to_display_size(self) -> None:
-        renderer = SimpleNamespace(display_width=2560, display_height=1440)
-
+    def test_window_to_world_scales_uniformly_from_window_to_larger_world(self) -> None:
+        simulation = SimpleNamespace(width=1920, height=1080)
         with patch(
             "primordial.main.pygame.display.get_window_size",
-            side_effect=pygame.error("window query failed"),
+            return_value=(1280, 720),
         ):
             self.assertEqual(
-                _map_mouse_event_to_display(640, 360, renderer),
-                (640.0, 360.0, 2560, 1440),
+                window_to_world(640, 360, simulation),
+                (960.0, 540.0),
             )
+
+    def test_window_world_round_trip_is_stable(self) -> None:
+        simulation = SimpleNamespace(width=1920, height=1080)
+        with patch(
+            "primordial.main.pygame.display.get_window_size",
+            return_value=(1280, 720),
+        ):
+            world_pos = window_to_world(835, 424, simulation)
+            self.assertEqual(world_pos, (1252.5, 636.0))
+            self.assertEqual(world_to_window(*world_pos, simulation), (835.0, 424.0))
 
     def test_get_display_window_size_reports_display_and_window(self) -> None:
         renderer = SimpleNamespace(display_width=2560, display_height=1440)
@@ -452,13 +478,13 @@ class FixedStepLoopTests(unittest.TestCase):
                 (2560, 1440, 1280, 720),
             )
 
-    def test_select_inspect_click_compares_raw_and_scaled_candidates_by_score(self) -> None:
-        raw_target = FakeCreature(795.0, 311.0)
-        scaled_candidate = FakeCreature(1192.5, 510.0)
+    def test_inspect_selection_uses_single_window_to_world_transform(self) -> None:
+        authoritative_target = FakeCreature(1252.5, 636.0)
+        raw_x_window_y_target = FakeCreature(835.0, 636.0)
         simulation = SimpleNamespace(
             width=1920,
             height=1080,
-            creatures=[raw_target, scaled_candidate],
+            creatures=[authoritative_target, raw_x_window_y_target],
         )
         renderer = SimpleNamespace(
             display_width=1920,
@@ -470,46 +496,17 @@ class FixedStepLoopTests(unittest.TestCase):
             "primordial.main.pygame.display.get_window_size",
             return_value=(1280, 720),
         ):
-            display_x, display_y, _w, _h, label, score, _dist = _select_inspect_click(
-                795,
-                311,
-                simulation,
-                renderer,
-            )
+            world_x, world_y = window_to_world(835, 424, simulation)
+            renderer.inspect_mode.select_at_world_pos(world_x, world_y, simulation)
 
-        self.assertEqual(renderer.inspect_mode.selected_creature_id, id(raw_target))
-        self.assertEqual(label, "raw_display")
-        self.assertEqual((display_x, display_y), (795.0, 311.0))
-        self.assertEqual(score, 0.0)
-
-    def test_select_inspect_click_allows_mixed_axis_candidate(self) -> None:
-        mixed_target = FakeCreature(835.0, 636.0)
-        simulation = SimpleNamespace(
-            width=1920,
-            height=1080,
-            creatures=[mixed_target],
+        self.assertEqual(
+            renderer.inspect_mode.selected_creature_id,
+            id(authoritative_target),
         )
-        renderer = SimpleNamespace(
-            display_width=1920,
-            display_height=1080,
-            inspect_mode=FakeInspectMode(),
+        self.assertNotEqual(
+            renderer.inspect_mode.selected_creature_id,
+            id(raw_x_window_y_target),
         )
-
-        with patch(
-            "primordial.main.pygame.display.get_window_size",
-            return_value=(1280, 720),
-        ):
-            display_x, display_y, _w, _h, label, score, _dist = _select_inspect_click(
-                835,
-                424,
-                simulation,
-                renderer,
-            )
-
-        self.assertEqual(renderer.inspect_mode.selected_creature_id, id(mixed_target))
-        self.assertEqual(label, "raw_x_window_y")
-        self.assertEqual((display_x, display_y), (835.0, 636.0))
-        self.assertEqual(score, 0.0)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import math
 import time
 from collections import deque
@@ -37,6 +39,7 @@ from OpenGL.GL import (
     GL_TEXTURE_WRAP_T,
     GL_TRIANGLE_STRIP,
     GL_UNSIGNED_BYTE,
+    GL_VIEWPORT,
     GL_VERTEX_SHADER,
     glActiveTexture,
     glAttachShader,
@@ -62,6 +65,7 @@ from OpenGL.GL import (
     glGetProgramiv,
     glGetShaderInfoLog,
     glGetShaderiv,
+    glGetIntegerv,
     glGetString,
     glLineWidth,
     glLinkProgram,
@@ -91,6 +95,7 @@ from .themes import OceanTheme
 
 GL_TEXTURE0 = 0x84C0
 GL_UNPACK_ALIGNMENT = 0x0CF5
+logger = logging.getLogger(__name__)
 
 
 _QUAD_VERTICES = np.array(
@@ -367,9 +372,9 @@ class PredatorPreyGpuRenderer:
         self.screen = screen
         self.settings = settings
         self.debug_enabled = debug
-        self.display_width, self.display_height = screen.get_size()
-        self.width = self.display_width
-        self.height = self.display_height
+        self._refresh_presentation_sizes()
+        self.width = self.window_width
+        self.height = self.window_height
         self.theme = OceanTheme()
         self.start_time = time.time()
         self.frame_times: deque[float] = deque(maxlen=60)
@@ -390,9 +395,10 @@ class PredatorPreyGpuRenderer:
         self._zone_cache_key: tuple[object, ...] | None = None
         self._zone_cache: tuple[RadialSprite, ...] = ()
         self._initialize_gl()
+        self._log_gpu_coordinate_diagnostics("startup")
 
     def _initialize_gl(self) -> None:
-        glViewport(0, 0, self.display_width, self.display_height)
+        glViewport(0, 0, self.drawable_width, self.drawable_height)
         glEnable(GL_BLEND)
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
         self.gpu_info = {
@@ -441,6 +447,48 @@ class PredatorPreyGpuRenderer:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 
+    def _refresh_presentation_sizes(self) -> None:
+        """Refresh SDL logical-window and OpenGL drawable sizes."""
+        window_size = (0, 0)
+        get_window_size = getattr(pygame.display, "get_window_size", None)
+        if callable(get_window_size):
+            try:
+                window_size = get_window_size()
+            except pygame.error:
+                window_size = (0, 0)
+        drawable_size = self.screen.get_size()
+        self.window_width = max(1, int(window_size[0] or drawable_size[0]))
+        self.window_height = max(1, int(window_size[1] or drawable_size[1]))
+        self.drawable_width = max(1, int(drawable_size[0]))
+        self.drawable_height = max(1, int(drawable_size[1]))
+        # Existing metrics/debug consumers use display_* for the GL drawable size.
+        self.display_width = self.drawable_width
+        self.display_height = self.drawable_height
+
+    def _current_gl_viewport(self) -> list[int] | None:
+        try:
+            return [int(value) for value in glGetIntegerv(GL_VIEWPORT)]
+        except Exception:
+            return None
+
+    def _log_gpu_coordinate_diagnostics(self, phase: str) -> None:
+        logger.debug(
+            "GPU_COORDINATE_DIAGNOSTIC %s",
+            json.dumps(
+                {
+                    "phase": phase,
+                    "window_size": [self.window_width, self.window_height],
+                    "screen_size": list(self.screen.get_size()),
+                    "renderer_size": [self.width, self.height],
+                    "renderer_display_size": [self.display_width, self.display_height],
+                    "drawable_size": [self.drawable_width, self.drawable_height],
+                    "simulation_size": [self.width, self.height],
+                    "gl_viewport": self._current_gl_viewport(),
+                },
+                sort_keys=True,
+            ),
+        )
+
     def _create_instanced_vao(
         self,
         *,
@@ -481,12 +529,13 @@ class PredatorPreyGpuRenderer:
         self.height = height
         if screen is not None:
             self.screen = screen
-        self.display_width, self.display_height = self.screen.get_size()
+        self._refresh_presentation_sizes()
         self._ui_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
         self._zone_cache_key = None
         self._zone_cache = ()
         self._initialize_gl()
+        self._log_gpu_coordinate_diagnostics("resize")
 
     def reset_runtime_state(self) -> None:
         self.frame_times.clear()
