@@ -139,7 +139,18 @@ At 1920×1080 this keeps typical runs within the 60fps target envelope in normal
 
 ## Design & Behavior Documentation
 
-For a human-readable guide to how the simulation works as a living system — especially predator_prey mode — see **[docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md)**. It covers current world mechanics, predator/prey ecology, HUD/settings behavior, controls, observability limits, and key terminology.
+- **[docs/organism_biology.md](docs/organism_biology.md)** — organism biology, visual morphology, predator/prey ecology, and how to watch evolution happen.
+- **[docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md)** — predator_prey mode mechanics, HUD/settings, controls, observability limits, and terminology.
+
+## What You Are Watching
+
+Primordial is a living artificial ecosystem. The glowing creatures on screen are **genome-driven organisms**, not decorative particles. Each one carries an inherited genome that determines how it behaves, how it moves, how long it lives, and — crucially — what it looks like.
+
+Their bodies are **procedurally generated glyphs**: symbolic shapes assembled from the genome's visual traits. Related organisms look related because their genomes are similar. When a mutation changes a visual trait, the offspring's glyph changes too, producing a visible but recognizable variant. Glyph morphology is not decoration — it is the phenotype of inherited visual traits.
+
+The simulation implements real selection pressure: organisms that find food efficiently, avoid predators, and manage energy well reproduce more often. Over generations, trait distributions in the population shift. This is Darwinian evolution in a compact, bounded trait space. It is not open-ended — the system cannot invent new behaviors or new body plans — but the selection, drift, and trait change you see are real.
+
+For the full explanation, see [docs/organism_biology.md](docs/organism_biology.md).
 
 ## How It Works
 
@@ -202,6 +213,50 @@ Glyphs are built from a **stroke vocabulary**: arcs, straight lines, loops (smal
 - **Attack lines**: when a hunter drains a nearby creature, a thin colored thread briefly connects them.
 - **Zone backgrounds**: subtle radial tints mark the 5 environmental zones (warm vent, open water, kelp forest, hunting ground, deep trench). Creatures that evolve for their zone gain an energy advantage.
 
+### Biology of the Organisms
+
+Every organism has a genome that determines both behavior and appearance. Reproduction is asexual: a parent splits, passing a mutated genome copy to its offspring. Small mutations accumulate over generations, producing visible lineage divergence — not because visual traits are decorative, but because they are heritable traits that mutate like any other.
+
+**Selection pressure** is real: organisms that feed efficiently, avoid predation, and manage energy costs reproduce more often. Traits under selection (speed, efficiency, aggression, longevity, sense radius) shift in the population average over time. Visual traits (complexity, symmetry, appendages, stroke scale, rotation speed) are not under direct selection and drift neutrally, but they are still meaningful as markers of ancestry and mutation.
+
+**Lineage** is tracked by a numeric ID, branched when a hue mutation exceeds 0.15. Kin lines and territory shimmer use lineage data. A lineage is an ancestry marker, not a biological species — there is no reproductive isolation.
+
+Evolution here is **bounded**: the system selects within a fixed 16-trait space. It cannot invent new behaviors, new body plans, or new ecological niches. What changes is the distribution of existing trait values in the population, driven by real selection pressure and neutral drift.
+
+For the full explanation, see [docs/organism_biology.md](docs/organism_biology.md).
+
+### Reading the Creatures
+
+Because glyphs are generated from the genome, you can learn to read organism traits visually:
+
+- **Color** ≈ lineage and species (predators tinted warm; prey reflect genome hue)
+- **Saturation** ≈ age (desaturation increases after 70% of max lifespan)
+- **Size** ≈ body radius (4–12 px), also the `size` trait
+- **Complexity** ≈ stroke count (2–7 strokes in the glyph)
+- **Symmetry** ≈ arrangement type (asymmetric, bilateral, 3-fold, 4-fold)
+- **Stroke delicacy** ≈ `stroke_scale` (tight/compact vs. spread/fine)
+- **Appendages** ≈ 0–4 limb-like protrusions
+- **Rotation** ≈ `rotation_speed` (near-still to steady spin)
+- **Motion style** ≈ `motion_style` (glide/swim/dart; visible in trail length and movement pattern)
+- **Kin lines** ≈ shared ancestry (nearby same-lineage creatures)
+- **Territory shimmer** ≈ dominant lineages (top 3 get a pulsing glow)
+
+Some critical traits are invisible: energy level, sensing range, depth band, reproductive readiness, and death cause cannot be read from creature appearance alone. The HUD and Inspect Mode expose what the eye cannot see.
+
+Not every visual change is adaptive. Neutral drift can shift glyph traits over generations without any survival advantage. Predator/prey color cues can become less reliable after many generations of hue mutation. Visual change is evidence of heredity and mutation, not evidence of adaptation.
+
+### Predator-Prey Biology
+
+In predator_prey mode, species is determined by the `aggression` trait: above 0.5 = predator, below 0.5 = prey. This means species is an emergent role, not a separate property. Offspring can change species from their parent if a mutation crosses the 0.5 boundary.
+
+**Predators** hunt prey on contact (same depth band required), gain capped energy per kill, and can forage for food when not actively hunting — but reproduction requires recent animal energy from kills. Predators also suffer interference (reduced effectiveness near other predators), a metabolic premium on movement, and a scarcity penalty when prey are below 15% of the population.
+
+**Prey** seek food and flee nearby predators. Fleeing takes priority over feeding. Prey can escape into a different depth band (cross-band miss) or flee beyond the predator's sensing range.
+
+Several mechanisms prevent permanent predator dominance: the reproduction gate (recent kills required), the 60% dominance penalty (+20% reproduction threshold), prey scarcity costs, predator interference, and cross-band misses. These create negative feedback: predator success reduces prey density, which makes predation harder, which reduces predator reproduction, which allows prey to recover.
+
+For the full predator-prey ecology explanation, see [docs/organism_biology.md](docs/organism_biology.md) and [docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md).
+
 ### Watching Evolution
 
 Over a 10–30 minute run, you can observe real selection pressure at work:
@@ -225,7 +280,7 @@ Over a 10–30 minute run, you can observe real selection pressure at work:
 5. **Food Cycles**: Food spawn rate oscillates sinusoidally over ~30 seconds — alternating feast and famine. Boom-bust ecological cycles emerge from this pressure.
 6. **Zones**: Five environmental zones grant ±20% energy modifiers based on trait matching. Creatures evolve toward zones that favor their profile.
 7. **Reproduction**: At energy ≥ 0.8, split into parent + offspring (halved energy each); offspring genome is mutated
-8. **Mutation**: Each of 15 traits has a ~6% chance of shifting (gaussian, std 0.08), clamped to 0–1
+8. **Mutation**: Each of 16 traits has a ~6% chance of shifting (gaussian, std 0.08), clamped to 0–1
 9. **Cosmic Rays**: Each creature has a small per-frame chance of a single spontaneous trait mutation (independent of reproduction)
 10. **Aging**: Creatures have a maximum lifespan determined by `longevity`. Speed declines after 70% of max lifespan; sense radius after 85%. Death by old age emits scatter particles.
 11. **Speciation**: If hue mutates more than 0.15 in one step, the offspring starts a new lineage

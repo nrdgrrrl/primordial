@@ -2,6 +2,31 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — docs: explain organism biology and visual evolution
+
+Added comprehensive documentation explaining what organisms are biologically,
+how their genomes determine both behavior and appearance, how to read creature
+morphology visually, how predator/prey ecology works, and how to watch
+evolution happen over different timescales.
+
+Changed:
+
+- Added `docs/organism_biology.md`: a deep user-facing document covering
+  organism biology, genome trait groups, reproduction and mutation mechanics,
+  selection pressure systems, lineage meaning, predator/prey ecology in
+  detail, the meaning of every visual feature, invisible mechanics, limits
+  of visual inference, and a practical guide to watching evolution.
+- Updated `README.md` with concise "What You Are Watching", "Biology of the
+  Organisms", "Reading the Creatures", and "Predator-Prey Biology" sections
+  that link to the deeper doc. Also fixed the trait count reference (15→16
+  in the Evolution list) and added the organism biology doc to the design
+  documentation references.
+- Updated `AGENTS.md` with the organism biology doc reference, the design
+  philosophy point that glyph morphology is the organism's phenotype, the
+  correct genome trait count in the architecture map (13→16), and the new
+  "glyph morphology is semantically meaningful" rule in the Do Not Break
+  list.
+
 ## [2026-05-21] — tune: make boids flocking loose and lifelike
 
 This pass focused on boids behavior and motion quality after the recent

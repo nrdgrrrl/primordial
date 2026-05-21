@@ -4,6 +4,7 @@ This document is for AI coding agents tasked with extending or modifying the Pri
 
 Detailed design/system reference: `docs/architecture_reference.md`
 Build/integration details: `docs/build_and_integration.md`
+Organism biology and visual morphology: `docs/organism_biology.md`
 
 ## Agent instructions
 Whenever you make code changes you MUST make a meaningful git commit
@@ -19,6 +20,7 @@ Primordial is a fullscreen Python screensaver featuring a cellular evolution sim
 - Performance-sensitive code uses spatial bucketing (no O(n²) loops)
 - Creatures are data-driven: the genome determines all behavior
 - Visual themes are pluggable and don't affect simulation logic
+- Glyph morphology is the organism's phenotype — visual traits are heritable and meaningful, not decorative
 
 ## Architecture Map
 
@@ -44,7 +46,7 @@ primordial/                  ← project root
     │   ├── screensaver.py   # ScreensaverArgs + parse_screensaver_args()
     │   └── cli.py           # RuntimeArgs + parse_runtime_args() for --debug/--profile/--mode/--theme
     ├── simulation/
-    │   ├── genome.py        # Genome dataclass — heritable traits (13 traits)
+    │   ├── genome.py        # Genome dataclass — 16 heritable traits
     │   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
     │   ├── food.py          # Food particle and FoodManager with spatial bucketing
     │   ├── simulation.py    # Simulation — orchestrates creatures, food, evolution, events
@@ -110,6 +112,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 8. **Energy bounds** — creature energy stays in [0.0, 1.0]
 9. **Glyph determinism** — same genome must always produce same glyph (hash-seeded RNG)
 10. **Event queue ownership** — `death_events` and `birth_events` are populated by simulation, cleared by renderer after processing
+11. **Glyph morphology is semantically meaningful** — creature visual traits (complexity, symmetry, stroke_scale, appendages, rotation_speed) are heritable genome traits that mutate, drift, and mark ancestry. Glyph appearance is the organism's phenotype. Do not treat glyph rendering as purely decorative or decoupled from simulation meaning. Changes to glyph generation must preserve determinism and recognizability of lineage resemblance. Visual changes that would make related organisms look unrelated, or that would add cosmetic effects not traceable to genome traits, break the visual-evolution contract.
 
 ## Config file and settings overlay
 
