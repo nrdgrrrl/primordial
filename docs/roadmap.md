@@ -33,6 +33,9 @@ includes:
 - HUDs, inspect mode, benchmark/probe tooling, and observability snapshots;
 - a redesigned categorized settings overlay with mouse support, cursor handling,
   action buttons, and modular metadata/layout/navigation/runtime action code;
+- an in-app documentation browser that loads the predator-prey guide, parses it
+  into sections, supports search, scrolling, mouse, and keyboard input, and
+  remains separate from settings overlay internals;
 - refreshed current-state architecture and predator-prey user documentation.
 
 This foundation enables the next phase: making the existing system easier for a
@@ -50,37 +53,13 @@ normal user to understand.
 | Constrained depth layer | Complete as first ecological version. Future work is readability and deeper depth-specialization, not introducing depth from scratch. |
 | Settings overlay polish | Complete for current needs. Future settings work should extend the refactored modules rather than rewrite the overlay. |
 | Current-state docs refresh | Complete. The human guide is now source material for in-app help. |
+| In-app documentation / help browser | Complete as first version. Future help work should improve content breadth and mode-specific sections, not rebuild the browser from scratch. |
 
 ## Near-Term Roadmap
 
-### 1. In-App Documentation / Help Browser
+### 1. In-Game Tutorial / Onboarding Flow
 
-The next user-facing priority is to bring documentation into the app.
-
-The current Guide action opens `docs/predator_prey_system_guide.md` in an
-external browser. That works, but it interrupts the screensaver and leaves help
-outside the simulation experience. The refreshed guide should become the source
-for an in-app help browser.
-
-Desired shape:
-
-- load or parse documentation from docs files;
-- organize content by Markdown headings or a simple section model;
-- show section navigation, a readable content area, search, and scrolling;
-- support mouse and keyboard;
-- reuse the ocean/bioluminescent visual language of the settings overlay;
-- remain separate from settings overlay internals;
-- keep content out of renderer code;
-- leave room for future mode-specific help sections.
-
-First version should prioritize wrapped text, section navigation, scrolling, and
-search. It should not attempt a full Markdown renderer unless the simpler model
-proves inadequate.
-
-### 2. In-Game Tutorial / Onboarding Flow
-
-After the help browser, add a guided tutorial that introduces Primordial from
-inside the running app.
+Add a guided tutorial that introduces Primordial from inside the running app.
 
 The tutorial should run on first launch, be forceable from the command line for
 developers/testers, and eventually be launchable from in-app help/settings.
@@ -99,6 +78,16 @@ It should explain:
 The first version should be linear and data-driven. Tutorial steps should define
 title, text, highlight target, paused/running behavior, and optional action
 requirements. Do not build complex missions or scoring in the first version.
+
+### 2. Help Content Breadth and Mode Sections
+
+The in-app help browser currently uses the predator-prey guide as its first
+content source. Future help work should extend content carefully:
+
+- add concise sections for `energy`, `boids`, and `drift`;
+- keep docs content in Markdown or structured content files;
+- preserve parser/rendering separation;
+- avoid hardcoding a second copy of the guide in Python.
 
 ### 3. Richer Observability and Evolution Readability
 
@@ -218,9 +207,9 @@ clear state boundaries.
 
 ## Current Priority Order
 
-1. Build an in-app documentation/help browser from the refreshed guide.
-2. Build a simple first-launch tutorial/onboarding flow.
-3. Add focused observability that makes hidden evolution/ecology legible.
+1. Build a simple first-launch tutorial/onboarding flow.
+2. Add focused observability that makes hidden evolution/ecology legible.
+3. Extend help content breadth and mode-specific documentation where useful.
 4. Revisit deeper ecology and strategy diversity.
 5. Consider richer analysis/replay and larger architecture changes only when
    measurement and user needs justify them.

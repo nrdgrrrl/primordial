@@ -29,11 +29,14 @@ Runtime package:
   and settings overlay action handling.
 - `primordial/input/keyboard.py` handles normal runtime key bindings.
 - `primordial/display/` contains display-mode, coordinate, and cursor helpers.
+- `primordial/help/` contains the Markdown-backed help document model, parser,
+  bundled guide path resolution, and simple section search.
 - `primordial/simulation/` owns all simulation state and rules.
 - `primordial/rendering/` owns pygame/GPU drawing, HUDs, inspect mode, glyphs,
-  settings UI rendering, and renderer-side visual state.
+  settings/help UI rendering, and renderer-side visual state.
 - `primordial/persistence/` contains runtime sidecar paths, snapshot defaults,
-  help-launch integration, and predator-prey tuning-state persistence.
+  external help fallback integration, and predator-prey tuning-state
+  persistence.
 
 ## Main Loop
 
@@ -143,12 +146,31 @@ runtime mouse clicks are transformed to world coordinates only for inspect mode.
 Settings overlay hit testing uses raw pygame UI coordinates and must not reuse
 world-coordinate transforms.
 
-The settings overlay action labeled `Guide` opens
-`docs/predator_prey_system_guide.md` through
-`persistence/runtime_state.py::_open_predator_prey_help`. If the app is
-fullscreen, the helper first forces windowed mode before opening the local
-Markdown file in the browser. Tests in `tests/test_fixed_step_loop.py` cover the
-expected path and missing-file behavior.
+The settings overlay action labeled `Guide` now opens an in-app documentation
+browser above the settings overlay. Help events are routed before settings
+events in `primordial/main.py`, so normal simulation controls do not fire while
+the browser is open. Closing help returns to the settings overlay if it is still
+open; otherwise it returns to normal playback.
+
+Help content is loaded from `docs/predator_prey_system_guide.md` through
+`primordial/help/document_model.py`. That module resolves the bundled path with
+`get_base_path()`, parses Markdown headings into flat sections, simplifies body
+Markdown into readable text, and performs simple case-insensitive title/body
+search. It does not implement a full Markdown renderer.
+
+Help UI ownership mirrors the settings split without sharing internals:
+
+- `rendering/help_overlay.py`: drawing, keyboard/mouse event interpretation,
+  search box editing, content wrapping, and hit-region registration.
+- `rendering/help_layout.py`: modal, search, nav, content, footer, and close
+  button rectangles.
+- `rendering/help_navigation.py`: selected section, search query/results, and
+  nav/content scroll state.
+- `rendering/help_mouse.py`: hit-region dataclass.
+
+The old external browser helper
+`persistence/runtime_state.py::_open_predator_prey_help` still exists as tested
+fallback infrastructure, but it is no longer the primary Guide action path.
 
 ## Configuration
 
@@ -189,8 +211,8 @@ The in-app settings overlay is renderer-owned but split across focused modules:
   mouse event interpretation, value formatting, hover state, and hit-region
   registration from the same rectangles that are drawn.
 - `runtime/settings_actions.py`: applies overlay actions to the live runtime:
-  apply/save, discard, reset defaults, save/load snapshot, guide launch, display
-  and backend changes, and predator-prey dial reset.
+  apply/save, discard, reset defaults, save/load snapshot, in-app guide launch,
+  display and backend changes, and predator-prey dial reset.
 
 The overlay supports keyboard and mouse:
 
@@ -200,8 +222,8 @@ The overlay supports keyboard and mouse:
 - arrows change selection and values.
 - `Tab` / `Shift+Tab` change categories.
 - double `R` confirms settings reset.
-- action shortcuts include `V` save snapshot, `L` load snapshot, `H` guide, and
-  double `D` reset predator-prey dials when available.
+- action shortcuts include `V` save snapshot, `L` load snapshot, `H` in-app
+  guide, and double `D` reset predator-prey dials when available.
 - mouse clicks switch categories, select rows, use value steppers, press footer
   buttons, and run action buttons; mouse wheel scrolls the active list.
 
@@ -216,7 +238,7 @@ Runtime cursor behavior lives in `primordial/display/cursor.py`:
 - `hide_runtime_cursor()` hides the OS cursor during normal simulation playback,
   screensaver mode, preview mode, display recreates, and app startup.
 - `show_interactive_cursor()` shows it while interactive UI is open, including
-  settings and inspect mode.
+  settings, the help browser, and inspect mode.
 - `restore_system_cursor()` restores visibility on clean shutdown.
 
 Main-loop and input helpers coordinate these calls. Do not scatter raw
@@ -269,6 +291,7 @@ Useful commands:
 
 ```bash
 .venv/bin/python -m pytest -q
+.venv/bin/python -m pytest tests/test_help_browser.py -q
 .venv/bin/python -m pytest tests/test_settings_overlay.py -q
 .venv/bin/python -m pytest tests/test_settings_actions.py tests/test_fixed_step_loop.py -q
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout 5 .venv/bin/python main.py --mode energy

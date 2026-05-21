@@ -26,11 +26,16 @@ Several earlier roadmap items are implemented:
 - **Settings UX**: the settings overlay is now categorized, readable,
   mouse-capable, cursor-aware, and split across metadata, layout, navigation,
   mouse, rendering, and runtime-action modules.
+- **In-app help**: the Guide action now opens a renderer-owned help browser
+  that loads `docs/predator_prey_system_guide.md`, parses Markdown headings
+  into sections, supports search, mouse, keyboard, and scrolling, and keeps help
+  state separate from settings.
 - **Current-state documentation**: `docs/architecture_reference.md` and
   `docs/predator_prey_system_guide.md` were refreshed from code.
 
 The next gap is not simulation capability. The next gap is user understanding:
-the app has enough behavior that users need in-app help and guided onboarding.
+the app has enough behavior that users need guided onboarding and richer
+observability.
 
 ## Development Principles
 
@@ -63,26 +68,29 @@ Every milestone should preserve these rules:
 | M5 constrained depth-layer model | Complete as first ecological version | Predator-prey has surface/mid/deep bands, depth-aware sensing, food access, escape, and cross-band misses. Better visualization can be future observability work. |
 | Settings overlay redesign | Complete | Recent refactor split metadata, navigation, layout, mouse hit regions, rendering, cursor behavior, and runtime actions. |
 | Current-state docs refresh | Complete | Architecture and predator-prey guide now reflect current code. |
+| M6 in-app documentation/help browser | Complete | Guide opens the in-app browser; parser/search/navigation/layout/mouse/rendering are split across focused modules. |
 
 ## Immediate Next Milestones
 
 Recommended order:
 
-1. **M6: In-App Documentation / Help Browser**
-2. **M7: In-Game Tutorial / Onboarding Flow**
-3. Revisit deeper observability and ecology work.
+1. **M7: In-Game Tutorial / Onboarding Flow**
+2. Revisit deeper observability and ecology work.
+3. Then return to deeper strategy diversity where measurements justify it.
 
-This order is intentional. The refreshed guide already exists and can become
-source material for in-app help. The tutorial should then use that knowledge and
-the help browser as support rather than inventing a parallel explanation system.
+This order is intentional. The refreshed guide now powers in-app help. The
+tutorial should use that knowledge and the help browser as support rather than
+inventing a parallel explanation system.
 
 ## M6: In-App Documentation / Help Browser
 
+Status: **Complete as first version.**
+
 ### Purpose
 
-Replace the current external browser-only Guide workflow with an in-app help
-browser that reads the existing human-facing documentation and makes it usable
-while the simulation is running.
+The old external-browser Guide workflow has been replaced as the primary path.
+The app now has an in-app browser that reads the existing human-facing
+documentation and makes it usable while the simulation is running.
 
 ### Scope
 
@@ -102,9 +110,8 @@ while the simulation is running.
 
 ### Likely Files / Modules
 
-- New module such as `primordial/docs_browser/model.py` or
-  `primordial/help/document_model.py` for loading/parsing docs.
-- New rendering modules under `primordial/rendering/`, for example:
+- `primordial/help/document_model.py` for loading/parsing docs.
+- Rendering modules under `primordial/rendering/`:
   - `help_overlay.py`
   - `help_layout.py`
   - `help_navigation.py`
@@ -125,8 +132,8 @@ while the simulation is running.
 - Help overlay hit testing should register rectangles from layout/draw logic,
   as the settings overlay does.
 - Cursor visibility should follow interactive overlay rules.
-- The Guide action should no longer force a browser-only workflow as the primary
-  path once in-app help exists.
+- The Guide action uses the in-app browser as the primary path; any external
+  browser helper should stay fallback-only.
 
 ### Validation
 
@@ -164,7 +171,8 @@ while the simulation is running.
 - Long documents can create wrapping and scrolling bugs.
 - Search can become too broad or too slow if it tries to be a full text engine.
 - Reusing settings code too directly could entangle unrelated UI state.
-- Browser fallback behavior needs a deliberate decision once in-app help exists.
+- Browser fallback behavior remains available as lower-level infrastructure, but
+  the primary Guide action is now in-app.
 
 ## M7: In-Game Tutorial / Onboarding Flow
 
@@ -360,5 +368,5 @@ Each spec should include:
 The near-term program is not about adding more simulation machinery. It is about
 making the existing world understandable from inside the app.
 
-Build the help browser first. Build the tutorial second. Then return to deeper
-observability and ecology with better user-facing context already in place.
+Build the tutorial next. Then return to deeper observability and ecology with
+better user-facing context already in place.

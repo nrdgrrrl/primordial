@@ -244,6 +244,22 @@ def main(
                 if event.key == pygame.K_p:
                     renderer.set_predator_highlight(False)
 
+            elif renderer.help_overlay.visible and event.type in (
+                pygame.KEYDOWN,
+                pygame.MOUSEBUTTONDOWN,
+                pygame.MOUSEMOTION,
+                pygame.MOUSEWHEEL,
+            ):
+                renderer.help_overlay.handle_event(event)
+                runtime_loop.reset_timing_debt()
+                if renderer.help_overlay.fade_dir < 0:
+                    if renderer.settings_overlay.visible or renderer.inspect_mode.enabled:
+                        show_interactive_cursor()
+                    else:
+                        hide_runtime_cursor()
+                else:
+                    show_interactive_cursor()
+
             elif renderer.settings_overlay.visible and event.type in (
                 pygame.KEYDOWN,
                 pygame.MOUSEBUTTONDOWN,

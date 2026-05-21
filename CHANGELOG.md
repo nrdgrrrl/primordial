@@ -2,6 +2,16 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — feat: add in-app documentation browser
+
+Added a renderer-owned in-app help browser opened from the settings Guide action.
+The browser loads `docs/predator_prey_system_guide.md` through a new help
+document model, parses Markdown headings into navigable sections, supports
+search, scrolling, mouse clicks, keyboard navigation, and draws in the existing
+ocean/bioluminescent modal style. Help layout/navigation/mouse/rendering now
+live in focused modules separate from the settings overlay, and docs/README
+planning notes now describe the in-app help workflow.
+
 ## [2026-05-21] — docs: refresh roadmap and implementation plan
 
 Updated `docs/implementation_program.md` and `docs/roadmap.md` from the

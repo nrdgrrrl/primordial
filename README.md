@@ -303,7 +303,11 @@ Configuration is TOML-backed and persistent across app updates.
   to select them, use value steppers to edit fields, use the mouse wheel to
   scroll long categories, and use footer buttons for Apply, Discard, Save, Load,
   Guide, and reset actions.
-- Press **`H`** while the settings overlay is open to launch the local predator/prey guide in your browser; Primordial drops out of fullscreen first if needed.
+- Press **`H`** while the settings overlay is open, or click **Guide**, to open
+  the in-app documentation browser. It loads
+  `docs/predator_prey_system_guide.md`, supports section navigation, search,
+  scrolling, mouse input, and keyboard input, and closes with `Esc` or the
+  Close button.
 - Canonical repo-tracked defaults live in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml).
 - The runtime user override file is editable by hand as `config.toml`.
 - User config locations:
@@ -362,6 +366,10 @@ so long labels wrap within their panels without shrinking the readable UI fonts.
 Mouse hit regions are produced by the overlay draw pass with the small
 `primordial/rendering/settings_mouse.py` hit-region type so visible controls and
 click targets stay aligned.
+In-app help content is loaded from docs files through
+[`primordial/help/document_model.py`](/home/victoria/projects/primordial/primordial/help/document_model.py).
+The help browser lives in dedicated rendering modules:
+`help_overlay.py`, `help_layout.py`, `help_navigation.py`, and `help_mouse.py`.
 The overlay can edit selected mode-scoped values where a field explicitly points
 at a `[modes.<name>]` key; other mode-table tuning remains TOML-only.
 

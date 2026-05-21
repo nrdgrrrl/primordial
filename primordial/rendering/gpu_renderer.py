@@ -86,6 +86,7 @@ from OpenGL.raw.GL.VERSION.GL_2_0 import (
 )
 
 from .glyphs import build_glyph_surface
+from .help_overlay import HelpOverlay
 from .hud import HUD
 from .inspect_mode import InspectMode
 from .renderer import _ZONE_BG_COLORS
@@ -405,6 +406,7 @@ class PredatorPreyGpuRenderer:
         self.hud = HUD(font_size=16)
         self.hud.visible = settings.show_hud
         self.settings_overlay = SettingsOverlay(settings)
+        self.help_overlay = HelpOverlay()
         self._ui_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._ui_texture: int | None = None
         self._overlay_font = pygame.font.Font(None, 72)
@@ -597,6 +599,12 @@ class PredatorPreyGpuRenderer:
             self.settings_overlay.close()
         else:
             self.settings_overlay.open()
+
+    def open_help_overlay(self) -> None:
+        self.help_overlay.open()
+
+    def close_help_overlay(self) -> None:
+        self.help_overlay.close()
 
     def set_predator_highlight(self, active: bool) -> None:
         self.show_predator_highlight = active
@@ -997,6 +1005,8 @@ class PredatorPreyGpuRenderer:
             self.hud.visible
             or self.settings_overlay.visible
             or self.settings_overlay.fade > 0
+            or self.help_overlay.visible
+            or self.help_overlay.fade > 0
             or simulation.predator_prey_game_over_active
             or self.inspect_mode.enabled
         )
@@ -1011,6 +1021,9 @@ class PredatorPreyGpuRenderer:
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
             self.settings_overlay.update()
             self.settings_overlay.draw(self._ui_surface)
+        if self.help_overlay.visible or self.help_overlay.fade > 0:
+            self.help_overlay.update()
+            self.help_overlay.draw(self._ui_surface)
         self._draw_surface_texture(self._ui_surface)
 
     def _draw_inspect_overlay(self, simulation) -> None:

@@ -16,7 +16,6 @@ from primordial.display import (
     hide_runtime_cursor,
 )
 from primordial.persistence.runtime_state import (
-    _open_predator_prey_help,
     _save_predator_prey_tuning_state,
 )
 from primordial.rendering import display_flags_for_settings, renderer_backend_name
@@ -260,15 +259,13 @@ def _handle_load_snapshot(context: SettingsActionContext) -> SettingsActionResul
 
 
 def _handle_help(context: SettingsActionContext) -> SettingsActionResult:
-    opened, status_message = _open_predator_prey_help(
-        context.settings,
-        context.simulation,
-        context.renderer,
-    )
-    context.renderer.settings_overlay.pending["fullscreen"] = context.settings.fullscreen
+    context.renderer.open_help_overlay()
+    status_message = "Opened in-app predator-prey guide."
+    if context.renderer.help_overlay.status_message:
+        status_message = context.renderer.help_overlay.status_message
     context.renderer.settings_overlay.set_snapshot_status(
         status_message,
-        is_error=not opened,
+        is_error=bool(context.renderer.help_overlay.status_message),
     )
     context.runtime_loop.reset_timing_debt()
     return SettingsActionResult(

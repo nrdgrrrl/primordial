@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from .animations import AnimationManager
+from .help_overlay import HelpOverlay
 from .hud import HUD
 from .inspect_mode import InspectMode
 from .settings_overlay import SettingsOverlay
@@ -238,6 +239,7 @@ class Renderer:
         self.inspect_mode = InspectMode()
 
         self.settings_overlay = SettingsOverlay(settings)
+        self.help_overlay = HelpOverlay()
 
     # ------------------------------------------------------------------
     # Public API
@@ -485,6 +487,12 @@ class Renderer:
             self.settings_overlay.draw(target)
         timings["settings_ms"] = (time.perf_counter() - t0) * 1000.0
 
+        t0 = time.perf_counter()
+        if self.help_overlay.visible or self.help_overlay.fade > 0:
+            self.help_overlay.update()
+            self.help_overlay.draw(target)
+        timings["help_ms"] = (time.perf_counter() - t0) * 1000.0
+
         timings["render_core_ms"] = (time.perf_counter() - frame_t0) * 1000.0
         if self.debug_enabled:
             self._debug_timing = timings
@@ -514,6 +522,14 @@ class Renderer:
             self.settings_overlay.close()
         else:
             self.settings_overlay.open()
+
+    def open_help_overlay(self) -> None:
+        """Open the in-app documentation browser above other runtime overlays."""
+        self.help_overlay.open()
+
+    def close_help_overlay(self) -> None:
+        """Close the in-app documentation browser."""
+        self.help_overlay.close()
 
     def set_predator_highlight(self, active: bool) -> None:
         """Toggle the temporary predator locator overlay."""

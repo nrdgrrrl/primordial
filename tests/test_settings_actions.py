@@ -60,6 +60,8 @@ class FakeRenderer:
         self.mode_changes: list[str] = []
         self.reset_runtime_state = mock.Mock()
         self.resize = mock.Mock()
+        self.help_overlay = SimpleNamespace(status_message="")
+        self.open_help_overlay = mock.Mock()
 
     def set_theme(self, theme: str) -> None:
         self.theme_changes.append(theme)
@@ -297,7 +299,7 @@ class SettingsActionTests(unittest.TestCase):
             ("Saved snapshot to saved_snapshot.json", False),
         )
 
-    def test_help_action_preserves_fullscreen_pending_state(self) -> None:
+    def test_help_action_opens_in_app_help_overlay(self) -> None:
         settings = _settings(fullscreen=False)
         renderer = FakeRenderer("help")
         runtime_loop = create_fixed_step_loop_state(settings)
@@ -309,17 +311,15 @@ class SettingsActionTests(unittest.TestCase):
             runtime_loop=runtime_loop,
         )
 
-        with mock.patch(
-            "primordial.runtime.settings_actions._open_predator_prey_help",
-            return_value=(True, "Opened guide"),
-        ) as open_help:
-            result = handle_settings_overlay_event(object(), context)
+        result = handle_settings_overlay_event(object(), context)
 
         self.assertIs(result.renderer, renderer)
-        open_help.assert_called_once_with(settings, context.simulation, renderer)
-        self.assertEqual(renderer.settings_overlay.pending["fullscreen"], False)
+        renderer.open_help_overlay.assert_called_once_with()
         self.assertEqual(runtime_loop.accumulator_seconds, 0.0)
-        self.assertEqual(renderer.settings_overlay.statuses[-1], ("Opened guide", False))
+        self.assertEqual(
+            renderer.settings_overlay.statuses[-1],
+            ("Opened in-app predator-prey guide.", False),
+        )
 
     def test_reset_predator_prey_dials_preserves_existing_branch_behavior(self) -> None:
         settings = _settings(sim_mode="predator_prey")

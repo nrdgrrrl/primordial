@@ -259,13 +259,14 @@ Settings overlay controls:
 | `Space` | Run selected action in the Actions category |
 | `V` | Save snapshot |
 | `L` | Load snapshot |
-| `H` | Open this guide |
+| `H` | Open this guide in the in-app help browser |
 | `R R` | Confirm reset settings defaults |
 | `D D` | Confirm predator-prey dial reset, when available |
 
-The **Guide** action opens this local Markdown file in your browser. If the app
-is fullscreen, Primordial first switches to windowed mode so the browser can be
-used normally.
+The **Guide** action opens this document inside Primordial. The help browser has
+section navigation on the left, readable guide content on the right, search,
+mouse scrolling, and keyboard navigation. Press `Esc` or click **Close** to
+return to settings.
 
 ## Save, Load, and Persistent Tuning State
 
