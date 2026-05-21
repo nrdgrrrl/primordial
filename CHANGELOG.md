@@ -2,6 +2,18 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — docs: refresh architecture and predator-prey guide
+
+Rewrote `docs/architecture_reference.md` around the current module layout,
+settings overlay refactor, cursor helpers, runtime action routing, config
+authority, persistence, and predator-prey state. Reworked
+`docs/predator_prey_system_guide.md` as a current-state user guide, correcting
+stale predator-prey defaults and behavior notes, clarifying that adaptive tuning
+is implemented but disabled by default, and documenting current controls,
+settings, HUD, game-over, snapshot, and guide-launch behavior. Also corrected
+matching README/AGENTS references for genome trait count, predator-prey defaults,
+adaptive tuning default state, and game-over hold time.
+
 ## [2026-05-21] — polish: settings overlay long-label layout
 
 Adjusted the redesigned settings overlay layout so long category names and

@@ -114,13 +114,13 @@ At 1920×1080 this keeps typical runs within the 60fps target envelope in normal
 
 ## Design & Behavior Documentation
 
-For a thorough human-readable guide to how the simulation works as a living system — especially predator_prey mode — see **[docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md)**. It covers world mechanics, predator/prey ecology, evolutionary features, observability gaps, and a design assessment.
+For a human-readable guide to how the simulation works as a living system — especially predator_prey mode — see **[docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md)**. It covers current world mechanics, predator/prey ecology, HUD/settings behavior, controls, observability limits, and key terminology.
 
 ## How It Works
 
 ### The Genome System
 
-Each creature has a **genome** — a set of 15 heritable traits that determine its characteristics. All traits are floats in the range 0.0–1.0 and can mutate slightly each generation.
+Each creature has a **genome** — a set of 16 heritable traits that determine its characteristics. All traits are floats in the range 0.0–1.0 and can mutate slightly each generation.
 
 #### Survival Traits
 
@@ -229,7 +229,7 @@ HUD shows: population, generation count, hunter/grazer/opportunist ratio, domina
 
 ### Predator Prey Mode
 
-A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%) or **prey** (70%). Predators hunt prey on contact, prey flee from nearby predators, and the success metric is **stability**: how many simulation ticks the run survives before either species collapses to zero.
+A Lotka-Volterra-inspired ecosystem where creatures are born as either **predator** or **prey**. The committed default starts at 12% predators and 88% prey. Predators hunt prey on contact and may forage when not actively hunting; prey search for food and flee nearby predators. The success metric is **stability**: how many simulation ticks the run survives before either species remains collapsed past the extinction grace window.
 
 - Arms race evolution: predator aggression and prey speed evolve under mutual selection pressure.
 - Cosmic ray hits can flip species identity when aggression crosses the 0.5 threshold.
@@ -240,7 +240,7 @@ A Lotka-Volterra ecosystem where creatures are born as either **predator** (30%)
 - That dial highlight means "this run was the trial run that used this dial change," not "the dial change succeeded." A failed trial still highlights the changed dial, because that is the dial the run actually tested.
 - The settings overlay exposes a predator-prey-only dial reset action that restores adaptive dials to baseline values and clears the max survival tick record before starting a fresh run.
 - The HUD shows `sim_ticks`, current seed, current `survival_ticks`, the rolling median survival over the configured history window (`stability_history_size`, 20 by default), and the best recent survival from that same window.
-- A small adaptive tuning pass tweaks one bounded ecological dial at a time after below-median collapses. That comparison is against the rolling median, not the all-time high. Each candidate is then evaluated against the unchanged baseline on the same seed set, using the median survival from those runs. The seed-pair count defaults to `2` and can be overridden with `adaptive_trial_seed_count`. Survival remains the primary objective. If the candidate and baseline survival medians are within `adaptive_survival_deadband` ticks (`50` by default), the decision falls back to lower near-extinction pressure, defined as `predator_low_ticks + prey_low_ticks` over the run. If both survival and pressure are still tied, the existing keep-on-tie behavior is preserved when candidate survival meets baseline; otherwise the candidate is reverted.
+- Adaptive tuning is implemented but disabled by the committed default (`adaptive_tuning_enabled = false`). When enabled in config, it tweaks one bounded ecological dial at a time after below-median collapses. That comparison is against the rolling median, not the all-time high. Each candidate is then evaluated against the unchanged baseline on the same seed set, using the median survival from those runs. The seed-pair count defaults to `2` and can be overridden with `adaptive_trial_seed_count`. Survival remains the primary objective. If the candidate and baseline survival medians are within `adaptive_survival_deadband` ticks (`50` by default), the decision falls back to lower near-extinction pressure, defined as `predator_low_ticks + prey_low_ticks` over the run. Exact ties revert the candidate.
 - If runs keep failing to beat the rolling median for `adaptive_step_escalation_runs` completed runs in a row (5 by default), the next dial trial increases its step size by `adaptive_step_escalation_percent` (25% by default) for each full streak block.
 - If you launch with `--log=csv`, predator-prey appends one `run_complete` row per completed run and one `trial_decision` row per completed adaptive trial to `run_logs/predator_prey_runs.csv`. The rows include seed, `sim_ticks`, `survival_ticks`, `predator_low_ticks`, `prey_low_ticks`, `near_extinction_pressure`, trial role (`candidate` or `baseline`), verification seed, trial id, survival deadband, decision basis, keep/revert outcome, and the dial values used for that run. Manual dial resets still append a `dial_reset` marker row so later analysis can segment the data.
 - Predators keep a persistent warm predator tint layered over their genome color, so they stay legible even after hue drift. Prey continue to render directly from their genome palette.
@@ -401,7 +401,7 @@ primordial/
 │   │   ├── __init__.py
 │   │   ├── creature.py      # Creature class with motion styles and aging
 │   │   ├── food.py          # Food and FoodManager (spatial bucket)
-│   │   ├── genome.py        # Genome — 15 heritable traits
+│   │   ├── genome.py        # Genome — 16 heritable traits
 │   │   ├── zones.py         # Environmental zones and ZoneManager
 │   │   └── simulation.py    # Main simulation logic + event queues
 │   └── rendering/

@@ -149,7 +149,7 @@ When predators exceed 60% of the live population, predator reproduction becomes
 harder by increasing the resolved predator threshold by 20%.
 Predator/prey extinction is no longer rescued in normal operation: either
 species hitting zero triggers a frozen red `GAME OVER` state, then an automatic
-restart after 5 seconds with a new seed. Pressing `Space` during that screen
+restart after 10 seconds with a new seed. Pressing `Space` during that screen
 skips the hold and restarts immediately.
 That `GAME OVER` overlay also shows the run's dial values, highlights the dial
 changed for that run with its signed delta, and marks the highest survival tick
