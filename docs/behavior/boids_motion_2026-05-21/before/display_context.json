@@ -1,0 +1,18 @@
+{
+  "display_path": "live_display",
+  "visible_display": true,
+  "driver": "x11",
+  "desktop_resolution": [
+    1920,
+    1080
+  ],
+  "desktop_sizes": [
+    [
+      1920,
+      1080
+    ]
+  ],
+  "display_env": ":0",
+  "wayland_display": "wayland-0",
+  "session_type": "wayland"
+}

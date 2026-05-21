@@ -66,6 +66,19 @@ _DEFAULT_PREY_TO_PREDATOR_AGGRESSION_THRESHOLD = 0.30
 _DEFAULT_PREDATOR_TO_PREY_AGGRESSION_THRESHOLD = 0.20
 _DEFAULT_EXTINCTION_GRACE_TICKS = 7200
 _PREDATOR_INTERFERENCE_RADIUS = 150.0
+_BOIDS_NEIGHBOR_SENSE_SCALE = 1.05
+_BOIDS_FLOCK_LINK_SCALE = 0.62
+_BOIDS_PREFERRED_SPACING_SCALE = 3.7
+_BOIDS_SEPARATION_RANGE_SCALE = 1.15
+_BOIDS_CLOSE_SEPARATION_SCALE = 2.2
+_BOIDS_SEPARATION_CLOSE_BOOST = 2.8
+_BOIDS_ALIGNMENT_BASE = 0.085
+_BOIDS_COHESION_BASE = 0.060
+_BOIDS_WANDER_BASE = 0.024
+_BOIDS_ENERGY_REGEN_BASE = 0.00115
+_BOIDS_TARGET_NEIGHBORS = 6.0
+_BOIDS_MIN_NEIGHBORS = 2.0
+_BOIDS_SOFT_MAX_NEIGHBORS = 9.0
 
 
 @dataclass(frozen=True)
@@ -815,13 +828,13 @@ class Simulation:
         for _ in range(initial_pop):
             lid = self._alloc_lineage_id()
             genome = Genome(
-                speed=random.uniform(0.3, 0.7),
-                size=random.uniform(0.2, 0.6),
-                sense_radius=random.uniform(0.4, 0.9),
-                aggression=random.uniform(0.3, 0.7),
+                speed=random.uniform(0.25, 0.75),
+                size=random.uniform(0.18, 0.55),
+                sense_radius=random.uniform(0.18, 0.65),
+                aggression=random.uniform(0.25, 0.85),
                 hue=random.random(),
                 saturation=random.uniform(0.6, 1.0),
-                efficiency=random.uniform(0.4, 0.8),
+                efficiency=random.uniform(0.30, 0.85),
                 complexity=random.random(),
                 symmetry=random.random(),
                 stroke_scale=random.random(),
@@ -829,7 +842,7 @@ class Simulation:
                 rotation_speed=random.random(),
                 motion_style=random.random(),
                 longevity=random.random(),
-                conformity=random.uniform(0.3, 0.7),
+                conformity=random.uniform(0.20, 0.80),
                 depth_preference=random.random(),
             )
             creature = Creature.spawn(
@@ -2092,14 +2105,33 @@ class Simulation:
         for creature in self.creatures:
             if self._queue_preexisting_death(creature, dead_creatures, dead_causes):
                 continue
-            sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n_neighbors, alignment_dot = \
-                self._compute_boid_forces(
-                    creature, boid_neighbors.get(id(creature), [])
-                )
+            (
+                sep_fx,
+                sep_fy,
+                align_fx,
+                align_fy,
+                coh_fx,
+                coh_fy,
+                n_neighbors,
+                alignment_score,
+                crowding_score,
+                nearest_distance,
+                mean_distance,
+                _sep_mag,
+                _coh_mag,
+            ) = self._compute_boid_forces(
+                creature,
+                boid_neighbors.get(id(creature), []),
+            )
+            wander_fx, wander_fy = self._compute_boid_wander_force(
+                creature,
+                neighbor_count=n_neighbors,
+                crowding_score=crowding_score,
+            )
 
             # Apply flocking forces
-            creature.vx += sep_fx + align_fx + coh_fx
-            creature.vy += sep_fy + align_fy + coh_fy
+            creature.vx += sep_fx + align_fx + coh_fx + wander_fx
+            creature.vy += sep_fy + align_fy + coh_fy + wander_fy
 
             # Clamp to max speed
             max_speed = creature.genome.speed * speed_base
@@ -2113,22 +2145,32 @@ class Simulation:
 
             creature.update_position(1.0, self.width, self.height)
 
-            # Energy model: optimal band = 3–12 neighbours
-            if n_neighbors < 3:
-                creature.energy = max(0.0, creature.energy - 0.0005)
-            elif n_neighbors > 12:
-                creature.energy = max(0.0, creature.energy - 0.0003)
-            else:
-                regen = 0.0012 * max(0.0, alignment_dot)
-                creature.energy = min(1.0, creature.energy + regen)
+            self._update_boid_energy(
+                creature,
+                neighbor_count=n_neighbors,
+                alignment_score=alignment_score,
+                crowding_score=crowding_score,
+                nearest_distance=nearest_distance,
+                mean_distance=mean_distance,
+            )
 
             # Overcrowding penalty
             creature.energy = max(0.0, creature.energy - creature.get_movement_cost() * overcrowding_penalty)
+            if overcrowding_penalty > 0.0:
+                creature.energy = max(
+                    0.0,
+                    creature.energy - (0.00025 * overcrowding_penalty),
+                )
 
             if random.random() < cosmic_rate:
                 self._apply_cosmic_ray(creature)
 
-            if creature.energy >= energy_to_reproduce:
+            if (
+                creature.energy >= energy_to_reproduce
+                and alignment_score >= 0.35
+                and 2 <= n_neighbors <= 9
+                and crowding_score < 0.55
+            ):
                 offspring = self._reproduce_boids(
                     creature,
                     mutation_rate,
@@ -2183,7 +2225,15 @@ class Simulation:
             id(creature): index for index, creature in enumerate(creatures)
         }
         sense_sq_by_id = {
-            id(creature): (creature.get_effective_sense_radius() * 1.5) ** 2
+            id(creature): (
+                creature.get_effective_sense_radius() * _BOIDS_NEIGHBOR_SENSE_SCALE
+            ) ** 2
+            for creature in creatures
+        }
+        flock_link_sq_by_id = {
+            id(creature): (
+                creature.get_effective_sense_radius() * _BOIDS_FLOCK_LINK_SCALE
+            ) ** 2
             for creature in creatures
         }
 
@@ -2216,6 +2266,7 @@ class Simulation:
                 bucket_members,
                 same_bucket=True,
                 sense_sq_by_id=sense_sq_by_id,
+                flock_link_sq_by_id=flock_link_sq_by_id,
                 creature_index=creature_index,
                 neighbor_cache=neighbor_cache,
                 union=union,
@@ -2232,6 +2283,7 @@ class Simulation:
                     neighbor_members,
                     same_bucket=False,
                     sense_sq_by_id=sense_sq_by_id,
+                    flock_link_sq_by_id=flock_link_sq_by_id,
                     creature_index=creature_index,
                     neighbor_cache=neighbor_cache,
                     union=union,
@@ -2270,6 +2322,7 @@ class Simulation:
         *,
         same_bucket: bool,
         sense_sq_by_id: dict[int, float],
+        flock_link_sq_by_id: dict[int, float],
         creature_index: dict[int, int],
         neighbor_cache: dict[int, list[tuple[Creature, float, float, float]]],
         union: Any,
@@ -2293,29 +2346,42 @@ class Simulation:
                     left_neighbors.append((right, dx, dy, dist_sq))
                 if right_can_sense:
                     neighbor_cache[right_id].append((left, -dx, -dy, dist_sq))
-                union(left_index, creature_index[right_id])
+                if (
+                    dist_sq < flock_link_sq_by_id[left_id]
+                    and dist_sq < flock_link_sq_by_id[right_id]
+                ):
+                    union(left_index, creature_index[right_id])
 
     def _compute_boid_forces(
         self, creature: Creature, neighbors: list[tuple[Creature, float, float, float]]
-    ) -> tuple[float, float, float, float, float, float, int, float]:
+    ) -> tuple[float, float, float, float, float, float, int, float, float, float, float, float, float]:
         """
         Compute separation, alignment, and cohesion forces for a boid.
 
         Strengths: separation=aggression, alignment=conformity, cohesion=efficiency.
 
         Returns:
-            (sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n_neighbors, alignment_dot)
+            (
+                sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy,
+                n_neighbors, alignment_score, crowding_score,
+                nearest_distance, mean_distance, separation_mag, cohesion_mag,
+            )
         """
         if not neighbors:
-            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0
+            return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
         n = len(neighbors)
-        sep_threshold = creature.get_radius() * 3.0
-        sep_threshold_sq = sep_threshold * sep_threshold
+        body_radius = creature.get_radius()
+        preferred_spacing = body_radius * _BOIDS_PREFERRED_SPACING_SCALE
+        separation_range = preferred_spacing * _BOIDS_SEPARATION_RANGE_SCALE
+        close_range = body_radius * _BOIDS_CLOSE_SEPARATION_SCALE
 
         sep_x = sep_y = 0.0
         sum_vx = sum_vy = 0.0
         sum_dx = sum_dy = 0.0
+        sum_distance = 0.0
+        nearest_distance = float("inf")
+        local_density = 0.0
 
         for other, dx, dy, dist_sq in neighbors:
             sum_vx += other.vx
@@ -2323,14 +2389,52 @@ class Simulation:
             sum_dx += dx
             sum_dy += dy
 
-            if dist_sq < sep_threshold_sq and dist_sq > 1e-6:
-                dist = math.sqrt(dist_sq)
-                weight = (sep_threshold - dist) / sep_threshold
+            if dist_sq <= 1e-6:
+                continue
+
+            dist = math.sqrt(dist_sq)
+            sum_distance += dist
+            nearest_distance = min(nearest_distance, dist)
+            closeness = max(0.0, 1.0 - (dist / separation_range))
+            local_density += closeness
+
+            if dist < separation_range:
                 inv_dist = 1.0 / dist
+                close_pressure = max(0.0, 1.0 - (dist / close_range))
+                weight = (
+                    (closeness * closeness)
+                    + (close_pressure * close_pressure * _BOIDS_SEPARATION_CLOSE_BOOST)
+                )
                 sep_x += (-dx * inv_dist) * weight
                 sep_y += (-dy * inv_dist) * weight
 
-        sep_strength = creature.genome.aggression * 0.25
+        if nearest_distance == float("inf"):
+            nearest_distance = 0.0
+        mean_distance = sum_distance / n if n > 0 else 0.0
+        crowding_from_density = min(1.0, local_density / max(1.0, n * 0.6))
+        crowding_from_spacing = 0.0
+        if nearest_distance > 0.0:
+            crowding_from_spacing = max(
+                0.0,
+                min(1.0, (preferred_spacing - nearest_distance) / preferred_spacing),
+            )
+        crowding_from_count = max(
+            0.0,
+            min(
+                1.0,
+                (n - _BOIDS_TARGET_NEIGHBORS)
+                / (_BOIDS_SOFT_MAX_NEIGHBORS - _BOIDS_TARGET_NEIGHBORS + 2.0),
+            ),
+        )
+        crowding_score = max(
+            crowding_from_density,
+            crowding_from_spacing,
+            crowding_from_count,
+        )
+
+        sep_strength = (0.18 + creature.genome.aggression * 0.32) * (
+            1.0 + crowding_score * 0.9
+        )
         sep_fx = sep_x * sep_strength
         sep_fy = sep_y * sep_strength
 
@@ -2343,8 +2447,12 @@ class Simulation:
             alignment_dot = (
                 (creature.vx * avg_vx + creature.vy * avg_vy) / (my_speed * avg_speed)
             )
+        alignment_score = max(0.0, alignment_dot)
 
-        align_strength = creature.genome.conformity * 0.12
+        align_strength = creature.genome.conformity * _BOIDS_ALIGNMENT_BASE * max(
+            0.35,
+            1.0 - (crowding_score * 0.45),
+        )
         align_fx = (avg_vx - creature.vx) * align_strength
         align_fy = (avg_vy - creature.vy) * align_strength
 
@@ -2352,14 +2460,150 @@ class Simulation:
         avg_dy = sum_dy / n
         dist_to_centroid_sq = avg_dx * avg_dx + avg_dy * avg_dy
         if dist_to_centroid_sq > 1e-6:
-            inv_dist = 1.0 / math.sqrt(dist_to_centroid_sq)
-            coh_strength = creature.genome.efficiency * 0.04
+            dist_to_centroid = math.sqrt(dist_to_centroid_sq)
+            inv_dist = 1.0 / dist_to_centroid
+            isolation_score = max(
+                0.0,
+                min(1.0, (_BOIDS_TARGET_NEIGHBORS - n) / _BOIDS_TARGET_NEIGHBORS),
+            )
+            centroid_pull = max(
+                0.0,
+                min(
+                    1.0,
+                    (
+                        dist_to_centroid - (preferred_spacing * 0.55)
+                    ) / (preferred_spacing * 1.45),
+                ),
+            )
+            coh_drive = centroid_pull * max(
+                0.0,
+                0.45 + (isolation_score * 0.9) - (crowding_score * 0.60),
+            )
+            coh_strength = creature.genome.efficiency * _BOIDS_COHESION_BASE * coh_drive
             coh_fx = avg_dx * inv_dist * coh_strength
             coh_fy = avg_dy * inv_dist * coh_strength
         else:
             coh_fx = coh_fy = 0.0
 
-        return sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n, alignment_dot
+        return (
+            sep_fx,
+            sep_fy,
+            align_fx,
+            align_fy,
+            coh_fx,
+            coh_fy,
+            n,
+            alignment_score,
+            crowding_score,
+            nearest_distance,
+            mean_distance,
+            math.hypot(sep_fx, sep_fy),
+            math.hypot(coh_fx, coh_fy),
+        )
+
+    def _compute_boid_wander_force(
+        self,
+        creature: Creature,
+        *,
+        neighbor_count: int,
+        crowding_score: float,
+    ) -> tuple[float, float]:
+        """Add smooth, low-frequency local variation so schools do not move rigidly."""
+        frequency = 0.028 + creature.genome.motion_style * 0.042
+        phase = (
+            (self._frame * frequency)
+            + (creature.lineage_id * 0.61803398875)
+            + (creature.genome.hue * math.tau)
+        )
+        speed = math.hypot(creature.vx, creature.vy)
+        if speed > 0.01:
+            heading_x = creature.vx / speed
+            heading_y = creature.vy / speed
+        else:
+            heading_x = math.cos(phase)
+            heading_y = math.sin(phase)
+        perp_x = -heading_y
+        perp_y = heading_x
+        individuality = 0.25 + (1.0 - creature.genome.conformity) * 0.75
+        flock_tension = 1.0 if neighbor_count == 0 else (0.55 + crowding_score * 0.65)
+        amplitude = _BOIDS_WANDER_BASE * individuality * flock_tension
+        lateral = math.sin(phase)
+        forward = math.cos((phase * 0.61) + (creature.genome.motion_style * math.pi))
+        return (
+            ((perp_x * lateral) + (heading_x * forward * 0.25)) * amplitude,
+            ((perp_y * lateral) + (heading_y * forward * 0.25)) * amplitude,
+        )
+
+    def _update_boid_energy(
+        self,
+        creature: Creature,
+        *,
+        neighbor_count: int,
+        alignment_score: float,
+        crowding_score: float,
+        nearest_distance: float,
+        mean_distance: float,
+    ) -> None:
+        """Reward moderate, well-spaced local flocking while penalizing crowding."""
+        if neighbor_count <= 0:
+            creature.energy = max(0.0, creature.energy - 0.0007)
+            return
+
+        preferred_spacing = creature.get_radius() * _BOIDS_PREFERRED_SPACING_SCALE
+        count_score = max(
+            0.0,
+            1.0 - (
+                abs(neighbor_count - _BOIDS_TARGET_NEIGHBORS)
+                / 4.0
+            ),
+        )
+        spacing_score = 0.0
+        if nearest_distance > 0.0:
+            spacing_score = max(
+                0.0,
+                1.0
+                - (
+                    abs(nearest_distance - (preferred_spacing * 0.95))
+                    / (preferred_spacing * 0.75)
+                ),
+            )
+        mean_spacing_score = 0.0
+        if mean_distance > 0.0:
+            mean_spacing_score = max(
+                0.0,
+                1.0
+                - (
+                    abs(mean_distance - (preferred_spacing * 1.25))
+                    / preferred_spacing
+                ),
+            )
+        formation_score = max(
+            0.0,
+            (alignment_score * 0.42)
+            + (spacing_score * 0.33)
+            + (mean_spacing_score * 0.15)
+            + (count_score * 0.10),
+        )
+        creature.energy = min(
+            1.0,
+            creature.energy + (_BOIDS_ENERGY_REGEN_BASE * formation_score),
+        )
+        if neighbor_count < _BOIDS_MIN_NEIGHBORS:
+            creature.energy = max(
+                0.0,
+                creature.energy - (0.00035 * (_BOIDS_MIN_NEIGHBORS - neighbor_count)),
+            )
+        if crowding_score > 0.0:
+            creature.energy = max(
+                0.0,
+                creature.energy - (0.00075 * crowding_score),
+            )
+        if neighbor_count > _BOIDS_SOFT_MAX_NEIGHBORS:
+            creature.energy = max(
+                0.0,
+                creature.energy
+                - (0.00020 * (neighbor_count - _BOIDS_SOFT_MAX_NEIGHBORS)),
+            )
 
     def _update_boids_glyph_phases(self) -> None:
         """Lerp each creature's glyph pulse phase toward its flock average."""
@@ -3887,6 +4131,135 @@ class Simulation:
         avg = sum(sizes) / len(sizes)
         return self._flock_count, avg, max(sizes)
 
+    def get_boids_behavior_metrics(self) -> dict[str, Any]:
+        """Return boids-specific spacing, flock-size, and force diagnostics."""
+        if self.settings.sim_mode != "boids" or not self.creatures:
+            return {
+                "count": 0,
+                "average_size": 0.0,
+                "largest": 0,
+                "loners": 0,
+                "largest_share": 0.0,
+                "nearest_neighbor_distance_mean": 0.0,
+                "nearest_neighbor_distance_median": 0.0,
+                "neighbor_count_mean": 0.0,
+                "neighbor_count_median": 0.0,
+                "alignment_mean": 0.0,
+                "separation_force_mean": 0.0,
+                "cohesion_force_mean": 0.0,
+                "overcrowded_share": 0.0,
+                "dense_cluster_share": 0.0,
+                "size_bands": {
+                    "small": 0,
+                    "medium": 0,
+                    "large": 0,
+                    "huge": 0,
+                },
+                "member_bands": {
+                    "small": 0,
+                    "medium": 0,
+                    "large": 0,
+                    "huge": 0,
+                },
+            }
+
+        creature_bucket = self._build_creature_bucket()
+        boid_neighbors = self._build_boid_neighbor_cache_and_assignments(
+            creature_bucket
+        )
+        flock_count, avg_flock_size, largest_flock = self.get_flock_stats()
+        population = max(1, len(self.creatures))
+        loners = sum(1 for creature in self.creatures if creature.flock_id == -1)
+
+        nearest_neighbor_distances: list[float] = []
+        neighbor_counts: list[int] = []
+        alignment_scores: list[float] = []
+        separation_force_magnitudes: list[float] = []
+        cohesion_force_magnitudes: list[float] = []
+        overcrowded_count = 0
+        dense_cluster_count = 0
+
+        for creature in self.creatures:
+            neighbors = boid_neighbors.get(id(creature), [])
+            (
+                sep_fx,
+                sep_fy,
+                _align_fx,
+                _align_fy,
+                coh_fx,
+                coh_fy,
+                neighbor_count,
+                alignment_score,
+                _crowding_score,
+                nearest_distance,
+                _mean_distance,
+                _sep_mag,
+                _coh_mag,
+            ) = self._compute_boid_forces(creature, neighbors)
+            neighbor_counts.append(neighbor_count)
+            alignment_scores.append(alignment_score)
+            separation_force_magnitudes.append(math.hypot(sep_fx, sep_fy))
+            cohesion_force_magnitudes.append(math.hypot(coh_fx, coh_fy))
+            if nearest_distance > 0.0:
+                nearest_neighbor_distances.append(nearest_distance)
+
+            radius = creature.get_radius()
+            if neighbor_count >= 10 or (
+                nearest_distance > 0.0 and nearest_distance < radius * 2.5
+            ):
+                overcrowded_count += 1
+            if neighbor_count >= 14 or (
+                nearest_distance > 0.0 and nearest_distance < radius * 1.9
+            ):
+                dense_cluster_count += 1
+
+        def _size_band(size: int) -> str:
+            if size >= 50:
+                return "huge"
+            if size >= 20:
+                return "large"
+            if size >= 8:
+                return "medium"
+            return "small"
+
+        size_bands = {"small": 0, "medium": 0, "large": 0, "huge": 0}
+        member_bands = {"small": 0, "medium": 0, "large": 0, "huge": 0}
+        for size in self._flock_sizes.values():
+            band = _size_band(size)
+            size_bands[band] += 1
+            member_bands[band] += size
+
+        return {
+            "count": flock_count,
+            "average_size": avg_flock_size,
+            "largest": largest_flock,
+            "loners": loners,
+            "largest_share": largest_flock / population,
+            "nearest_neighbor_distance_mean": (
+                sum(nearest_neighbor_distances) / len(nearest_neighbor_distances)
+                if nearest_neighbor_distances
+                else 0.0
+            ),
+            "nearest_neighbor_distance_median": (
+                median(nearest_neighbor_distances)
+                if nearest_neighbor_distances
+                else 0.0
+            ),
+            "neighbor_count_mean": sum(neighbor_counts) / len(neighbor_counts),
+            "neighbor_count_median": float(median(neighbor_counts)),
+            "alignment_mean": sum(alignment_scores) / len(alignment_scores),
+            "separation_force_mean": (
+                sum(separation_force_magnitudes) / len(separation_force_magnitudes)
+            ),
+            "cohesion_force_mean": (
+                sum(cohesion_force_magnitudes) / len(cohesion_force_magnitudes)
+            ),
+            "overcrowded_share": overcrowded_count / population,
+            "dense_cluster_share": dense_cluster_count / population,
+            "size_bands": size_bands,
+            "member_bands": member_bands,
+        }
+
     def get_avg_conformity(self) -> float:
         """Return average conformity trait across population."""
         if not self.creatures:
@@ -4075,13 +4448,7 @@ class Simulation:
                 "trial_last_decision": stability_stats["trial_last_decision"],
             }
         elif self.settings.sim_mode == "boids":
-            flock_count, avg_flock_size, largest_flock = self.get_flock_stats()
-            snapshot["flocks"] = {
-                "count": flock_count,
-                "average_size": avg_flock_size,
-                "largest": largest_flock,
-                "loners": sum(1 for creature in self.creatures if creature.flock_id == -1),
-            }
+            snapshot["flocks"] = self.get_boids_behavior_metrics()
 
         return snapshot
 

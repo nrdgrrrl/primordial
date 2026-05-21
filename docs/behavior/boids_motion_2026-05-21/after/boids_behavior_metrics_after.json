@@ -1,0 +1,1137 @@
+{
+  "generated_at": "2026-05-21",
+  "runs": [
+    {
+      "name": "boids_default_after",
+      "seed": 130363,
+      "seconds": 90,
+      "initial_population": 150,
+      "max_population": 300,
+      "series": [
+        {
+          "step": 0,
+          "seconds": 0.0,
+          "population": 150,
+          "metrics": {
+            "count": 30,
+            "average_size": 3.2,
+            "largest": 10,
+            "loners": 54,
+            "largest_share": 0.06666666666666667,
+            "nearest_neighbor_distance_mean": 38.00478388291677,
+            "nearest_neighbor_distance_median": 33.225278896390904,
+            "neighbor_count_mean": 4.6866666666666665,
+            "neighbor_count_median": 5.0,
+            "alignment_mean": 0.25649503442475613,
+            "separation_force_mean": 0.04097492887038104,
+            "cohesion_force_mean": 0.009597436987757576,
+            "overcrowded_share": 0.14,
+            "dense_cluster_share": 0.06666666666666667,
+            "size_bands": {
+              "small": 28,
+              "medium": 2,
+              "large": 0,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 78,
+              "medium": 18,
+              "large": 0,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 150,
+          "seconds": 5.0,
+          "population": 239,
+          "metrics": {
+            "count": 21,
+            "average_size": 10.952380952380953,
+            "largest": 32,
+            "loners": 9,
+            "largest_share": 0.13389121338912133,
+            "nearest_neighbor_distance_mean": 30.79171164813054,
+            "nearest_neighbor_distance_median": 29.34850785467785,
+            "neighbor_count_mean": 8.577405857740585,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.5264826385173534,
+            "separation_force_mean": 0.008110578226696778,
+            "cohesion_force_mean": 0.003117479822529407,
+            "overcrowded_share": 0.38493723849372385,
+            "dense_cluster_share": 0.06276150627615062,
+            "size_bands": {
+              "small": 9,
+              "medium": 9,
+              "large": 3,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 29,
+              "medium": 115,
+              "large": 86,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 300,
+          "seconds": 10.0,
+          "population": 241,
+          "metrics": {
+            "count": 12,
+            "average_size": 19.75,
+            "largest": 58,
+            "loners": 4,
+            "largest_share": 0.24066390041493776,
+            "nearest_neighbor_distance_mean": 30.117785570039246,
+            "nearest_neighbor_distance_median": 28.95564244219022,
+            "neighbor_count_mean": 9.593360995850622,
+            "neighbor_count_median": 9.0,
+            "alignment_mean": 0.4010129525851734,
+            "separation_force_mean": 0.00428856914330486,
+            "cohesion_force_mean": 0.001890673524692502,
+            "overcrowded_share": 0.4854771784232365,
+            "dense_cluster_share": 0.12033195020746888,
+            "size_bands": {
+              "small": 3,
+              "medium": 3,
+              "large": 5,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 15,
+              "medium": 33,
+              "large": 131,
+              "huge": 58
+            }
+          }
+        },
+        {
+          "step": 450,
+          "seconds": 15.0,
+          "population": 227,
+          "metrics": {
+            "count": 14,
+            "average_size": 16.0,
+            "largest": 49,
+            "loners": 3,
+            "largest_share": 0.21585903083700442,
+            "nearest_neighbor_distance_mean": 29.919950250920834,
+            "nearest_neighbor_distance_median": 29.693451739620027,
+            "neighbor_count_mean": 8.872246696035242,
+            "neighbor_count_median": 9.0,
+            "alignment_mean": 0.4599454509918467,
+            "separation_force_mean": 0.012320665410005696,
+            "cohesion_force_mean": 0.0020381617160631794,
+            "overcrowded_share": 0.3656387665198238,
+            "dense_cluster_share": 0.07048458149779736,
+            "size_bands": {
+              "small": 4,
+              "medium": 7,
+              "large": 3,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 14,
+              "medium": 96,
+              "large": 114,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 600,
+          "seconds": 20.0,
+          "population": 202,
+          "metrics": {
+            "count": 17,
+            "average_size": 11.352941176470589,
+            "largest": 26,
+            "loners": 9,
+            "largest_share": 0.12871287128712872,
+            "nearest_neighbor_distance_mean": 30.28262688122988,
+            "nearest_neighbor_distance_median": 28.963404302350035,
+            "neighbor_count_mean": 7.693069306930693,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.42679188604129,
+            "separation_force_mean": 0.004045249066946139,
+            "cohesion_force_mean": 0.0025576803819057385,
+            "overcrowded_share": 0.18316831683168316,
+            "dense_cluster_share": 0.0,
+            "size_bands": {
+              "small": 6,
+              "medium": 8,
+              "large": 3,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 23,
+              "medium": 97,
+              "large": 73,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 750,
+          "seconds": 25.0,
+          "population": 215,
+          "metrics": {
+            "count": 12,
+            "average_size": 17.25,
+            "largest": 47,
+            "loners": 8,
+            "largest_share": 0.2186046511627907,
+            "nearest_neighbor_distance_mean": 29.78388947719385,
+            "nearest_neighbor_distance_median": 29.58865656815399,
+            "neighbor_count_mean": 8.288372093023256,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4201744926403951,
+            "separation_force_mean": 0.010737501930476645,
+            "cohesion_force_mean": 0.0024497790630330185,
+            "overcrowded_share": 0.30697674418604654,
+            "dense_cluster_share": 0.03255813953488372,
+            "size_bands": {
+              "small": 2,
+              "medium": 7,
+              "large": 3,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 5,
+              "medium": 94,
+              "large": 108,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 900,
+          "seconds": 30.0,
+          "population": 222,
+          "metrics": {
+            "count": 14,
+            "average_size": 15.5,
+            "largest": 31,
+            "loners": 5,
+            "largest_share": 0.13963963963963963,
+            "nearest_neighbor_distance_mean": 29.31595671819593,
+            "nearest_neighbor_distance_median": 28.747255014618396,
+            "neighbor_count_mean": 8.22972972972973,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4054492236327589,
+            "separation_force_mean": 0.012134902936621025,
+            "cohesion_force_mean": 0.002266669194463676,
+            "overcrowded_share": 0.30180180180180183,
+            "dense_cluster_share": 0.02702702702702703,
+            "size_bands": {
+              "small": 3,
+              "medium": 6,
+              "large": 5,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 12,
+              "medium": 85,
+              "large": 120,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 1050,
+          "seconds": 35.0,
+          "population": 222,
+          "metrics": {
+            "count": 13,
+            "average_size": 16.76923076923077,
+            "largest": 25,
+            "loners": 4,
+            "largest_share": 0.11261261261261261,
+            "nearest_neighbor_distance_mean": 29.017185403947163,
+            "nearest_neighbor_distance_median": 28.79171256097537,
+            "neighbor_count_mean": 8.306306306306306,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4619945791140439,
+            "separation_force_mean": 0.004306019403729105,
+            "cohesion_force_mean": 0.0021034882844038314,
+            "overcrowded_share": 0.2972972972972973,
+            "dense_cluster_share": 0.0045045045045045045,
+            "size_bands": {
+              "small": 1,
+              "medium": 6,
+              "large": 6,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 2,
+              "medium": 82,
+              "large": 134,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 1200,
+          "seconds": 40.0,
+          "population": 232,
+          "metrics": {
+            "count": 13,
+            "average_size": 17.384615384615383,
+            "largest": 27,
+            "loners": 6,
+            "largest_share": 0.11637931034482758,
+            "nearest_neighbor_distance_mean": 29.344046625421274,
+            "nearest_neighbor_distance_median": 29.46001169617034,
+            "neighbor_count_mean": 8.435344827586206,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.41915345616033406,
+            "separation_force_mean": 0.004363577792114501,
+            "cohesion_force_mean": 0.0018562819710513296,
+            "overcrowded_share": 0.2672413793103448,
+            "dense_cluster_share": 0.008620689655172414,
+            "size_bands": {
+              "small": 2,
+              "medium": 4,
+              "large": 7,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 8,
+              "medium": 56,
+              "large": 162,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 1350,
+          "seconds": 45.0,
+          "population": 235,
+          "metrics": {
+            "count": 13,
+            "average_size": 17.692307692307693,
+            "largest": 37,
+            "loners": 5,
+            "largest_share": 0.1574468085106383,
+            "nearest_neighbor_distance_mean": 28.60780955022387,
+            "nearest_neighbor_distance_median": 28.600157621815246,
+            "neighbor_count_mean": 8.340425531914894,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.42128860321196887,
+            "separation_force_mean": 0.014843414127733151,
+            "cohesion_force_mean": 0.0019392806051379897,
+            "overcrowded_share": 0.2851063829787234,
+            "dense_cluster_share": 0.0425531914893617,
+            "size_bands": {
+              "small": 1,
+              "medium": 7,
+              "large": 5,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 4,
+              "medium": 90,
+              "large": 136,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 1500,
+          "seconds": 50.0,
+          "population": 239,
+          "metrics": {
+            "count": 10,
+            "average_size": 23.1,
+            "largest": 55,
+            "loners": 8,
+            "largest_share": 0.2301255230125523,
+            "nearest_neighbor_distance_mean": 29.17938802797013,
+            "nearest_neighbor_distance_median": 29.02308939419345,
+            "neighbor_count_mean": 8.401673640167363,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4250546549187998,
+            "separation_force_mean": 0.0063539049670286105,
+            "cohesion_force_mean": 0.002040815591813609,
+            "overcrowded_share": 0.28451882845188287,
+            "dense_cluster_share": 0.02510460251046025,
+            "size_bands": {
+              "small": 2,
+              "medium": 3,
+              "large": 4,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 13,
+              "medium": 40,
+              "large": 123,
+              "huge": 55
+            }
+          }
+        },
+        {
+          "step": 1650,
+          "seconds": 55.0,
+          "population": 240,
+          "metrics": {
+            "count": 9,
+            "average_size": 26.555555555555557,
+            "largest": 57,
+            "loners": 1,
+            "largest_share": 0.2375,
+            "nearest_neighbor_distance_mean": 28.50406267808639,
+            "nearest_neighbor_distance_median": 28.196506558925464,
+            "neighbor_count_mean": 8.2125,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.39403926947624146,
+            "separation_force_mean": 0.010302946441126634,
+            "cohesion_force_mean": 0.001995667155409285,
+            "overcrowded_share": 0.24166666666666667,
+            "dense_cluster_share": 0.016666666666666666,
+            "size_bands": {
+              "small": 1,
+              "medium": 2,
+              "large": 5,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 3,
+              "medium": 25,
+              "large": 154,
+              "huge": 57
+            }
+          }
+        },
+        {
+          "step": 1800,
+          "seconds": 60.0,
+          "population": 244,
+          "metrics": {
+            "count": 9,
+            "average_size": 26.333333333333332,
+            "largest": 58,
+            "loners": 7,
+            "largest_share": 0.23770491803278687,
+            "nearest_neighbor_distance_mean": 29.327003924925783,
+            "nearest_neighbor_distance_median": 29.023657429291024,
+            "neighbor_count_mean": 8.30327868852459,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.47443186969060697,
+            "separation_force_mean": 0.003723297878725323,
+            "cohesion_force_mean": 0.0020329972710916963,
+            "overcrowded_share": 0.2786885245901639,
+            "dense_cluster_share": 0.00819672131147541,
+            "size_bands": {
+              "small": 1,
+              "medium": 2,
+              "large": 5,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 2,
+              "medium": 23,
+              "large": 154,
+              "huge": 58
+            }
+          }
+        },
+        {
+          "step": 1950,
+          "seconds": 65.0,
+          "population": 245,
+          "metrics": {
+            "count": 11,
+            "average_size": 21.818181818181817,
+            "largest": 81,
+            "loners": 5,
+            "largest_share": 0.3306122448979592,
+            "nearest_neighbor_distance_mean": 28.684486007555027,
+            "nearest_neighbor_distance_median": 29.067417592012415,
+            "neighbor_count_mean": 8.093877551020409,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.38824652826784944,
+            "separation_force_mean": 0.009409452002936382,
+            "cohesion_force_mean": 0.0020849214192553435,
+            "overcrowded_share": 0.24489795918367346,
+            "dense_cluster_share": 0.012244897959183673,
+            "size_bands": {
+              "small": 3,
+              "medium": 3,
+              "large": 4,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 9,
+              "medium": 35,
+              "large": 115,
+              "huge": 81
+            }
+          }
+        },
+        {
+          "step": 2100,
+          "seconds": 70.0,
+          "population": 250,
+          "metrics": {
+            "count": 11,
+            "average_size": 22.09090909090909,
+            "largest": 77,
+            "loners": 7,
+            "largest_share": 0.308,
+            "nearest_neighbor_distance_mean": 29.046604078543304,
+            "nearest_neighbor_distance_median": 29.04477406963281,
+            "neighbor_count_mean": 7.956,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.44003229484674183,
+            "separation_force_mean": 0.004381704677420668,
+            "cohesion_force_mean": 0.002019894173278863,
+            "overcrowded_share": 0.204,
+            "dense_cluster_share": 0.004,
+            "size_bands": {
+              "small": 3,
+              "medium": 3,
+              "large": 4,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 7,
+              "medium": 39,
+              "large": 120,
+              "huge": 77
+            }
+          }
+        },
+        {
+          "step": 2250,
+          "seconds": 75.0,
+          "population": 254,
+          "metrics": {
+            "count": 13,
+            "average_size": 19.076923076923077,
+            "largest": 57,
+            "loners": 6,
+            "largest_share": 0.22440944881889763,
+            "nearest_neighbor_distance_mean": 28.785893817198446,
+            "nearest_neighbor_distance_median": 28.69985204277033,
+            "neighbor_count_mean": 8.039370078740157,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.42932911244394517,
+            "separation_force_mean": 0.005844603365373941,
+            "cohesion_force_mean": 0.0019056549518823526,
+            "overcrowded_share": 0.1889763779527559,
+            "dense_cluster_share": 0.007874015748031496,
+            "size_bands": {
+              "small": 3,
+              "medium": 5,
+              "large": 4,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 6,
+              "medium": 56,
+              "large": 129,
+              "huge": 57
+            }
+          }
+        },
+        {
+          "step": 2400,
+          "seconds": 80.0,
+          "population": 262,
+          "metrics": {
+            "count": 15,
+            "average_size": 17.266666666666666,
+            "largest": 58,
+            "loners": 3,
+            "largest_share": 0.22137404580152673,
+            "nearest_neighbor_distance_mean": 28.97865675033055,
+            "nearest_neighbor_distance_median": 28.86016454607126,
+            "neighbor_count_mean": 8.16793893129771,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4333202790890273,
+            "separation_force_mean": 0.006108114632340295,
+            "cohesion_force_mean": 0.001662098662438501,
+            "overcrowded_share": 0.2595419847328244,
+            "dense_cluster_share": 0.007633587786259542,
+            "size_bands": {
+              "small": 4,
+              "medium": 5,
+              "large": 5,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 13,
+              "medium": 55,
+              "large": 133,
+              "huge": 58
+            }
+          }
+        },
+        {
+          "step": 2550,
+          "seconds": 85.0,
+          "population": 267,
+          "metrics": {
+            "count": 9,
+            "average_size": 29.0,
+            "largest": 55,
+            "loners": 6,
+            "largest_share": 0.20599250936329588,
+            "nearest_neighbor_distance_mean": 29.182808109195626,
+            "nearest_neighbor_distance_median": 29.485079216522497,
+            "neighbor_count_mean": 8.146067415730338,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.38713681229508906,
+            "separation_force_mean": 0.0047992052710699295,
+            "cohesion_force_mean": 0.0015288592727845383,
+            "overcrowded_share": 0.23595505617977527,
+            "dense_cluster_share": 0.0149812734082397,
+            "size_bands": {
+              "small": 1,
+              "medium": 1,
+              "large": 6,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 7,
+              "medium": 10,
+              "large": 189,
+              "huge": 55
+            }
+          }
+        },
+        {
+          "step": 2700,
+          "seconds": 90.0,
+          "population": 275,
+          "metrics": {
+            "count": 13,
+            "average_size": 20.384615384615383,
+            "largest": 69,
+            "loners": 10,
+            "largest_share": 0.2509090909090909,
+            "nearest_neighbor_distance_mean": 29.142988416545407,
+            "nearest_neighbor_distance_median": 29.19141718012153,
+            "neighbor_count_mean": 8.076363636363636,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.42734153403930775,
+            "separation_force_mean": 0.005070563916933885,
+            "cohesion_force_mean": 0.0016982522455310958,
+            "overcrowded_share": 0.24,
+            "dense_cluster_share": 0.01090909090909091,
+            "size_bands": {
+              "small": 5,
+              "medium": 2,
+              "large": 5,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 14,
+              "medium": 29,
+              "large": 153,
+              "huge": 69
+            }
+          }
+        }
+      ],
+      "summary": {
+        "population_end": 275,
+        "population_mean": 234.78947368421052,
+        "flock_count_mean": 13.631578947368421,
+        "largest_flock_share_mean": 0.1987949729316567,
+        "largest_flock_share_end": 0.2509090909090909,
+        "nearest_neighbor_mean_mean": 29.790401990451056,
+        "nearest_neighbor_median_end": 29.19141718012153,
+        "alignment_mean_mean": 0.4209326669677647,
+        "separation_force_mean_mean": 0.009058905266366558,
+        "cohesion_force_mean_mean": 0.0024624259102380805,
+        "overcrowded_share_mean": 0.27346792124212754,
+        "dense_cluster_share_mean": 0.028585216482023185,
+        "loners_mean": 8.421052631578947,
+        "largest_flock_end": 69,
+        "flock_count_end": 13,
+        "size_bands_end": {
+          "small": 5,
+          "medium": 2,
+          "large": 5,
+          "huge": 1
+        },
+        "member_bands_end": {
+          "small": 14,
+          "medium": 29,
+          "large": 153,
+          "huge": 69
+        }
+      }
+    },
+    {
+      "name": "boids_stress_after",
+      "seed": 130363,
+      "seconds": 60,
+      "initial_population": 220,
+      "max_population": 320,
+      "series": [
+        {
+          "step": 0,
+          "seconds": 0.0,
+          "population": 220,
+          "metrics": {
+            "count": 38,
+            "average_size": 4.684210526315789,
+            "largest": 22,
+            "loners": 42,
+            "largest_share": 0.1,
+            "nearest_neighbor_distance_mean": 31.38226885624786,
+            "nearest_neighbor_distance_median": 28.650037314579826,
+            "neighbor_count_mean": 6.6045454545454545,
+            "neighbor_count_median": 7.0,
+            "alignment_mean": 0.3309353445562258,
+            "separation_force_mean": 0.11014484064239068,
+            "cohesion_force_mean": 0.005962505776277161,
+            "overcrowded_share": 0.35,
+            "dense_cluster_share": 0.1409090909090909,
+            "size_bands": {
+              "small": 34,
+              "medium": 3,
+              "large": 1,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 115,
+              "medium": 41,
+              "large": 22,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 150,
+          "seconds": 5.0,
+          "population": 316,
+          "metrics": {
+            "count": 18,
+            "average_size": 17.11111111111111,
+            "largest": 169,
+            "loners": 8,
+            "largest_share": 0.5348101265822784,
+            "nearest_neighbor_distance_mean": 31.18480404609909,
+            "nearest_neighbor_distance_median": 29.5784246055699,
+            "neighbor_count_mean": 9.658227848101266,
+            "neighbor_count_median": 9.0,
+            "alignment_mean": 0.49415601065621084,
+            "separation_force_mean": 0.00890145319509217,
+            "cohesion_force_mean": 0.002003589482789972,
+            "overcrowded_share": 0.46835443037974683,
+            "dense_cluster_share": 0.17405063291139242,
+            "size_bands": {
+              "small": 9,
+              "medium": 6,
+              "large": 2,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 29,
+              "medium": 64,
+              "large": 46,
+              "huge": 169
+            }
+          }
+        },
+        {
+          "step": 300,
+          "seconds": 10.0,
+          "population": 313,
+          "metrics": {
+            "count": 5,
+            "average_size": 61.2,
+            "largest": 237,
+            "loners": 7,
+            "largest_share": 0.7571884984025559,
+            "nearest_neighbor_distance_mean": 31.440871724660262,
+            "nearest_neighbor_distance_median": 30.209323801270852,
+            "neighbor_count_mean": 9.76038338658147,
+            "neighbor_count_median": 9.0,
+            "alignment_mean": 0.4065978173309745,
+            "separation_force_mean": 0.002333994431809262,
+            "cohesion_force_mean": 0.0013809080765774988,
+            "overcrowded_share": 0.476038338658147,
+            "dense_cluster_share": 0.14696485623003194,
+            "size_bands": {
+              "small": 1,
+              "medium": 2,
+              "large": 1,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 4,
+              "medium": 29,
+              "large": 36,
+              "huge": 237
+            }
+          }
+        },
+        {
+          "step": 450,
+          "seconds": 15.0,
+          "population": 276,
+          "metrics": {
+            "count": 16,
+            "average_size": 16.6875,
+            "largest": 56,
+            "loners": 9,
+            "largest_share": 0.2028985507246377,
+            "nearest_neighbor_distance_mean": 30.970091335031665,
+            "nearest_neighbor_distance_median": 29.875637683755045,
+            "neighbor_count_mean": 8.16304347826087,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.38264508459851937,
+            "separation_force_mean": 0.007675484250207017,
+            "cohesion_force_mean": 0.0018042709613787116,
+            "overcrowded_share": 0.2536231884057971,
+            "dense_cluster_share": 0.043478260869565216,
+            "size_bands": {
+              "small": 5,
+              "medium": 5,
+              "large": 5,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 20,
+              "medium": 58,
+              "large": 133,
+              "huge": 56
+            }
+          }
+        },
+        {
+          "step": 600,
+          "seconds": 20.0,
+          "population": 259,
+          "metrics": {
+            "count": 21,
+            "average_size": 11.952380952380953,
+            "largest": 30,
+            "loners": 8,
+            "largest_share": 0.11583011583011583,
+            "nearest_neighbor_distance_mean": 30.516891422539565,
+            "nearest_neighbor_distance_median": 28.752412322986956,
+            "neighbor_count_mean": 7.664092664092664,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.38626517636174507,
+            "separation_force_mean": 0.0031491878384516283,
+            "cohesion_force_mean": 0.002085212774814299,
+            "overcrowded_share": 0.16602316602316602,
+            "dense_cluster_share": 0.0,
+            "size_bands": {
+              "small": 8,
+              "medium": 9,
+              "large": 4,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 42,
+              "medium": 105,
+              "large": 104,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 750,
+          "seconds": 25.0,
+          "population": 252,
+          "metrics": {
+            "count": 20,
+            "average_size": 12.35,
+            "largest": 33,
+            "loners": 5,
+            "largest_share": 0.13095238095238096,
+            "nearest_neighbor_distance_mean": 30.324037241855084,
+            "nearest_neighbor_distance_median": 29.043989708814543,
+            "neighbor_count_mean": 7.579365079365079,
+            "neighbor_count_median": 7.0,
+            "alignment_mean": 0.3935307008083807,
+            "separation_force_mean": 0.004066013070554995,
+            "cohesion_force_mean": 0.0019297280129767526,
+            "overcrowded_share": 0.14682539682539683,
+            "dense_cluster_share": 0.011904761904761904,
+            "size_bands": {
+              "small": 7,
+              "medium": 9,
+              "large": 4,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 34,
+              "medium": 99,
+              "large": 114,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 900,
+          "seconds": 30.0,
+          "population": 263,
+          "metrics": {
+            "count": 20,
+            "average_size": 12.75,
+            "largest": 40,
+            "loners": 8,
+            "largest_share": 0.1520912547528517,
+            "nearest_neighbor_distance_mean": 29.350344762087953,
+            "nearest_neighbor_distance_median": 28.64414427435771,
+            "neighbor_count_mean": 7.768060836501901,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4448212188941868,
+            "separation_force_mean": 0.007849861318936873,
+            "cohesion_force_mean": 0.0019582113325351007,
+            "overcrowded_share": 0.1596958174904943,
+            "dense_cluster_share": 0.0076045627376425855,
+            "size_bands": {
+              "small": 5,
+              "medium": 12,
+              "large": 3,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 21,
+              "medium": 137,
+              "large": 97,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 1050,
+          "seconds": 35.0,
+          "population": 270,
+          "metrics": {
+            "count": 18,
+            "average_size": 14.444444444444445,
+            "largest": 65,
+            "loners": 10,
+            "largest_share": 0.24074074074074073,
+            "nearest_neighbor_distance_mean": 29.928858326979586,
+            "nearest_neighbor_distance_median": 29.11199062461469,
+            "neighbor_count_mean": 7.907407407407407,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.41411289889497405,
+            "separation_force_mean": 0.0037158666125882956,
+            "cohesion_force_mean": 0.001871833299786539,
+            "overcrowded_share": 0.2037037037037037,
+            "dense_cluster_share": 0.003703703703703704,
+            "size_bands": {
+              "small": 5,
+              "medium": 11,
+              "large": 1,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 18,
+              "medium": 138,
+              "large": 39,
+              "huge": 65
+            }
+          }
+        },
+        {
+          "step": 1200,
+          "seconds": 40.0,
+          "population": 268,
+          "metrics": {
+            "count": 14,
+            "average_size": 18.571428571428573,
+            "largest": 67,
+            "loners": 8,
+            "largest_share": 0.25,
+            "nearest_neighbor_distance_mean": 29.684560479840894,
+            "nearest_neighbor_distance_median": 28.84902626057267,
+            "neighbor_count_mean": 7.925373134328358,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.435398934050378,
+            "separation_force_mean": 0.0022919756500579557,
+            "cohesion_force_mean": 0.001911109725311004,
+            "overcrowded_share": 0.2126865671641791,
+            "dense_cluster_share": 0.0037313432835820895,
+            "size_bands": {
+              "small": 1,
+              "medium": 11,
+              "large": 0,
+              "huge": 2
+            },
+            "member_bands": {
+              "small": 5,
+              "medium": 137,
+              "large": 0,
+              "huge": 118
+            }
+          }
+        },
+        {
+          "step": 1350,
+          "seconds": 45.0,
+          "population": 269,
+          "metrics": {
+            "count": 16,
+            "average_size": 16.5625,
+            "largest": 59,
+            "loners": 4,
+            "largest_share": 0.21933085501858737,
+            "nearest_neighbor_distance_mean": 29.307287021352348,
+            "nearest_neighbor_distance_median": 28.85806446938951,
+            "neighbor_count_mean": 7.754646840148699,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4199088955993609,
+            "separation_force_mean": 0.00395861155671718,
+            "cohesion_force_mean": 0.0020013088608551114,
+            "overcrowded_share": 0.1821561338289963,
+            "dense_cluster_share": 0.0037174721189591076,
+            "size_bands": {
+              "small": 1,
+              "medium": 12,
+              "large": 2,
+              "huge": 1
+            },
+            "member_bands": {
+              "small": 4,
+              "medium": 153,
+              "large": 49,
+              "huge": 59
+            }
+          }
+        },
+        {
+          "step": 1500,
+          "seconds": 50.0,
+          "population": 280,
+          "metrics": {
+            "count": 18,
+            "average_size": 15.38888888888889,
+            "largest": 47,
+            "loners": 3,
+            "largest_share": 0.16785714285714284,
+            "nearest_neighbor_distance_mean": 29.051137611583822,
+            "nearest_neighbor_distance_median": 28.619699797690494,
+            "neighbor_count_mean": 8.15,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4307557616875074,
+            "separation_force_mean": 0.008608344182873859,
+            "cohesion_force_mean": 0.0017689433168417772,
+            "overcrowded_share": 0.2571428571428571,
+            "dense_cluster_share": 0.03571428571428571,
+            "size_bands": {
+              "small": 4,
+              "medium": 8,
+              "large": 6,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 11,
+              "medium": 93,
+              "large": 173,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 1650,
+          "seconds": 55.0,
+          "population": 287,
+          "metrics": {
+            "count": 21,
+            "average_size": 13.333333333333334,
+            "largest": 35,
+            "loners": 7,
+            "largest_share": 0.12195121951219512,
+            "nearest_neighbor_distance_mean": 29.161546230857347,
+            "nearest_neighbor_distance_median": 28.769437817801048,
+            "neighbor_count_mean": 8.236933797909408,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.4287441617452032,
+            "separation_force_mean": 0.0037272405183798067,
+            "cohesion_force_mean": 0.0016657860493893314,
+            "overcrowded_share": 0.28222996515679444,
+            "dense_cluster_share": 0.006968641114982578,
+            "size_bands": {
+              "small": 6,
+              "medium": 11,
+              "large": 4,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 18,
+              "medium": 150,
+              "large": 112,
+              "huge": 0
+            }
+          }
+        },
+        {
+          "step": 1800,
+          "seconds": 60.0,
+          "population": 280,
+          "metrics": {
+            "count": 17,
+            "average_size": 15.882352941176471,
+            "largest": 36,
+            "loners": 10,
+            "largest_share": 0.12857142857142856,
+            "nearest_neighbor_distance_mean": 29.375662893416262,
+            "nearest_neighbor_distance_median": 28.40602090951957,
+            "neighbor_count_mean": 7.985714285714286,
+            "neighbor_count_median": 8.0,
+            "alignment_mean": 0.38458292500030933,
+            "separation_force_mean": 0.00569864533260619,
+            "cohesion_force_mean": 0.001782505655239604,
+            "overcrowded_share": 0.2357142857142857,
+            "dense_cluster_share": 0.010714285714285714,
+            "size_bands": {
+              "small": 4,
+              "medium": 9,
+              "large": 4,
+              "huge": 0
+            },
+            "member_bands": {
+              "small": 19,
+              "medium": 126,
+              "large": 125,
+              "huge": 0
+            }
+          }
+        }
+      ],
+      "summary": {
+        "population_end": 280,
+        "population_mean": 273.3076923076923,
+        "flock_count_mean": 18.615384615384617,
+        "largest_flock_share_mean": 0.24017094722653193,
+        "largest_flock_share_end": 0.12857142857142856,
+        "nearest_neighbor_mean_mean": 30.1291047655809,
+        "nearest_neighbor_median_end": 28.40602090951957,
+        "alignment_mean_mean": 0.4117273023218443,
+        "separation_force_mean_mean": 0.013240116815435838,
+        "cohesion_force_mean_mean": 0.0021635317942132973,
+        "overcrowded_share_mean": 0.2610918346533511,
+        "dense_cluster_share_mean": 0.04534322286248337,
+        "loners_mean": 9.923076923076923,
+        "largest_flock_end": 36,
+        "flock_count_end": 17,
+        "size_bands_end": {
+          "small": 4,
+          "medium": 9,
+          "large": 4,
+          "huge": 0
+        },
+        "member_bands_end": {
+          "small": 19,
+          "medium": 126,
+          "large": 125,
+          "huge": 0
+        }
+      }
+    }
+  ]
+}

@@ -2,6 +2,70 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — tune: make boids flocking loose and lifelike
+
+This pass focused on boids behavior and motion quality after the recent
+performance work made the live `30 Hz` path readable.
+
+Changed:
+
+- Reworked boids local force composition in
+  `primordial/simulation/simulation.py`:
+  - stronger near-contact separation with a steeper close-range falloff
+  - density-aware alignment and cohesion so compact neighborhoods stop
+    collapsing inward and moving like rigid pucks
+  - smooth per-creature low-frequency wander variation so schools bend, shear,
+    split, and recombine more naturally
+- Tightened boids flock-link assignment so sparse bridge chains no longer merge
+  visibly separate groups into one giant flock for HUD/flock-line grouping.
+- Adjusted boids initial spawn ranges to preserve heritable variation while
+  reducing blob-prone sensing defaults.
+- Reworked boids energy/reproduction around moderate local formation quality:
+  reward readable spacing and alignment, penalize crowding more clearly, and
+  add an explicit overpopulation tax near carrying capacity.
+- Added boids behavior diagnostics to the simulation observability path and
+  added targeted tests for the new metrics.
+- Captured new seeded before/after boids behavior artifacts, screenshots, and a
+  report under `docs/behavior/boids_motion_2026-05-21.md`.
+
+Behavior results from seeded runs (`seed = 130363`):
+
+- Default boids, `90s`
+  - nearest-neighbor mean: `18.92 -> 29.79`
+  - largest-flock share mean: `0.697 -> 0.199`
+  - overcrowded share mean: `0.985 -> 0.273`
+  - dense-cluster share mean: `0.790 -> 0.029`
+  - end-state flock bands changed from `2 medium` groups to a mix of `small`,
+    `medium`, `large`, and `huge` schools
+- Stress boids, `60s`, `initial_population = 220`, `max_population = 320`
+  - nearest-neighbor mean: `18.48 -> 30.13`
+  - largest-flock share mean: `0.758 -> 0.240`
+  - overcrowded share mean: `0.992 -> 0.261`
+  - dense-cluster share mean: `0.971 -> 0.045`
+  - end-state flock bands changed from `2 large + 1 huge` to a mixed spread of
+    `small`, `medium`, and `large` schools
+
+Live graphical results:
+
+- `boids` default live run, `90s`, seed `130363`
+  - FPS mean `29.84`
+  - population mean / max `236.12 / 276`
+  - final flock mix: `12` flocks, largest `72`, loners `10`
+- `boids` stress live run, `60s`, seed `130363`
+  - FPS mean `29.07`
+  - population mean / max `275.07 / 320`
+  - final flock mix: `17` flocks, largest `36`, loners `10`
+- `predator_prey` default regression run, `90s`, seed `104729`
+  - FPS mean `30.04`
+  - sim/render mean `7.80 / 7.56 ms`
+
+Artifacts:
+
+- `docs/behavior/boids_motion_2026-05-21.md`
+- `docs/behavior/boids_motion_2026-05-21/before/`
+- `docs/behavior/boids_motion_2026-05-21/after/`
+- `docs/behavior/boids_motion_2026-05-21/regression_predator_prey/`
+
 ## [2026-05-21] — perf: smooth boids graphical mode without predator_prey regression
 
 Measured the real graphical path on a live `1920x1080` display before changing

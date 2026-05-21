@@ -107,6 +107,10 @@ def load_snapshot_payload(
 
 def build_snapshot(simulation: Simulation) -> dict[str, Any]:
     """Build a deterministic, machine-readable snapshot payload."""
+    if simulation.settings.sim_mode == "boids":
+        simulation._build_boid_neighbor_cache_and_assignments(  # type: ignore[attr-defined]
+            simulation._build_creature_bucket()  # type: ignore[attr-defined]
+        )
     return {
         "version": SAVE_FORMAT_VERSION,
         "metadata": {

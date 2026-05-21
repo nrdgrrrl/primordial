@@ -1,0 +1,2240 @@
+{
+  "checkpoints": [
+    {
+      "display_size": [
+        1280,
+        720
+      ],
+      "edge_counts": {
+        "creatures_bottom_band": 6,
+        "creatures_right_band": 4,
+        "food_bottom_band": 0,
+        "food_right_band": 0
+      },
+      "elapsed_wall_seconds": 10.033,
+      "food_count": 0,
+      "frame_index": 293,
+      "fullscreen": false,
+      "label": "t0010s",
+      "logical_render_size": [
+        1280,
+        720
+      ],
+      "observability": {
+        "flocks": {
+          "average_size": 243.0,
+          "count": 1,
+          "largest": 243,
+          "loners": 0
+        },
+        "lineages": {
+          "active": 221
+        },
+        "population": 243,
+        "strategies": {
+          "grazers": 58,
+          "hunters": 69,
+          "opportunists": 116
+        },
+        "zone_occupancy": {
+          "deep_trench": 22,
+          "hunting_ground": 29,
+          "kelp_forest": 11,
+          "open_water": 9,
+          "unzoned": 171,
+          "warm_vent": 1
+        }
+      },
+      "population": 243,
+      "predator_count": 0,
+      "prey_count": 0,
+      "screenshot": "docs/behavior/boids_motion_2026-05-21/before/screenshots/boids/boids_stress_live_60s_before__boids__seed130363/t0010s.png",
+      "world_size": [
+        1280,
+        720
+      ],
+      "zone_hash": "24315b5109bff7eb292239f6a868ed42276af6b33a953b1b47fcac93ad550d07"
+    },
+    {
+      "display_size": [
+        1280,
+        720
+      ],
+      "edge_counts": {
+        "creatures_bottom_band": 42,
+        "creatures_right_band": 3,
+        "food_bottom_band": 0,
+        "food_right_band": 0
+      },
+      "elapsed_wall_seconds": 30.15,
+      "food_count": 0,
+      "frame_index": 479,
+      "fullscreen": false,
+      "label": "t0030s",
+      "logical_render_size": [
+        1280,
+        720
+      ],
+      "observability": {
+        "flocks": {
+          "average_size": 82.0,
+          "count": 3,
+          "largest": 156,
+          "loners": 0
+        },
+        "lineages": {
+          "active": 221
+        },
+        "population": 246,
+        "strategies": {
+          "grazers": 58,
+          "hunters": 70,
+          "opportunists": 118
+        },
+        "zone_occupancy": {
+          "deep_trench": 0,
+          "hunting_ground": 4,
+          "kelp_forest": 0,
+          "open_water": 2,
+          "unzoned": 240,
+          "warm_vent": 0
+        }
+      },
+      "population": 246,
+      "predator_count": 0,
+      "prey_count": 0,
+      "screenshot": "docs/behavior/boids_motion_2026-05-21/before/screenshots/boids/boids_stress_live_60s_before__boids__seed130363/t0030s.png",
+      "world_size": [
+        1280,
+        720
+      ],
+      "zone_hash": "24315b5109bff7eb292239f6a868ed42276af6b33a953b1b47fcac93ad550d07"
+    },
+    {
+      "display_size": [
+        1280,
+        720
+      ],
+      "edge_counts": {
+        "creatures_bottom_band": 16,
+        "creatures_right_band": 0,
+        "food_bottom_band": 0,
+        "food_right_band": 0
+      },
+      "elapsed_wall_seconds": 60.074,
+      "food_count": 0,
+      "frame_index": 728,
+      "fullscreen": false,
+      "label": "t0060s",
+      "logical_render_size": [
+        1280,
+        720
+      ],
+      "observability": {
+        "flocks": {
+          "average_size": 70.66666666666667,
+          "count": 3,
+          "largest": 139,
+          "loners": 0
+        },
+        "lineages": {
+          "active": 205
+        },
+        "population": 212,
+        "strategies": {
+          "grazers": 51,
+          "hunters": 62,
+          "opportunists": 99
+        },
+        "zone_occupancy": {
+          "deep_trench": 123,
+          "hunting_ground": 0,
+          "kelp_forest": 6,
+          "open_water": 43,
+          "unzoned": 40,
+          "warm_vent": 0
+        }
+      },
+      "population": 212,
+      "predator_count": 0,
+      "prey_count": 0,
+      "screenshot": "docs/behavior/boids_motion_2026-05-21/before/screenshots/boids/boids_stress_live_60s_before__boids__seed130363/t0060s.png",
+      "world_size": [
+        1280,
+        720
+      ],
+      "zone_hash": "24315b5109bff7eb292239f6a868ed42276af6b33a953b1b47fcac93ad550d07"
+    },
+    {
+      "display_size": [
+        1280,
+        720
+      ],
+      "edge_counts": {
+        "creatures_bottom_band": 16,
+        "creatures_right_band": 0,
+        "food_bottom_band": 0,
+        "food_right_band": 0
+      },
+      "elapsed_wall_seconds": 60.0,
+      "food_count": 0,
+      "frame_index": 728,
+      "fullscreen": false,
+      "label": "final",
+      "logical_render_size": [
+        1280,
+        720
+      ],
+      "observability": {
+        "flocks": {
+          "average_size": 70.66666666666667,
+          "count": 3,
+          "largest": 139,
+          "loners": 0
+        },
+        "lineages": {
+          "active": 205
+        },
+        "population": 212,
+        "strategies": {
+          "grazers": 51,
+          "hunters": 62,
+          "opportunists": 99
+        },
+        "zone_occupancy": {
+          "deep_trench": 123,
+          "hunting_ground": 0,
+          "kelp_forest": 6,
+          "open_water": 43,
+          "unzoned": 40,
+          "warm_vent": 0
+        }
+      },
+      "population": 212,
+      "predator_count": 0,
+      "prey_count": 0,
+      "screenshot": "docs/behavior/boids_motion_2026-05-21/before/screenshots/boids/boids_stress_live_60s_before__boids__seed130363/final.png",
+      "world_size": [
+        1280,
+        720
+      ],
+      "zone_hash": "24315b5109bff7eb292239f6a868ed42276af6b33a953b1b47fcac93ad550d07"
+    }
+  ],
+  "display_path": "live_display",
+  "dominant_cost": {
+    "bucket": "simulation",
+    "reason": "simulation had the largest mean frame cost."
+  },
+  "duration_seconds_actual": 60.18791541599785,
+  "duration_seconds_requested": 60.0,
+  "final_observability": {
+    "flocks": {
+      "average_size": 70.66666666666667,
+      "count": 3,
+      "largest": 139,
+      "loners": 0
+    },
+    "lineages": {
+      "active": 205
+    },
+    "population": 212,
+    "strategies": {
+      "grazers": 51,
+      "hunters": 62,
+      "opportunists": 99
+    },
+    "zone_occupancy": {
+      "deep_trench": 123,
+      "hunting_ground": 0,
+      "kelp_forest": 6,
+      "open_water": 43,
+      "unzoned": 40,
+      "warm_vent": 0
+    }
+  },
+  "final_stability": null,
+  "frame_samples_file": "docs/behavior/boids_motion_2026-05-21/before/frame_samples/boids_stress_live_60s_before__boids__seed130363.frames.csv.gz",
+  "fullscreen": false,
+  "gpu_info": {},
+  "mode": "boids",
+  "mode_overrides": {
+    "initial_population": 220,
+    "max_population": 320
+  },
+  "notes": "Required before-comparison stress boids run.",
+  "observability_samples": [
+    {
+      "elapsed_wall_seconds": 0.049,
+      "flocks": {
+        "average_size": 0.0,
+        "count": 0,
+        "largest": 0,
+        "loners": 220
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 220,
+      "strategies": {
+        "grazers": 50,
+        "hunters": 64,
+        "opportunists": 106
+      },
+      "zone_occupancy": {
+        "deep_trench": 16,
+        "hunting_ground": 13,
+        "kelp_forest": 25,
+        "open_water": 11,
+        "unzoned": 144,
+        "warm_vent": 11
+      }
+    },
+    {
+      "elapsed_wall_seconds": 1.077,
+      "flocks": {
+        "average_size": 230.0,
+        "count": 1,
+        "largest": 230,
+        "loners": 2
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 232,
+      "strategies": {
+        "grazers": 54,
+        "hunters": 66,
+        "opportunists": 112
+      },
+      "zone_occupancy": {
+        "deep_trench": 15,
+        "hunting_ground": 13,
+        "kelp_forest": 27,
+        "open_water": 11,
+        "unzoned": 155,
+        "warm_vent": 11
+      }
+    },
+    {
+      "elapsed_wall_seconds": 2.105,
+      "flocks": {
+        "average_size": 240.0,
+        "count": 1,
+        "largest": 240,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 240,
+      "strategies": {
+        "grazers": 55,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 18,
+        "hunting_ground": 15,
+        "kelp_forest": 30,
+        "open_water": 14,
+        "unzoned": 154,
+        "warm_vent": 9
+      }
+    },
+    {
+      "elapsed_wall_seconds": 3.105,
+      "flocks": {
+        "average_size": 240.0,
+        "count": 1,
+        "largest": 240,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 240,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 69,
+        "opportunists": 115
+      },
+      "zone_occupancy": {
+        "deep_trench": 22,
+        "hunting_ground": 17,
+        "kelp_forest": 30,
+        "open_water": 15,
+        "unzoned": 150,
+        "warm_vent": 6
+      }
+    },
+    {
+      "elapsed_wall_seconds": 4.105,
+      "flocks": {
+        "average_size": 241.0,
+        "count": 1,
+        "largest": 241,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 241,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 21,
+        "hunting_ground": 16,
+        "kelp_forest": 29,
+        "open_water": 17,
+        "unzoned": 152,
+        "warm_vent": 6
+      }
+    },
+    {
+      "elapsed_wall_seconds": 5.116,
+      "flocks": {
+        "average_size": 241.0,
+        "count": 1,
+        "largest": 241,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 241,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 23,
+        "hunting_ground": 18,
+        "kelp_forest": 30,
+        "open_water": 18,
+        "unzoned": 148,
+        "warm_vent": 4
+      }
+    },
+    {
+      "elapsed_wall_seconds": 6.144,
+      "flocks": {
+        "average_size": 242.0,
+        "count": 1,
+        "largest": 242,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 242,
+      "strategies": {
+        "grazers": 57,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 23,
+        "hunting_ground": 20,
+        "kelp_forest": 27,
+        "open_water": 16,
+        "unzoned": 153,
+        "warm_vent": 3
+      }
+    },
+    {
+      "elapsed_wall_seconds": 7.16,
+      "flocks": {
+        "average_size": 242.0,
+        "count": 1,
+        "largest": 242,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 242,
+      "strategies": {
+        "grazers": 57,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 22,
+        "hunting_ground": 22,
+        "kelp_forest": 25,
+        "open_water": 15,
+        "unzoned": 157,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 8.19,
+      "flocks": {
+        "average_size": 242.0,
+        "count": 1,
+        "largest": 242,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 242,
+      "strategies": {
+        "grazers": 57,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 22,
+        "hunting_ground": 24,
+        "kelp_forest": 20,
+        "open_water": 14,
+        "unzoned": 161,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 9.192,
+      "flocks": {
+        "average_size": 243.0,
+        "count": 1,
+        "largest": 243,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 243,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 22,
+        "hunting_ground": 27,
+        "kelp_forest": 14,
+        "open_water": 11,
+        "unzoned": 168,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 10.247,
+      "flocks": {
+        "average_size": 243.0,
+        "count": 1,
+        "largest": 243,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 243,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 21,
+        "hunting_ground": 30,
+        "kelp_forest": 11,
+        "open_water": 8,
+        "unzoned": 172,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 11.259,
+      "flocks": {
+        "average_size": 243.0,
+        "count": 1,
+        "largest": 243,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 243,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 19,
+        "hunting_ground": 33,
+        "kelp_forest": 6,
+        "open_water": 6,
+        "unzoned": 179,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 12.266,
+      "flocks": {
+        "average_size": 243.0,
+        "count": 1,
+        "largest": 243,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 243,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 69,
+        "opportunists": 116
+      },
+      "zone_occupancy": {
+        "deep_trench": 15,
+        "hunting_ground": 33,
+        "kelp_forest": 5,
+        "open_water": 6,
+        "unzoned": 184,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 13.304,
+      "flocks": {
+        "average_size": 246.0,
+        "count": 1,
+        "largest": 246,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 69,
+        "opportunists": 119
+      },
+      "zone_occupancy": {
+        "deep_trench": 12,
+        "hunting_ground": 36,
+        "kelp_forest": 3,
+        "open_water": 3,
+        "unzoned": 192,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 14.409,
+      "flocks": {
+        "average_size": 246.0,
+        "count": 1,
+        "largest": 246,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 69,
+        "opportunists": 119
+      },
+      "zone_occupancy": {
+        "deep_trench": 9,
+        "hunting_ground": 37,
+        "kelp_forest": 2,
+        "open_water": 2,
+        "unzoned": 196,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 15.414,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 7,
+        "hunting_ground": 37,
+        "kelp_forest": 2,
+        "open_water": 2,
+        "unzoned": 198,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 16.504,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 4,
+        "hunting_ground": 37,
+        "kelp_forest": 1,
+        "open_water": 2,
+        "unzoned": 202,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 17.523,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 3,
+        "hunting_ground": 38,
+        "kelp_forest": 1,
+        "open_water": 1,
+        "unzoned": 203,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 18.525,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 3,
+        "hunting_ground": 38,
+        "kelp_forest": 1,
+        "open_water": 2,
+        "unzoned": 202,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 19.668,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 3,
+        "hunting_ground": 39,
+        "kelp_forest": 1,
+        "open_water": 3,
+        "unzoned": 200,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 20.743,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 3,
+        "hunting_ground": 39,
+        "kelp_forest": 0,
+        "open_water": 3,
+        "unzoned": 201,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 21.808,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 2,
+        "hunting_ground": 38,
+        "kelp_forest": 0,
+        "open_water": 5,
+        "unzoned": 201,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 22.878,
+      "flocks": {
+        "average_size": 123.0,
+        "count": 2,
+        "largest": 208,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 2,
+        "hunting_ground": 36,
+        "kelp_forest": 0,
+        "open_water": 4,
+        "unzoned": 204,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 23.982,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 2,
+        "hunting_ground": 32,
+        "kelp_forest": 0,
+        "open_water": 4,
+        "unzoned": 208,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 25.11,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 1,
+        "hunting_ground": 27,
+        "kelp_forest": 0,
+        "open_water": 5,
+        "unzoned": 213,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 26.223,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 1,
+        "hunting_ground": 20,
+        "kelp_forest": 0,
+        "open_water": 4,
+        "unzoned": 221,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 27.326,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 1,
+        "hunting_ground": 13,
+        "kelp_forest": 0,
+        "open_water": 4,
+        "unzoned": 228,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 28.473,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 0,
+        "hunting_ground": 10,
+        "kelp_forest": 0,
+        "open_water": 3,
+        "unzoned": 233,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 29.579,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 0,
+        "hunting_ground": 5,
+        "kelp_forest": 0,
+        "open_water": 3,
+        "unzoned": 238,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 30.764,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 0,
+        "hunting_ground": 3,
+        "kelp_forest": 0,
+        "open_water": 1,
+        "unzoned": 242,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 31.896,
+      "flocks": {
+        "average_size": 82.0,
+        "count": 3,
+        "largest": 156,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 246,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 70,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 3,
+        "hunting_ground": 2,
+        "kelp_forest": 0,
+        "open_water": 1,
+        "unzoned": 240,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 33.021,
+      "flocks": {
+        "average_size": 81.66666666666667,
+        "count": 3,
+        "largest": 155,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 221
+      },
+      "population": 245,
+      "strategies": {
+        "grazers": 58,
+        "hunters": 69,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 4,
+        "hunting_ground": 1,
+        "kelp_forest": 0,
+        "open_water": 1,
+        "unzoned": 239,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 34.16,
+      "flocks": {
+        "average_size": 81.0,
+        "count": 3,
+        "largest": 153,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 220
+      },
+      "population": 243,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 69,
+        "opportunists": 118
+      },
+      "zone_occupancy": {
+        "deep_trench": 6,
+        "hunting_ground": 0,
+        "kelp_forest": 1,
+        "open_water": 1,
+        "unzoned": 235,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 35.257,
+      "flocks": {
+        "average_size": 80.0,
+        "count": 3,
+        "largest": 153,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 219
+      },
+      "population": 240,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 69,
+        "opportunists": 115
+      },
+      "zone_occupancy": {
+        "deep_trench": 10,
+        "hunting_ground": 0,
+        "kelp_forest": 3,
+        "open_water": 1,
+        "unzoned": 226,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 36.285,
+      "flocks": {
+        "average_size": 78.33333333333333,
+        "count": 3,
+        "largest": 149,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 217
+      },
+      "population": 235,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 67,
+        "opportunists": 112
+      },
+      "zone_occupancy": {
+        "deep_trench": 11,
+        "hunting_ground": 0,
+        "kelp_forest": 3,
+        "open_water": 1,
+        "unzoned": 220,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 37.314,
+      "flocks": {
+        "average_size": 78.0,
+        "count": 3,
+        "largest": 149,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 216
+      },
+      "population": 234,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 67,
+        "opportunists": 111
+      },
+      "zone_occupancy": {
+        "deep_trench": 14,
+        "hunting_ground": 0,
+        "kelp_forest": 5,
+        "open_water": 2,
+        "unzoned": 213,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 38.32,
+      "flocks": {
+        "average_size": 78.0,
+        "count": 3,
+        "largest": 149,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 216
+      },
+      "population": 234,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 67,
+        "opportunists": 111
+      },
+      "zone_occupancy": {
+        "deep_trench": 18,
+        "hunting_ground": 0,
+        "kelp_forest": 6,
+        "open_water": 4,
+        "unzoned": 206,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 39.336,
+      "flocks": {
+        "average_size": 77.33333333333333,
+        "count": 3,
+        "largest": 149,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 215
+      },
+      "population": 232,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 67,
+        "opportunists": 109
+      },
+      "zone_occupancy": {
+        "deep_trench": 19,
+        "hunting_ground": 0,
+        "kelp_forest": 8,
+        "open_water": 5,
+        "unzoned": 200,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 40.5,
+      "flocks": {
+        "average_size": 76.66666666666667,
+        "count": 3,
+        "largest": 148,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 214
+      },
+      "population": 230,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 67,
+        "opportunists": 107
+      },
+      "zone_occupancy": {
+        "deep_trench": 21,
+        "hunting_ground": 0,
+        "kelp_forest": 11,
+        "open_water": 9,
+        "unzoned": 188,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 41.58,
+      "flocks": {
+        "average_size": 76.66666666666667,
+        "count": 3,
+        "largest": 148,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 214
+      },
+      "population": 230,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 67,
+        "opportunists": 107
+      },
+      "zone_occupancy": {
+        "deep_trench": 25,
+        "hunting_ground": 0,
+        "kelp_forest": 13,
+        "open_water": 16,
+        "unzoned": 175,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 42.695,
+      "flocks": {
+        "average_size": 76.66666666666667,
+        "count": 3,
+        "largest": 148,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 214
+      },
+      "population": 230,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 67,
+        "opportunists": 107
+      },
+      "zone_occupancy": {
+        "deep_trench": 29,
+        "hunting_ground": 0,
+        "kelp_forest": 14,
+        "open_water": 24,
+        "unzoned": 161,
+        "warm_vent": 2
+      }
+    },
+    {
+      "elapsed_wall_seconds": 43.784,
+      "flocks": {
+        "average_size": 76.0,
+        "count": 3,
+        "largest": 146,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 212
+      },
+      "population": 228,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 66,
+        "opportunists": 106
+      },
+      "zone_occupancy": {
+        "deep_trench": 30,
+        "hunting_ground": 0,
+        "kelp_forest": 19,
+        "open_water": 33,
+        "unzoned": 143,
+        "warm_vent": 3
+      }
+    },
+    {
+      "elapsed_wall_seconds": 44.863,
+      "flocks": {
+        "average_size": 76.0,
+        "count": 3,
+        "largest": 146,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 212
+      },
+      "population": 228,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 66,
+        "opportunists": 106
+      },
+      "zone_occupancy": {
+        "deep_trench": 34,
+        "hunting_ground": 0,
+        "kelp_forest": 21,
+        "open_water": 37,
+        "unzoned": 133,
+        "warm_vent": 3
+      }
+    },
+    {
+      "elapsed_wall_seconds": 45.895,
+      "flocks": {
+        "average_size": 76.0,
+        "count": 3,
+        "largest": 146,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 212
+      },
+      "population": 228,
+      "strategies": {
+        "grazers": 56,
+        "hunters": 66,
+        "opportunists": 106
+      },
+      "zone_occupancy": {
+        "deep_trench": 39,
+        "hunting_ground": 0,
+        "kelp_forest": 21,
+        "open_water": 42,
+        "unzoned": 122,
+        "warm_vent": 4
+      }
+    },
+    {
+      "elapsed_wall_seconds": 46.969,
+      "flocks": {
+        "average_size": 74.33333333333333,
+        "count": 3,
+        "largest": 144,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 212
+      },
+      "population": 223,
+      "strategies": {
+        "grazers": 55,
+        "hunters": 64,
+        "opportunists": 104
+      },
+      "zone_occupancy": {
+        "deep_trench": 41,
+        "hunting_ground": 0,
+        "kelp_forest": 23,
+        "open_water": 46,
+        "unzoned": 110,
+        "warm_vent": 3
+      }
+    },
+    {
+      "elapsed_wall_seconds": 48.035,
+      "flocks": {
+        "average_size": 73.33333333333333,
+        "count": 3,
+        "largest": 143,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 211
+      },
+      "population": 220,
+      "strategies": {
+        "grazers": 53,
+        "hunters": 64,
+        "opportunists": 103
+      },
+      "zone_occupancy": {
+        "deep_trench": 45,
+        "hunting_ground": 0,
+        "kelp_forest": 25,
+        "open_water": 47,
+        "unzoned": 100,
+        "warm_vent": 3
+      }
+    },
+    {
+      "elapsed_wall_seconds": 49.067,
+      "flocks": {
+        "average_size": 73.0,
+        "count": 3,
+        "largest": 142,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 211
+      },
+      "population": 219,
+      "strategies": {
+        "grazers": 53,
+        "hunters": 64,
+        "opportunists": 102
+      },
+      "zone_occupancy": {
+        "deep_trench": 51,
+        "hunting_ground": 0,
+        "kelp_forest": 23,
+        "open_water": 47,
+        "unzoned": 96,
+        "warm_vent": 2
+      }
+    },
+    {
+      "elapsed_wall_seconds": 50.165,
+      "flocks": {
+        "average_size": 72.33333333333333,
+        "count": 3,
+        "largest": 142,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 209
+      },
+      "population": 217,
+      "strategies": {
+        "grazers": 52,
+        "hunters": 63,
+        "opportunists": 102
+      },
+      "zone_occupancy": {
+        "deep_trench": 56,
+        "hunting_ground": 0,
+        "kelp_forest": 24,
+        "open_water": 47,
+        "unzoned": 87,
+        "warm_vent": 3
+      }
+    },
+    {
+      "elapsed_wall_seconds": 51.26,
+      "flocks": {
+        "average_size": 72.33333333333333,
+        "count": 3,
+        "largest": 142,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 209
+      },
+      "population": 217,
+      "strategies": {
+        "grazers": 52,
+        "hunters": 63,
+        "opportunists": 102
+      },
+      "zone_occupancy": {
+        "deep_trench": 64,
+        "hunting_ground": 0,
+        "kelp_forest": 24,
+        "open_water": 47,
+        "unzoned": 79,
+        "warm_vent": 3
+      }
+    },
+    {
+      "elapsed_wall_seconds": 52.356,
+      "flocks": {
+        "average_size": 72.0,
+        "count": 3,
+        "largest": 141,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 208
+      },
+      "population": 216,
+      "strategies": {
+        "grazers": 52,
+        "hunters": 63,
+        "opportunists": 101
+      },
+      "zone_occupancy": {
+        "deep_trench": 73,
+        "hunting_ground": 0,
+        "kelp_forest": 20,
+        "open_water": 47,
+        "unzoned": 74,
+        "warm_vent": 2
+      }
+    },
+    {
+      "elapsed_wall_seconds": 53.406,
+      "flocks": {
+        "average_size": 71.66666666666667,
+        "count": 3,
+        "largest": 141,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 207
+      },
+      "population": 215,
+      "strategies": {
+        "grazers": 51,
+        "hunters": 63,
+        "opportunists": 101
+      },
+      "zone_occupancy": {
+        "deep_trench": 81,
+        "hunting_ground": 0,
+        "kelp_forest": 20,
+        "open_water": 47,
+        "unzoned": 66,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 54.407,
+      "flocks": {
+        "average_size": 71.33333333333333,
+        "count": 3,
+        "largest": 140,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 206
+      },
+      "population": 214,
+      "strategies": {
+        "grazers": 51,
+        "hunters": 63,
+        "opportunists": 100
+      },
+      "zone_occupancy": {
+        "deep_trench": 86,
+        "hunting_ground": 0,
+        "kelp_forest": 19,
+        "open_water": 47,
+        "unzoned": 61,
+        "warm_vent": 1
+      }
+    },
+    {
+      "elapsed_wall_seconds": 55.468,
+      "flocks": {
+        "average_size": 71.33333333333333,
+        "count": 3,
+        "largest": 140,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 206
+      },
+      "population": 214,
+      "strategies": {
+        "grazers": 51,
+        "hunters": 63,
+        "opportunists": 100
+      },
+      "zone_occupancy": {
+        "deep_trench": 97,
+        "hunting_ground": 0,
+        "kelp_forest": 16,
+        "open_water": 47,
+        "unzoned": 54,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 56.471,
+      "flocks": {
+        "average_size": 71.0,
+        "count": 3,
+        "largest": 139,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 205
+      },
+      "population": 213,
+      "strategies": {
+        "grazers": 51,
+        "hunters": 62,
+        "opportunists": 100
+      },
+      "zone_occupancy": {
+        "deep_trench": 102,
+        "hunting_ground": 0,
+        "kelp_forest": 14,
+        "open_water": 47,
+        "unzoned": 50,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 57.525,
+      "flocks": {
+        "average_size": 71.0,
+        "count": 3,
+        "largest": 139,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 205
+      },
+      "population": 213,
+      "strategies": {
+        "grazers": 51,
+        "hunters": 62,
+        "opportunists": 100
+      },
+      "zone_occupancy": {
+        "deep_trench": 107,
+        "hunting_ground": 0,
+        "kelp_forest": 12,
+        "open_water": 47,
+        "unzoned": 47,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 58.568,
+      "flocks": {
+        "average_size": 71.0,
+        "count": 3,
+        "largest": 139,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 205
+      },
+      "population": 213,
+      "strategies": {
+        "grazers": 51,
+        "hunters": 62,
+        "opportunists": 100
+      },
+      "zone_occupancy": {
+        "deep_trench": 115,
+        "hunting_ground": 0,
+        "kelp_forest": 10,
+        "open_water": 46,
+        "unzoned": 42,
+        "warm_vent": 0
+      }
+    },
+    {
+      "elapsed_wall_seconds": 59.628,
+      "flocks": {
+        "average_size": 70.66666666666667,
+        "count": 3,
+        "largest": 139,
+        "loners": 0
+      },
+      "food_count": 0,
+      "lineages": {
+        "active": 205
+      },
+      "population": 212,
+      "strategies": {
+        "grazers": 51,
+        "hunters": 62,
+        "opportunists": 99
+      },
+      "zone_occupancy": {
+        "deep_trench": 120,
+        "hunting_ground": 0,
+        "kelp_forest": 7,
+        "open_water": 43,
+        "unzoned": 42,
+        "warm_vent": 0
+      }
+    }
+  ],
+  "performance": {
+    "clamp_drop": {
+      "dropped_ms_total": 1872.970753999831,
+      "final_accumulator_ms": 22.479463000490448,
+      "frame_count": 141
+    },
+    "effective_fps_frame_stats": {
+      "count": 728,
+      "max": 31.63630398922235,
+      "mean": 18.467977946618493,
+      "median": 15.736328661139304,
+      "min": 4.550289310535897,
+      "p95": 30.732492672077715,
+      "p99": 31.05176841949417
+    },
+    "effective_fps_overall": 12.0954513039423,
+    "event_ms": {
+      "count": 728,
+      "max": 0.08744200022192672,
+      "mean": 0.018015178539116987,
+      "median": 0.016585498087806627,
+      "min": 0.009971001418307424,
+      "p95": 0.030849998438498005,
+      "p99": 0.048395999328931794
+    },
+    "frame_ms": {
+      "count": 728,
+      "max": 219.76624600210926,
+      "mean": 82.23800883924524,
+      "median": 63.54723149888741,
+      "min": 31.60925499832956,
+      "p95": 184.45154900109628,
+      "p99": 195.26427399978274
+    },
+    "frames_rendered": 728,
+    "pacing_ms": {
+      "count": 728,
+      "max": 13.202498001191998,
+      "mean": 1.7845020480948093,
+      "median": 0.0698709991411306,
+      "min": 0.01883400182123296,
+      "p95": 8.0795779977052,
+      "p99": 10.12046599862515
+    },
+    "present_ms": {
+      "count": 728,
+      "max": 1.7492570004833397,
+      "mean": 0.7033608145310619,
+      "median": 0.6441254990932066,
+      "min": 0.53839300016989,
+      "p95": 1.0726279979280662,
+      "p99": 1.2462150007195305
+    },
+    "render_breakdown_mean_ms": {
+      "action_bar_ms": 0.01712370743876858,
+      "ambient_ms": 0.7326521813111257,
+      "anim_ms": 0.04726963871879699,
+      "attacks_ms": 0.0007188406356023164,
+      "clear_ms": 0.41278460579193493,
+      "creatures_ms": 3.785616994494146,
+      "draw_total_ms": 14.658401489089226,
+      "events_ms": 0.006013324194669961,
+      "food_ms": 0.002477160790846568,
+      "help_ms": 0.0002925260779882812,
+      "hud_ms": 0.001075050906845238,
+      "inspect_ms": 0.011802575560008396,
+      "links_ms": 0.0019379532344688554,
+      "overlay_ms": 0.0021974711611679534,
+      "predator_highlights_ms": 0.0009695096535894094,
+      "presentation_copy_ms": 0.00016664018783178487,
+      "render_core_ms": 14.657032524720197,
+      "settings_ms": 0.00032940115088822097,
+      "stub_ms": 0.0009270769284170115,
+      "territory_ms": 0.002675237483145083,
+      "trails_ms": 9.61150395322285,
+      "tutorial_ms": 0.0003205494437309796,
+      "zones_ms": 0.0
+    },
+    "render_breakdown_ms": {
+      "action_bar_ms": {
+        "count": 728,
+        "max": 0.5321450007613748,
+        "mean": 0.01712370743876858,
+        "median": 0.013152999599697068,
+        "min": 0.011012001777999103,
+        "p95": 0.01798300218069926,
+        "p99": 0.02753000080701895
+      },
+      "ambient_ms": {
+        "count": 728,
+        "max": 2.1788399972137995,
+        "mean": 0.7326521813111257,
+        "median": 0.6663860003754962,
+        "min": 0.6053770011931192,
+        "p95": 1.0420260005048476,
+        "p99": 1.4951800003473181
+      },
+      "anim_ms": {
+        "count": 728,
+        "max": 0.4344970002421178,
+        "mean": 0.04726963871879699,
+        "median": 0.02039800165221095,
+        "min": 0.0017120000848080963,
+        "p95": 0.19746600082726218,
+        "p99": 0.2498279973224271
+      },
+      "attacks_ms": {
+        "count": 728,
+        "max": 0.006304999260464683,
+        "mean": 0.0007188406356023164,
+        "median": 0.0006770005711587146,
+        "min": 0.00039700171328149736,
+        "p95": 0.0010799994925037026,
+        "p99": 0.001386000803904608
+      },
+      "clear_ms": {
+        "count": 728,
+        "max": 2.395935996901244,
+        "mean": 0.41278460579193493,
+        "median": 0.35168350041203666,
+        "min": 0.30562800020561554,
+        "p95": 0.6806260025769006,
+        "p99": 1.1873869989358354
+      },
+      "creatures_ms": {
+        "count": 728,
+        "max": 43.20609199930914,
+        "mean": 3.785616994494146,
+        "median": 3.5534605012799148,
+        "min": 2.5462900011916645,
+        "p95": 4.889514999376843,
+        "p99": 7.006784002442146
+      },
+      "draw_total_ms": {
+        "count": 728,
+        "max": 48.05543700058479,
+        "mean": 14.658401489089226,
+        "median": 14.49362999846926,
+        "min": 7.539924001321197,
+        "p95": 17.353991999698337,
+        "p99": 19.2369710021012
+      },
+      "events_ms": {
+        "count": 728,
+        "max": 0.16065700037870556,
+        "mean": 0.006013324194669961,
+        "median": 0.0020364986994536594,
+        "min": 0.0013349999790079892,
+        "p95": 0.00800199995865114,
+        "p99": 0.08215600246330723
+      },
+      "food_ms": {
+        "count": 728,
+        "max": 0.011889002053067088,
+        "mean": 0.002477160790846568,
+        "median": 0.0022624990378972143,
+        "min": 0.001505999534856528,
+        "p95": 0.0037539975892286748,
+        "p99": 0.0063209990912582725
+      },
+      "help_ms": {
+        "count": 728,
+        "max": 0.0008069982868619263,
+        "mean": 0.0002925260779882812,
+        "median": 0.0002695014700293541,
+        "min": 0.0001770022208802402,
+        "p95": 0.0004720022843685001,
+        "p99": 0.0006269983714446425
+      },
+      "hud_ms": {
+        "count": 728,
+        "max": 0.005333000444807112,
+        "mean": 0.001075050906845238,
+        "median": 0.001001000782707706,
+        "min": 0.0007509988790843636,
+        "p95": 0.0015569967217743397,
+        "p99": 0.0021029991330578923
+      },
+      "inspect_ms": {
+        "count": 728,
+        "max": 0.16241699995589443,
+        "mean": 0.011802575560008396,
+        "median": 0.01090949990611989,
+        "min": 0.009018996934173629,
+        "p95": 0.01577700095367618,
+        "p99": 0.020744999346788973
+      },
+      "links_ms": {
+        "count": 728,
+        "max": 0.009366001904709265,
+        "mean": 0.0019379532344688554,
+        "median": 0.0017309994291281328,
+        "min": 0.0013159988156985492,
+        "p95": 0.0029289985832292587,
+        "p99": 0.004296998667996377
+      },
+      "overlay_ms": {
+        "count": 728,
+        "max": 0.00654399991617538,
+        "mean": 0.0021974711611679534,
+        "median": 0.0020765000954270363,
+        "min": 0.0014329998521134257,
+        "p95": 0.0029809998522978276,
+        "p99": 0.0039039987314026803
+      },
+      "predator_highlights_ms": {
+        "count": 728,
+        "max": 0.011222000466659665,
+        "mean": 0.0009695096535894094,
+        "median": 0.0008870010788086802,
+        "min": 0.0006869995559100062,
+        "p95": 0.0013609969755634665,
+        "p99": 0.001830001565394923
+      },
+      "presentation_copy_ms": {
+        "count": 728,
+        "max": 0.0005229994712863117,
+        "mean": 0.00016664018783178487,
+        "median": 0.00016000194591470063,
+        "min": 0.0001219996192958206,
+        "p95": 0.00021199957700446248,
+        "p99": 0.0003579989424906671
+      },
+      "render_core_ms": {
+        "count": 728,
+        "max": 48.05455499808886,
+        "mean": 14.657032524720197,
+        "median": 14.492558999336325,
+        "min": 7.538713998656021,
+        "p95": 17.352546001347946,
+        "p99": 19.235956002376042
+      },
+      "settings_ms": {
+        "count": 728,
+        "max": 0.0011500014807097614,
+        "mean": 0.00032940115088822097,
+        "median": 0.0003089990059379488,
+        "min": 0.00019399885786697268,
+        "p95": 0.0005330002750270069,
+        "p99": 0.0006760019459761679
+      },
+      "stub_ms": {
+        "count": 728,
+        "max": 0.002974000381072983,
+        "mean": 0.0009270769284170115,
+        "median": 0.0008620008884463459,
+        "min": 0.0006519985618069768,
+        "p95": 0.0013049975677859038,
+        "p99": 0.001606000296305865
+      },
+      "territory_ms": {
+        "count": 728,
+        "max": 0.01296800110139884,
+        "mean": 0.002675237483145083,
+        "median": 0.002430499080219306,
+        "min": 0.0016559970390517265,
+        "p95": 0.004205998266115785,
+        "p99": 0.0072020011430140585
+      },
+      "trails_ms": {
+        "count": 728,
+        "max": 15.645602998120012,
+        "mean": 9.61150395322285,
+        "median": 9.63177849916974,
+        "min": 1.7187550001835916,
+        "p95": 11.538506001670612,
+        "p99": 12.878502999228658
+      },
+      "tutorial_ms": {
+        "count": 728,
+        "max": 0.006477002898463979,
+        "mean": 0.0003205494437309796,
+        "median": 0.00028800059226341546,
+        "min": 0.00018200080376118422,
+        "p95": 0.0005410001904238015,
+        "p99": 0.0006519985618069768
+      },
+      "zones_ms": {
+        "count": 728,
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      }
+    },
+    "render_ms": {
+      "count": 728,
+      "max": 48.05543700058479,
+      "mean": 14.658401489089226,
+      "median": 14.49362999846926,
+      "min": 7.539924001321197,
+      "p95": 17.353991999698337,
+      "p99": 19.2369710021012
+    },
+    "sim_ms": {
+      "count": 728,
+      "max": 203.31800200074213,
+      "mean": 65.01058694780963,
+      "median": 48.92944950006495,
+      "min": 0.0,
+      "p95": 168.69698099981179,
+      "p99": 179.74188900188892
+    },
+    "sim_steps_per_render_frame": {
+      "count": 728,
+      "max": 5.0,
+      "mean": 2.394230769230769,
+      "median": 2.0,
+      "min": 0.0,
+      "p95": 5.0,
+      "p99": 5.0
+    },
+    "sim_ticks_advanced": 1743
+  },
+  "platform": {
+    "display_driver": "x11",
+    "platform": "Linux-6.17.0-23-generic-x86_64-with-glibc2.39",
+    "pygame": "2.6.1",
+    "python": "3.12.3"
+  },
+  "population_summary": {
+    "food_count": {
+      "count": 728,
+      "max": 0.0,
+      "mean": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "population": {
+      "count": 728,
+      "max": 246.0,
+      "mean": 235.02747252747253,
+      "median": 241.0,
+      "min": 212.0,
+      "p95": 246.0,
+      "p99": 246.0
+    },
+    "predator_count": {
+      "count": 0,
+      "max": 0.0,
+      "mean": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    },
+    "prey_count": {
+      "count": 0,
+      "max": 0.0,
+      "mean": 0.0,
+      "median": 0.0,
+      "min": 0.0,
+      "p95": 0.0,
+      "p99": 0.0
+    }
+  },
+  "render_backend": "pygame",
+  "resize_calls": {
+    "renderer": [],
+    "simulation": []
+  },
+  "resolution": {
+    "desktop_native": [
+      1920,
+      1080
+    ],
+    "final_display": [
+      1280,
+      720
+    ],
+    "initial_display": [
+      1280,
+      720
+    ],
+    "windowed_target": [
+      1280,
+      720
+    ],
+    "world": [
+      1280,
+      720
+    ]
+  },
+  "restart_seed_changes": 0,
+  "run_id": "boids_stress_live_60s_before__boids__seed130363",
+  "scenario": "boids_stress_live_60s_before",
+  "seed": 130363,
+  "settings_snapshot": {
+    "cosmic_ray_rate": 0.0003,
+    "energy_to_reproduce": 0.8,
+    "food_cycle_enabled": false,
+    "food_cycle_period": 1800,
+    "food_max_particles": 300,
+    "food_spawn_rate": 0.8,
+    "fullscreen": false,
+    "initial_population": 80,
+    "max_population": 220,
+    "mode_params": {
+      "energy_to_reproduce": 0.72,
+      "food_cycle_enabled": false,
+      "initial_population": 220,
+      "max_population": 320,
+      "mutation_rate": 0.07,
+      "simulation_tick_hz": 30,
+      "target_fps": 30,
+      "zone_strength": 0.5
+    },
+    "mutation_rate": 0.06,
+    "render_backend": "gpu",
+    "show_hud": false,
+    "sim_mode": "boids",
+    "simulation_tick_hz": 30.0,
+    "target_fps": 30,
+    "visual_theme": "ocean",
+    "zone_count": 5,
+    "zone_strength": 0.8
+  },
+  "simulation_tick_hz": 30.0,
+  "started_at": "",
+  "target_fps": 30,
+  "toggles_completed": 0,
+  "transition_checks": {
+    "expected_toggles": 0,
+    "fullscreen_sequence_ok": true,
+    "simulation_resize_called_for_toggles": true,
+    "world_size_matches_mode": true,
+    "zone_hash_stable": true
+  },
+  "visible_display": true
+}
