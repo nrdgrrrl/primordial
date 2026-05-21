@@ -80,6 +80,11 @@ make clean     # remove build/dist and __pycache__ dirs
 
 ## Keyboard Controls
 
+Move the mouse during normal playback to reveal a transient bottom action bar
+with the current runtime commands. It stays fully visible for 5 seconds after
+the last meaningful movement, then fades out over 10 seconds. The cursor still
+remains hidden during normal simulation playback.
+
 | Key | Action |
 |-----|--------|
 | `ESC` or `Q` | Quit the screensaver |
@@ -112,10 +117,10 @@ Press **I** to toggle Inspect Mode, a read-only observability overlay that does 
 On a fresh normal-mode launch, Primordial opens a short in-game tutorial.
 Existing installs are not forced into it after upgrades. The tutorial explains
 app controls first, then the main simulation concepts, with broad highlights and
-mouse/keyboard Next, Back, Skip, and Finish controls. It pauses stable
-explanation steps, allows motion for selected visual steps, and restores the
-prior pause state when closed. Replay it with `python main.py --tutorial` or
-from the settings Actions category.
+mouse/keyboard Next, Back, Skip, and Finish controls. The tutorial keeps the
+simulation paused while it is open and resumes normal playback when you finish,
+skip, or close it. Replay it with `python main.py --tutorial` or from the
+settings Actions category.
 
 ## Performance
 

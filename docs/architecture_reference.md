@@ -35,7 +35,8 @@ Runtime package:
   runtime state, and first-launch tutorial user-state persistence.
 - `primordial/simulation/` owns all simulation state and rules.
 - `primordial/rendering/` owns pygame/GPU drawing, HUDs, inspect mode, glyphs,
-  settings/help UI rendering, and renderer-side visual state.
+  settings/help/tutorial UI rendering, transient action-bar UI, and renderer-side
+  visual state.
 - `primordial/persistence/` contains runtime sidecar paths, snapshot defaults,
   external help fallback integration, and predator-prey tuning-state
   persistence.
@@ -56,6 +57,7 @@ Runtime package:
    - help browser events are handled before settings events;
    - settings overlay events are passed to
      `runtime/settings_actions.py`;
+   - normal-mode mouse motion refreshes the transient bottom action bar;
    - inspect clicks use display window-to-world conversion;
    - normal keyboard input goes through `input/keyboard.py`.
 5. Advance the simulation through `runtime/fixed_step.py` unless paused,
@@ -177,6 +179,21 @@ The old external browser helper
 `persistence/runtime_state.py::_open_predator_prey_help` still exists as tested
 fallback infrastructure, but it is no longer the primary Guide action path.
 
+## Action Bar
+
+`rendering/action_bar.py` owns the mouse-activated bottom action bar shown
+during normal playback. It contains:
+
+- declarative shortcut display metadata;
+- monotonic-timer visibility and fade state;
+- context filtering for normal, inspect, predator-prey, and game-over states;
+- bottom-bar layout and drawing.
+
+The action bar is informational only. Actual keyboard behavior still lives in
+`input/keyboard.py` plus the small `K_p` hold path in `primordial/main.py`.
+Keep those handlers and the displayed metadata aligned instead of scattering
+shortcut labels through renderer code or docs.
+
 ## Tutorial Overlay
 
 The tutorial is a renderer-owned peer to settings and help, not part of either
@@ -243,6 +260,8 @@ The in-app settings overlay is renderer-owned but split across focused modules:
 - `rendering/settings_overlay.py`: drawing, local pending values, keyboard and
   mouse event interpretation, value formatting, hover state, and hit-region
   registration from the same rectangles that are drawn.
+- `rendering/action_bar.py`: runtime shortcut metadata, transient visibility
+  timing, context filtering, and bottom-bar drawing.
 - `runtime/settings_actions.py`: applies overlay actions to the live runtime:
   apply/save, discard, reset defaults, save/load snapshot, in-app guide launch,
   display and backend changes, and predator-prey dial reset.
@@ -350,6 +369,8 @@ when possible so hit rectangles, footer layout, and cursor behavior are checked.
 - Keep `runtime/settings_actions.py` as the home for applying overlay actions to
   live simulation/display/runtime objects.
 - Preserve keyboard support when adding mouse features.
+- Keep action-bar shortcut labels in sync with the real handlers in
+  `input/keyboard.py` and `main.py`; do not invent docs-only or UI-only keys.
 - UI hit testing must use pygame event screen/window coordinates and the same
   rectangles used for drawing; do not apply world-coordinate transforms to UI
   clicks.

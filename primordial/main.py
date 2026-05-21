@@ -174,6 +174,7 @@ def main(
         if settings.sim_mode == "predator_prey":
             milestone_logger.log_run_start(simulation)
     renderer = create_renderer(screen, settings, debug=runtime_args.debug)
+    renderer.set_runtime_mode(scr_args.mode)
     renderer.resize(simulation.width, simulation.height, screen=screen)
     active_snapshot_path = _resolve_snapshot_path(
         settings,
@@ -367,6 +368,9 @@ def main(
                     hide_runtime_cursor()
                 elif renderer.settings_overlay.visible:
                     show_interactive_cursor()
+
+            elif event.type == pygame.MOUSEMOTION and scr_args.mode == "normal":
+                renderer.notify_mouse_motion(event.rel)
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":

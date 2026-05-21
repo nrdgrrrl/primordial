@@ -2,6 +2,16 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — feat: add mouse-activated action bar
+
+Added a renderer-owned bottom action bar that appears when the mouse moves
+during normal simulation playback, stays fully visible for 5 seconds, then
+fades out over 10 seconds. The bar uses centralized shortcut metadata in
+`primordial/rendering/action_bar.py`, filters commands by normal/inspect/game-over
+context, stays hidden during settings/help/tutorial overlays and non-normal
+runtime modes, and draws in both pygame and GPU renderer paths without showing
+the OS cursor.
+
 ## [2026-05-21] — fix: polish tutorial highlights and pause restore
 
 Removed confusing tutorial highlight boxes for conceptual steps like Welcome,

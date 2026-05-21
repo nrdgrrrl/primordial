@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from .action_bar import ActionBar
 from .animations import AnimationManager
 from .help_overlay import HelpOverlay
 from .hud import HUD
@@ -238,6 +239,7 @@ class Renderer:
         self.show_predator_highlight = False
         self.show_cursor = False
         self.inspect_mode = InspectMode()
+        self.action_bar = ActionBar()
 
         self.settings_overlay = SettingsOverlay(settings)
         self.help_overlay = HelpOverlay()
@@ -309,6 +311,14 @@ class Renderer:
         if isinstance(self.theme, OceanTheme):
             self.theme.invalidate_runtime_caches()
             self.theme._trail_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+    def set_runtime_mode(self, mode: str) -> None:
+        """Update renderer-owned UI state that depends on the top-level runtime mode."""
+        self.action_bar.set_runtime_mode(mode)
+
+    def notify_mouse_motion(self, rel: tuple[int, int]) -> None:
+        """Refresh transient runtime UI hints from mouse movement."""
+        self.action_bar.notify_mouse_motion(rel)
 
     def _invalidate_static_caches(self) -> None:
         """Clear cached surfaces tied to world geometry or presentation state."""
@@ -506,6 +516,17 @@ class Renderer:
             self.tutorial_overlay.update()
             self.tutorial_overlay.draw(target)
         timings["tutorial_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        t0 = time.perf_counter()
+        action_bar_context = self.action_bar.build_context(
+            simulation,
+            inspect_enabled=self.inspect_mode.enabled,
+            settings_visible=self.settings_overlay.visible,
+            help_visible=self.help_overlay.visible,
+            tutorial_visible=self.tutorial_overlay.visible,
+        )
+        self.action_bar.draw(target, action_bar_context)
+        timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
 
         timings["render_core_ms"] = (time.perf_counter() - frame_t0) * 1000.0
         if self.debug_enabled:

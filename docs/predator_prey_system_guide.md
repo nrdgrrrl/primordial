@@ -229,6 +229,11 @@ keyboard shortcuts. Destructive reset actions require confirmation.
 
 Normal runtime controls:
 
+Move the mouse during normal playback to reveal a temporary bottom action bar
+with the current runtime shortcuts. It stays fully visible for 5 seconds after
+movement stops, then fades out over 10 seconds. The cursor still stays hidden
+unless an interactive overlay or Inspect Mode is active.
+
 | Control | Action |
 | --- | --- |
 | `Esc` / `Q` | Quit |
@@ -276,8 +281,8 @@ fresh normal-mode launch, can be replayed with `python main.py --tutorial`, and
 can be started from the settings **Actions** category. The tutorial explains app
 controls first, then walks through creatures, food, predators and prey, births
 and deaths, lineages, zones, depth bands, collapse, and evolution. The tutorial
-keeps the simulation paused until you finish, skip, or close it, then returns
-to normal playback. It is a quick tour; this guide is the deeper reference.
+keeps the simulation paused until you finish, skip, or close it, then resumes
+normal playback. It is a quick tour; this guide is the deeper reference.
 
 ## Save, Load, and Persistent Tuning State
 

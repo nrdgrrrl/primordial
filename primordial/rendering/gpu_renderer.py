@@ -85,6 +85,7 @@ from OpenGL.raw.GL.VERSION.GL_2_0 import (
     glVertexAttribPointer as raw_glVertexAttribPointer,
 )
 
+from .action_bar import ActionBar
 from .glyphs import build_glyph_surface
 from .help_overlay import HelpOverlay
 from .hud import HUD
@@ -404,6 +405,7 @@ class PredatorPreyGpuRenderer:
         self.show_predator_highlight = False
         self.show_cursor = False
         self.inspect_mode = InspectMode()
+        self.action_bar = ActionBar()
         self.hud = HUD(font_size=16)
         self.hud.visible = settings.show_hud
         self.settings_overlay = SettingsOverlay(settings)
@@ -564,6 +566,12 @@ class PredatorPreyGpuRenderer:
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         self._external_debug_metrics = metrics
+
+    def set_runtime_mode(self, mode: str) -> None:
+        self.action_bar.set_runtime_mode(mode)
+
+    def notify_mouse_motion(self, rel: tuple[int, int]) -> None:
+        self.action_bar.notify_mouse_motion(rel)
 
     def mark_debug_inspect_click(self, world_x: float, world_y: float) -> None:
         """Show the mapped inspect-click world position briefly in GPU debug mode."""
@@ -1017,6 +1025,13 @@ class PredatorPreyGpuRenderer:
         glDrawArrays(GL_LINES, 0, len(lines) * 2)
 
     def _draw_ui(self, simulation) -> None:
+        action_bar_context = self.action_bar.build_context(
+            simulation,
+            inspect_enabled=self.inspect_mode.enabled,
+            settings_visible=self.settings_overlay.visible,
+            help_visible=self.help_overlay.visible,
+            tutorial_visible=self.tutorial_overlay.visible,
+        )
         should_draw = (
             self.hud.visible
             or self.settings_overlay.visible
@@ -1027,6 +1042,7 @@ class PredatorPreyGpuRenderer:
             or self.tutorial_overlay.fade > 0
             or simulation.predator_prey_game_over_active
             or self.inspect_mode.enabled
+            or self.action_bar.opacity(action_bar_context) > 0.0
         )
         if not should_draw:
             return
@@ -1051,6 +1067,7 @@ class PredatorPreyGpuRenderer:
             )
             self.tutorial_overlay.update()
             self.tutorial_overlay.draw(self._ui_surface)
+        self.action_bar.draw(self._ui_surface, action_bar_context)
         self._draw_surface_texture(self._ui_surface)
 
     def _draw_inspect_overlay(self, simulation) -> None:
