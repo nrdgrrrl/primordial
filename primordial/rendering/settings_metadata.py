@@ -1,0 +1,495 @@
+"""Presentation metadata for the in-app settings overlay."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+CATEGORY_SIMULATION = "Simulation"
+CATEGORY_DISPLAY = "Display"
+CATEGORY_EVOLUTION = "Evolution"
+CATEGORY_ECOLOGY = "Ecology / Predator-Prey"
+CATEGORY_RENDERING = "Rendering"
+CATEGORY_ACTIONS = "Actions"
+
+SETTING_CATEGORIES = [
+    CATEGORY_SIMULATION,
+    CATEGORY_DISPLAY,
+    CATEGORY_EVOLUTION,
+    CATEGORY_ECOLOGY,
+    CATEGORY_RENDERING,
+    CATEGORY_ACTIONS,
+]
+
+
+@dataclass(frozen=True)
+class Field:
+    label: str
+    attr: str
+    kind: str
+    min_value: float | int | None = None
+    max_value: float | int | None = None
+    step: float | int = 1
+    options: list[str] | None = None
+    section: str = ""
+    requires_reset: bool = False
+    mode_param_mode: str | None = None
+    mode_param_key: str | None = None
+    visible_modes: list[str] | None = None
+    use_active_mode_param: bool = False
+    description: str = ""
+    guidance: str = ""
+
+    @property
+    def internal_key(self) -> str:
+        if self.mode_param_mode and self.mode_param_key:
+            return f"modes.{self.mode_param_mode}.{self.mode_param_key}"
+        return self.attr
+
+
+@dataclass(frozen=True)
+class ActionItem:
+    label: str
+    action: str
+    shortcut: str
+    description: str
+    enabled_modes: list[str] | None = None
+    destructive: bool = False
+
+    @property
+    def section(self) -> str:
+        return CATEGORY_ACTIONS
+
+
+def build_settings_fields() -> list[Field]:
+    """Return the editable settings exposed by the overlay."""
+    return [
+        Field(
+            "Mode",
+            "sim_mode",
+            "enum",
+            options=["energy", "predator_prey", "boids", "drift"],
+            section=CATEGORY_SIMULATION,
+            requires_reset=True,
+            description="Selects the simulation rules used for the next run.",
+            guidance="Changing mode applies after the world reset transition.",
+        ),
+        Field(
+            "Initial Population",
+            "initial_population",
+            "int",
+            0,
+            500,
+            5,
+            section=CATEGORY_SIMULATION,
+            requires_reset=True,
+            use_active_mode_param=True,
+            description="Number of creatures spawned when a new run starts.",
+            guidance="Lower values leave more room for emergence; higher values make the world busy immediately.",
+        ),
+        Field(
+            "Carrying Capacity",
+            "max_population",
+            "int",
+            1,
+            600,
+            5,
+            section=CATEGORY_SIMULATION,
+            use_active_mode_param=True,
+            description="Soft population cap used by the ecology pressure model.",
+            guidance="The safety limit still prevents runaway populations above this value.",
+        ),
+        Field(
+            "Population Safety Limit",
+            "population_safety_limit",
+            "int",
+            50,
+            10000,
+            50,
+            section=CATEGORY_SIMULATION,
+            description="Hard guardrail that prevents pathological population growth.",
+            guidance="Keep this comfortably above the largest mode carrying capacity.",
+        ),
+        Field(
+            "Food Spawn Rate",
+            "food_spawn_rate",
+            "float",
+            0.0,
+            2.0,
+            0.05,
+            section=CATEGORY_SIMULATION,
+            use_active_mode_param=True,
+            description="Base rate at which food enters the world.",
+            guidance="Higher values favor larger populations and faster reproduction.",
+        ),
+        Field(
+            "Creature Speed",
+            "creature_speed_base",
+            "float",
+            0.5,
+            3.0,
+            0.05,
+            section=CATEGORY_SIMULATION,
+            description="Global movement scale applied to creature motion.",
+            guidance="Large changes can make hunting, flocking, and food gathering feel very different.",
+        ),
+        Field(
+            "Visual Theme",
+            "visual_theme",
+            "enum",
+            options=["ocean", "petri", "geometric", "chaotic"],
+            section=CATEGORY_DISPLAY,
+            description="Visual skin used by the renderer.",
+            guidance="Theme changes apply immediately; stub themes may show placeholder visuals.",
+        ),
+        Field(
+            "Render Backend",
+            "render_backend",
+            "enum",
+            options=["pygame", "gpu"],
+            section=CATEGORY_DISPLAY,
+            visible_modes=["predator_prey"],
+            description="Rendering implementation used for predator-prey visuals.",
+            guidance="GPU is the default high-throughput path; pygame is useful for compatibility.",
+        ),
+        Field(
+            "Fullscreen",
+            "fullscreen",
+            "bool",
+            section=CATEGORY_DISPLAY,
+            description="Switches between fullscreen and windowed display.",
+            guidance="Applies when settings are saved.",
+        ),
+        Field(
+            "Target FPS",
+            "target_fps",
+            "int",
+            15,
+            240,
+            5,
+            section=CATEGORY_DISPLAY,
+            use_active_mode_param=True,
+            description="Presentation frame cap for the active mode.",
+            guidance="Predator-prey may use a lower simulation tick rate than the visual frame rate.",
+        ),
+        Field(
+            "Show HUD",
+            "show_hud",
+            "bool",
+            section=CATEGORY_DISPLAY,
+            description="Shows or hides the heads-up stats panel.",
+            guidance="Useful for tuning; disable for a cleaner screensaver view.",
+        ),
+        Field(
+            "Mutation Rate",
+            "mutation_rate",
+            "float",
+            0.0,
+            1.0,
+            0.01,
+            section=CATEGORY_EVOLUTION,
+            use_active_mode_param=True,
+            description="Chance that inherited genome traits mutate during reproduction.",
+            guidance="Low values preserve lineages; high values explore the trait space faster.",
+        ),
+        Field(
+            "Cosmic Ray Rate",
+            "cosmic_ray_rate",
+            "float",
+            0.0,
+            0.01,
+            0.0001,
+            section=CATEGORY_EVOLUTION,
+            use_active_mode_param=True,
+            description="Chance of spontaneous genome mutation while creatures are alive.",
+            guidance="Tiny values are enough; this is a long-running background pressure.",
+        ),
+        Field(
+            "Food Cycle",
+            "food_cycle_enabled",
+            "bool",
+            section=CATEGORY_EVOLUTION,
+            use_active_mode_param=True,
+            description="Turns the feast/famine resource cycle on or off.",
+            guidance="Food cycles create periodic stress that can reshape evolution.",
+        ),
+        Field(
+            "Food Cycle Length",
+            "food_cycle_period",
+            "int",
+            60,
+            5000,
+            30,
+            section=CATEGORY_EVOLUTION,
+            description="Length of one full food abundance cycle in simulation frames.",
+            guidance="The value display includes approximate seconds for the active mode tick rate.",
+        ),
+        Field(
+            "Zone Count",
+            "zone_count",
+            "int",
+            0,
+            12,
+            1,
+            section=CATEGORY_EVOLUTION,
+            description="Number of environmental zones generated in the world.",
+            guidance="Zones create local pressure; changing the count affects newly generated layouts.",
+        ),
+        Field(
+            "Zone Strength",
+            "zone_strength",
+            "float",
+            0.0,
+            1.0,
+            0.05,
+            section=CATEGORY_EVOLUTION,
+            use_active_mode_param=True,
+            description="Intensity of environmental zone effects.",
+            guidance="Higher values make zones matter more to survival and movement.",
+        ),
+        Field(
+            "Starting Predators",
+            "",
+            "float",
+            0.0,
+            1.0,
+            0.01,
+            section=CATEGORY_ECOLOGY,
+            requires_reset=True,
+            mode_param_mode="predator_prey",
+            mode_param_key="predator_fraction",
+            visible_modes=["predator_prey"],
+            description="Fraction of the initial predator-prey population that starts as predators.",
+            guidance="Requires a new predator-prey run because it changes the starting mix.",
+        ),
+        Field(
+            "Prey Reproduction Energy",
+            "",
+            "float",
+            0.05,
+            1.0,
+            0.01,
+            section=CATEGORY_ECOLOGY,
+            mode_param_mode="predator_prey",
+            mode_param_key="prey_energy_to_reproduce",
+            visible_modes=["predator_prey"],
+            description="Energy threshold prey must reach before reproducing.",
+            guidance="Higher values slow prey recovery; lower values can overwhelm predators.",
+        ),
+        Field(
+            "Predator Reproduction Energy",
+            "",
+            "float",
+            0.05,
+            1.0,
+            0.01,
+            section=CATEGORY_ECOLOGY,
+            mode_param_mode="predator_prey",
+            mode_param_key="predator_energy_to_reproduce",
+            visible_modes=["predator_prey"],
+            description="Energy threshold predators must reach before reproducing.",
+            guidance="When predators exceed 60% of the population, runtime logic raises this effective threshold.",
+        ),
+        Field(
+            "Prey Flee Sense",
+            "",
+            "float",
+            0.1,
+            5.0,
+            0.05,
+            section=CATEGORY_ECOLOGY,
+            mode_param_mode="predator_prey",
+            mode_param_key="prey_flee_sense_multiplier",
+            visible_modes=["predator_prey"],
+            description="Multiplier applied to prey threat sensing while fleeing predators.",
+            guidance="Higher values help prey react sooner but may keep them from food.",
+        ),
+        Field(
+            "Predator Scarcity Penalty",
+            "",
+            "float",
+            0.1,
+            5.0,
+            0.05,
+            section=CATEGORY_ECOLOGY,
+            mode_param_mode="predator_prey",
+            mode_param_key="predator_prey_scarcity_penalty_multiplier",
+            visible_modes=["predator_prey"],
+            description="Extra predator energy pressure when prey are scarce.",
+            guidance="Higher values punish predator overshoot more aggressively.",
+        ),
+        Field(
+            "Food Cycle Amplitude",
+            "",
+            "float",
+            0.0,
+            1.0,
+            0.05,
+            section=CATEGORY_ECOLOGY,
+            mode_param_mode="predator_prey",
+            mode_param_key="food_cycle_amplitude",
+            visible_modes=["predator_prey"],
+            description="Strength of predator-prey feast/famine swings.",
+            guidance="0 is steady food; 1 uses the full configured cycle amplitude.",
+        ),
+        Field(
+            "Kin Line Style",
+            "kin_line_style",
+            "enum",
+            options=["plain", "filament"],
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Visual style for lineage connection lines.",
+            guidance="Filament adds wave, glow, and shimmer; plain is simpler for debugging.",
+        ),
+        Field(
+            "Kin Line Distance",
+            "kin_line_max_distance",
+            "float",
+            0.0,
+            400.0,
+            10.0,
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Maximum distance for drawing kinship lines.",
+            guidance="0 disables kin lines; larger values increase visual density and render work.",
+        ),
+        Field(
+            "Kin Line Min Group",
+            "kin_line_min_group",
+            "int",
+            2,
+            10,
+            1,
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Minimum lineage group size before kin lines are drawn.",
+            guidance="Higher values reduce clutter by only showing larger families.",
+        ),
+        Field(
+            "Kin Line Width",
+            "kin_line_width",
+            "float",
+            0.5,
+            6.0,
+            0.5,
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Core stroke width for visible kin lines.",
+            guidance="Glow may make lines appear thicker than this numeric value.",
+        ),
+        Field(
+            "Kin Line Wave Amp",
+            "kin_line_wave_amplitude",
+            "float",
+            0.0,
+            15.0,
+            0.5,
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="How far filament kin lines wave away from the straight path.",
+            guidance="Small values feel organic; large values become decorative and busy.",
+        ),
+        Field(
+            "Kin Line Wave Segments",
+            "kin_line_wave_segments",
+            "int",
+            1,
+            12,
+            1,
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Number of short segments used to approximate filament waves.",
+            guidance="More segments look smoother but cost more to render.",
+        ),
+        Field(
+            "Kin Line Wave Speed",
+            "kin_line_wave_speed",
+            "float",
+            0.0,
+            3.0,
+            0.1,
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Animation speed for filament wave motion.",
+            guidance="0 freezes the wave while keeping the shaped line.",
+        ),
+        Field(
+            "Kin Line Glow",
+            "kin_line_glow",
+            "bool",
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Adds a soft bioluminescent glow behind kin lines.",
+            guidance="Disable for a cleaner or cheaper rendering path.",
+        ),
+        Field(
+            "Kin Line Shimmer",
+            "kin_line_shimmer",
+            "bool",
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Adds moving shimmer highlights along kin filaments.",
+            guidance="Most visible when kin lines are enabled and using filament style.",
+        ),
+        Field(
+            "Kin Line Shimmer Strength",
+            "kin_line_shimmer_strength",
+            "float",
+            0.0,
+            1.0,
+            0.05,
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Brightness of moving shimmer highlights on kin lines.",
+            guidance="Keep this subtle to avoid distracting from creatures.",
+        ),
+        Field(
+            "Kin Line Debug Boost",
+            "kin_line_debug_boost",
+            "bool",
+            section=CATEGORY_RENDERING,
+            visible_modes=["predator_prey"],
+            description="Temporarily boosts kin-line visibility for diagnostics.",
+            guidance="Use while tuning line settings; it is intentionally more obvious than normal rendering.",
+        ),
+    ]
+
+
+def build_action_items() -> list[ActionItem]:
+    """Return non-editing actions shown in the overlay action category."""
+    return [
+        ActionItem(
+            "Save Snapshot",
+            "save_snapshot",
+            "V",
+            "Writes the current world snapshot to the active snapshot path.",
+        ),
+        ActionItem(
+            "Load Snapshot",
+            "load_snapshot",
+            "L",
+            "Loads the active snapshot path into the running app and pauses on the loaded world.",
+        ),
+        ActionItem(
+            "Predator-Prey Guide",
+            "help",
+            "H",
+            "Opens the local predator-prey guide in a browser; fullscreen may be released first.",
+        ),
+        ActionItem(
+            "Reset Predator-Prey Dials",
+            "reset_predator_prey_dials",
+            "D D",
+            "Restores adaptive predator-prey ecological dials to baseline values, clears the max tick record, and starts a fresh predator-prey run.",
+            enabled_modes=["predator_prey"],
+            destructive=True,
+        ),
+        ActionItem(
+            "Reset Settings Defaults",
+            "reset",
+            "R R",
+            "Restores canonical defaults, saves config.toml, and applies runtime display/theme/mode changes.",
+            destructive=True,
+        ),
+    ]

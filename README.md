@@ -295,6 +295,9 @@ You can switch modes at any time with `S` → change Mode → Apply. The simulat
 Configuration is TOML-backed and persistent across app updates.
 
 - Press **`S`** in normal mode to open the in-app settings overlay.
+- The overlay is grouped by category, with one category visible at a time and a
+  details panel explaining the selected setting, range, internal key, and reset
+  behavior.
 - Press **`H`** while the settings overlay is open to launch the local predator/prey guide in your browser; Primordial drops out of fullscreen first if needed.
 - Canonical repo-tracked defaults live in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml).
 - The runtime user override file is editable by hand as `config.toml`.
@@ -346,7 +349,10 @@ Mode-specific tuning keys:
 | modes.predator_prey | adaptive_near_extinction_predator_floor | int >= 0 | Predator-count floor used when counting `predator_low_ticks` during a run |
 | modes.predator_prey | adaptive_near_extinction_prey_floor | int >= 0 | Prey-count floor used when counting `prey_low_ticks` during a run |
 
-These mode-table tuning keys live in TOML config authority today; the in-app settings overlay still edits only the top-level settings fields.
+Settings overlay labels, categories, descriptions, ranges, and action help live
+in [`primordial/rendering/settings_metadata.py`](/home/victoria/projects/primordial/primordial/rendering/settings_metadata.py).
+The overlay can edit selected mode-scoped values where a field explicitly points
+at a `[modes.<name>]` key; other mode-table tuning remains TOML-only.
 
 ### Tuning
 

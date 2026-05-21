@@ -2,6 +2,16 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — redesign: categorized settings overlay
+
+Reworked the in-app settings overlay from a single cramped list into a
+categorized modal with sidebar navigation, stronger contrast, selected-setting
+details, compact reset badges, unapplied-change status, fixed footer controls,
+and action descriptions. Settings labels/descriptions/ranges now live in
+`primordial/rendering/settings_metadata.py`, category state lives in
+`primordial/rendering/settings_navigation.py`, and runtime apply/discard/reset
+behavior remains delegated to `primordial/runtime/settings_actions.py`.
+
 ## [2026-05-15] — fix: settings overlay runtime action handling
 
 Extracted settings-overlay action handling from `primordial/main.py` into

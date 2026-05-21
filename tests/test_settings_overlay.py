@@ -12,6 +12,14 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame
 
 from primordial.rendering.settings_overlay import SettingsOverlay
+from primordial.rendering.settings_metadata import (
+    CATEGORY_ACTIONS,
+    CATEGORY_ECOLOGY,
+    CATEGORY_SIMULATION,
+    SETTING_CATEGORIES,
+    build_action_items,
+    build_settings_fields,
+)
 from primordial.settings import Settings
 
 
@@ -196,7 +204,7 @@ class SettingsOverlayTests(unittest.TestCase):
             overlay.sync_from_settings()
 
             self.assertEqual(field.label, "Food Cycle Length")
-            self.assertEqual(overlay._format_value(field), "< 1800f / 30.0s >")
+            self.assertEqual(overlay._format_value(field), "1800f / 30.0s")
 
     def test_food_cycle_length_seconds_display_uses_active_mode_sim_tick_rate(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -210,7 +218,103 @@ class SettingsOverlayTests(unittest.TestCase):
             field = next(f for f in overlay.fields if f.attr == "food_cycle_period")
             overlay.sync_from_settings()
 
-            self.assertEqual(overlay._format_value(field), "< 1800f / 60.0s >")
+            self.assertEqual(overlay._format_value(field), "1800f / 60.0s")
+
+    def test_settings_metadata_has_categories_descriptions_and_reset_markers(self) -> None:
+        fields = build_settings_fields()
+        actions = build_action_items()
+
+        categories = {field.section for field in fields}
+        self.assertIn(CATEGORY_SIMULATION, categories)
+        self.assertIn(CATEGORY_ECOLOGY, categories)
+        self.assertIn(CATEGORY_ACTIONS, SETTING_CATEGORIES)
+        self.assertTrue(all(field.description for field in fields))
+        self.assertTrue(all(action.description for action in actions))
+
+        initial_population = next(
+            field for field in fields if field.attr == "initial_population"
+        )
+        self.assertEqual(initial_population.label, "Initial Population")
+        self.assertTrue(initial_population.requires_reset)
+        self.assertIn("new run", initial_population.description)
+
+        scarcity = next(
+            field
+            for field in fields
+            if field.mode_param_key == "predator_prey_scarcity_penalty_multiplier"
+        )
+        self.assertEqual(scarcity.label, "Predator Scarcity Penalty")
+        self.assertEqual(scarcity.section, CATEGORY_ECOLOGY)
+
+    def test_tab_cycles_categories_without_losing_selection_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            self.assertEqual(overlay.navigation.category, CATEGORY_SIMULATION)
+
+            overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DOWN))
+            self.assertEqual(overlay.selected, 1)
+            overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_TAB))
+
+            self.assertNotEqual(overlay.navigation.category, CATEGORY_SIMULATION)
+            self.assertEqual(overlay.selected, 0)
+
+            overlay.handle_event(
+                pygame.event.Event(
+                    pygame.KEYDOWN,
+                    key=pygame.K_TAB,
+                    mod=pygame.KMOD_SHIFT,
+                )
+            )
+            self.assertEqual(overlay.navigation.category, CATEGORY_SIMULATION)
+            self.assertEqual(overlay.selected, 1)
+
+    def test_actions_category_explains_predator_prey_dial_reset(self) -> None:
+        actions = build_action_items()
+        dial_reset = next(
+            action for action in actions if action.action == "reset_predator_prey_dials"
+        )
+
+        self.assertEqual(dial_reset.shortcut, "D D")
+        self.assertTrue(dial_reset.destructive)
+        self.assertIn("baseline", dial_reset.description)
+        self.assertIn("fresh predator-prey run", dial_reset.description)
+
+    def test_space_runs_selected_action_from_actions_category(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.navigation.set_category(CATEGORY_ACTIONS, overlay._item_count_for_category(CATEGORY_ACTIONS))
+
+            action = overlay.handle_event(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE)
+            )
+
+            self.assertEqual(action, "save_snapshot")
+
+    def test_draw_smoke_uses_fixed_footer_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            for _ in range(20):
+                overlay.update()
+
+            surface = pygame.Surface((1024, 768), pygame.SRCALPHA)
+            overlay.draw(surface)
+
+            self.assertGreater(surface.get_bounding_rect().width, 0)
 
 
 if __name__ == "__main__":

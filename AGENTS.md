@@ -130,7 +130,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 When adding a new setting, update all of:
 1. Canonical defaults file (`primordial/config/defaults.toml`)
 2. Config parsing/validation/serialization (`primordial/config/config.py`)
-3. Settings overlay widget list (`primordial/rendering/settings_overlay.py`)
+3. Settings overlay metadata (`primordial/rendering/settings_metadata.py`)
 4. AGENTS.md (this file) — settings reference notes
 5. README.md when user-facing config behavior or locations change
 
@@ -163,5 +163,6 @@ Snapshots must round-trip the adaptive tuning state, current seed, `sim_ticks`,
 and `survival_ticks`.
 The adaptive predator_prey tuning state is also persisted on app exit and
 reloaded on the next launch without requiring a world snapshot.
-These live in TOML mode params today; the in-app overlay still edits only
-top-level settings fields unless mode-param support is added explicitly.
+These live in TOML mode params today. The in-app overlay edits only fields
+declared explicitly in `primordial/rendering/settings_metadata.py`; other
+mode-param tuning remains TOML-only unless overlay metadata is added.
