@@ -275,9 +275,9 @@ Primordial includes a guided onboarding tutorial for new users. It runs on a
 fresh normal-mode launch, can be replayed with `python main.py --tutorial`, and
 can be started from the settings **Actions** category. The tutorial explains app
 controls first, then walks through creatures, food, predators and prey, births
-and deaths, lineages, zones, depth bands, collapse, and evolution. Closing,
-skipping, or finishing it returns the simulation to normal playback. It is a
-quick tour; this guide is the deeper reference.
+and deaths, lineages, zones, depth bands, collapse, and evolution. The tutorial
+keeps the simulation paused until you finish, skip, or close it, then returns
+to normal playback. It is a quick tour; this guide is the deeper reference.
 
 ## Save, Load, and Persistent Tuning State
 

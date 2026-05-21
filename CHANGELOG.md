@@ -19,8 +19,7 @@ user-state persistence, and a `--tutorial` / `--show-tutorial` CLI override.
 Tutorial state/content, layout, mouse hit regions, and rendering live in focused
 modules separate from settings and help. The settings Actions category can also
 start the tutorial, and the main loop now routes tutorial events before help,
-settings, and normal simulation controls while preserving cursor and pause
-state.
+settings, and normal simulation controls while preserving cursor behavior.
 
 ## [2026-05-21] — feat: add in-app documentation browser
 

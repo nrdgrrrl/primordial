@@ -112,7 +112,9 @@ class TutorialOverlay:
         return self.state.previous_paused
 
     def wants_simulation_paused(self) -> bool:
-        return self.visible and self.state.current_step.pause_simulation
+        # v1 onboarding keeps the simulation frozen for the full tutorial so
+        # the scene does not drift while the user reads or interacts.
+        return self.visible
 
     def set_runtime_context(
         self,

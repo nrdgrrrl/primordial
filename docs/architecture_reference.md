@@ -199,11 +199,11 @@ not exist before startup and the tutorial sidecar has not marked the current
 version seen/skipped. `--tutorial` and `--show-tutorial` force it for the current
 run. Finish and Skip/Escape both mark the current tutorial version handled.
 
-Tutorial steps may pause the simulation or allow motion. The main loop applies
-that preference while active, and tutorial exit resumes normal playback instead
-of restoring a paused state. Conceptual steps should not manufacture fake
-highlight rectangles; highlight boxes are only appropriate for stable, actually
-visible targets.
+The tutorial keeps the simulation paused for the full onboarding flow. The main
+loop resumes normal playback on Finish, Skip, or Escape instead of restoring a
+saved paused state. Conceptual steps should not manufacture fake highlight
+rectangles; highlight boxes are only appropriate for stable, actually visible
+targets.
 
 ## Configuration
 

@@ -80,6 +80,16 @@ class TutorialModelTests(unittest.TestCase):
         state.start(previous_paused=True)
         self.assertFalse(state.paused_after_exit())
 
+    def test_overlay_keeps_simulation_paused_while_visible(self) -> None:
+        pygame.init()
+        try:
+            overlay = TutorialOverlay()
+            overlay.open(previous_paused=False)
+
+            self.assertTrue(overlay.wants_simulation_paused())
+        finally:
+            pygame.quit()
+
 
 class TutorialPersistenceTests(unittest.TestCase):
     def test_fresh_state_auto_starts_only_when_config_was_new(self) -> None:
