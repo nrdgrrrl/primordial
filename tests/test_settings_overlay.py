@@ -25,6 +25,7 @@ from primordial.rendering.settings_metadata import (
     build_action_items,
     build_settings_fields,
 )
+from primordial.rendering.settings_layout import calculate_settings_layout
 from primordial.settings import Settings
 
 
@@ -320,6 +321,60 @@ class SettingsOverlayTests(unittest.TestCase):
             overlay.draw(surface)
 
             self.assertGreater(surface.get_bounding_rect().width, 0)
+
+    def test_settings_layout_keeps_long_category_and_label_columns_positive(self) -> None:
+        category_font = pygame.font.Font(None, 24)
+        item_font = pygame.font.Font(None, 24)
+        count_font = pygame.font.Font(None, 18)
+
+        layout = calculate_settings_layout(
+            (1024, 768),
+            categories=SETTING_CATEGORIES,
+            item_labels=[
+                "Predator Reproduction Energy",
+                "Kin Line Shimmer Strength",
+                "Reset Predator-Prey Dials",
+            ],
+            category_font=category_font,
+            item_font=item_font,
+            count_font=count_font,
+        )
+
+        self.assertGreaterEqual(layout.sidebar_rect.width, 190)
+        self.assertGreaterEqual(layout.list_rect.width, 360)
+        self.assertGreaterEqual(layout.details_rect.width, 220)
+        self.assertLess(layout.sidebar_rect.right, layout.list_rect.left)
+        self.assertLess(layout.list_rect.right, layout.details_rect.left)
+
+    def test_settings_overlay_hit_regions_remain_inside_drawn_panel_after_layout_polish(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            settings.sim_mode = "predator_prey"
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.pending["sim_mode"] = "predator_prey"
+            overlay.navigation.set_category(CATEGORY_ECOLOGY, overlay._item_count_for_category(CATEGORY_ECOLOGY))
+            surface = pygame.Surface((1024, 768), pygame.SRCALPHA)
+            overlay.draw(surface)
+
+            panel = overlay._last_panel_rect
+            category_region = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "category" and region.category == CATEGORY_ECOLOGY
+            )
+            value_region = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "value" and region.row_index == 2 and region.direction == 1
+            )
+
+            self.assertTrue(panel.contains(category_region.rect))
+            self.assertTrue(panel.contains(value_region.rect))
+            self.assertGreater(value_region.rect.width, 0)
 
     def test_mouse_click_category_switches_category(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

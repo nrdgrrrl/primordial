@@ -356,6 +356,9 @@ Mode-specific tuning keys:
 
 Settings overlay labels, categories, descriptions, ranges, and action help live
 in [`primordial/rendering/settings_metadata.py`](/home/victoria/projects/primordial/primordial/rendering/settings_metadata.py).
+The overlay's modal, sidebar, list, details, and footer rectangles are sized by
+[`primordial/rendering/settings_layout.py`](/home/victoria/projects/primordial/primordial/rendering/settings_layout.py)
+so long labels wrap within their panels without shrinking the readable UI fonts.
 Mouse hit regions are produced by the overlay draw pass with the small
 `primordial/rendering/settings_mouse.py` hit-region type so visible controls and
 click targets stay aligned.

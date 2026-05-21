@@ -2,6 +2,14 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — polish: settings overlay long-label layout
+
+Adjusted the redesigned settings overlay layout so long category names and
+setting labels wrap cleanly instead of clipping or colliding with value
+controls. Overlay panel sizing now uses measured category/item text through
+`primordial/rendering/settings_layout.py`, preserving the current readable font
+sizes while keeping mouse hit regions aligned with the drawn controls.
+
 ## [2026-05-21] — input: clickable settings overlay
 
 Added mouse support to the redesigned settings overlay: category sidebar items,

@@ -12,6 +12,13 @@ from .settings_metadata import (
     build_action_items,
     build_settings_fields,
 )
+from .settings_layout import (
+    LIST_HEADER_HEIGHT,
+    ROW_HEIGHT,
+    ROW_RECT_HEIGHT,
+    calculate_settings_layout,
+    panel_rect_for_screen,
+)
 from .settings_mouse import SettingsHitRegion
 from .settings_navigation import SettingsNavigation
 
@@ -36,6 +43,7 @@ class SettingsOverlay:
         self._hit_regions: list[SettingsHitRegion] = []
         self._hover_region: SettingsHitRegion | None = None
         self._last_panel_rect = pygame.Rect(0, 0, 0, 0)
+        self._last_list_rect = pygame.Rect(0, 0, 0, 0)
 
         self._shade: pygame.Surface | None = None
         self._title_font = pygame.font.Font(None, 34)
@@ -305,7 +313,8 @@ class SettingsOverlay:
         self._shade.fill((0, 6, 16, alpha))
         screen.blit(self._shade, (0, 0))
 
-        panel_rect = self._panel_rect(screen)
+        layout = self._layout_for_screen(screen)
+        panel_rect = layout.panel_rect
         panel = pygame.Surface(panel_rect.size, pygame.SRCALPHA)
         panel.fill((6, 18, 34, int(244 * fade_ratio)))
         self._draw_panel_glow(panel, fade_ratio)
@@ -313,18 +322,11 @@ class SettingsOverlay:
         self._hit_regions = []
         self._last_panel_rect = panel_rect
 
-        body_top = 86
-        footer_height = 94
-        body_bottom = panel.get_height() - footer_height
-        sidebar_rect = pygame.Rect(18, body_top, 184, body_bottom - body_top - 12)
-        list_rect = pygame.Rect(sidebar_rect.right + 18, body_top, 360, sidebar_rect.height)
-        details_rect = pygame.Rect(list_rect.right + 18, body_top, panel.get_width() - list_rect.right - 36, sidebar_rect.height)
-        footer_rect = pygame.Rect(18, panel.get_height() - footer_height, panel.get_width() - 36, footer_height - 14)
-
-        self._draw_sidebar(panel, sidebar_rect)
-        self._draw_item_list(panel, list_rect)
-        self._draw_details(panel, details_rect)
-        self._draw_footer(panel, footer_rect)
+        self._last_list_rect = layout.list_rect
+        self._draw_sidebar(panel, layout.sidebar_rect)
+        self._draw_item_list(panel, layout.list_rect)
+        self._draw_details(panel, layout.details_rect)
+        self._draw_footer(panel, layout.footer_rect)
 
         screen.blit(panel, panel_rect.topleft)
 
@@ -355,18 +357,19 @@ class SettingsOverlay:
                 return region
         return None
 
-    def _panel_rect(self, screen: pygame.Surface) -> pygame.Rect:
-        margin = 24
-        width = min(max(980, int(screen.get_width() * 0.86)), screen.get_width() - margin * 2)
-        height = min(max(620, int(screen.get_height() * 0.84)), screen.get_height() - margin * 2)
-        width = max(720, width)
-        height = max(520, height)
-        return pygame.Rect(
-            screen.get_width() // 2 - width // 2,
-            screen.get_height() // 2 - height // 2,
-            width,
-            height,
+    def _layout_for_screen(self, screen: pygame.Surface):
+        labels = [item.label for item in self._visible_items_for_active_category()]
+        return calculate_settings_layout(
+            screen.get_size(),
+            categories=SETTING_CATEGORIES,
+            item_labels=labels,
+            category_font=self._font,
+            item_font=self._font,
+            count_font=self._tiny,
         )
+
+    def _panel_rect(self, screen: pygame.Surface) -> pygame.Rect:
+        return panel_rect_for_screen(screen.get_size())
 
     def _draw_panel_glow(self, panel: pygame.Surface, fade_ratio: float) -> None:
         rect = panel.get_rect()
@@ -399,7 +402,10 @@ class SettingsOverlay:
         for index, category in enumerate(SETTING_CATEGORIES):
             count = self._item_count_for_category(category)
             selected = index == self.navigation.category_index
-            item_rect = pygame.Rect(rect.x + 10, y, rect.width - 20, 34)
+            label_lines = self._wrap_text(category, self._font, max(70, rect.width - 54))
+            label_lines = label_lines[:2]
+            item_height = max(38, 17 + len(label_lines) * 18)
+            item_rect = pygame.Rect(rect.x + 10, y, rect.width - 20, item_height)
             hovered = self._region_hovered("category", category=category)
             if selected:
                 pygame.draw.rect(panel, (18, 76, 98), item_rect, border_radius=6)
@@ -411,11 +417,14 @@ class SettingsOverlay:
             if hovered and not selected:
                 label_color = (190, 232, 240)
             count_color = (116, 210, 210) if count else (88, 116, 132)
-            panel.blit(self._font.render(category, True, label_color), (item_rect.x + 9, item_rect.y + 7))
+            line_y = item_rect.y + 7
+            for line in label_lines:
+                panel.blit(self._font.render(line, True, label_color), (item_rect.x + 9, line_y))
+                line_y += 18
             count_surf = self._tiny.render(str(count), True, count_color)
             panel.blit(count_surf, (item_rect.right - count_surf.get_width() - 10, item_rect.y + 9))
             self._register_hit_region("category", item_rect, category=category)
-            y += 39
+            y += item_height + 7
 
     def _draw_item_list(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (5, 20, 34), (37, 89, 116))
@@ -430,8 +439,8 @@ class SettingsOverlay:
                 panel.blit(self._font.render(line, True, (156, 190, 208)), (rect.x + 14, rect.y + 64))
             return
 
-        row_height = 40
-        max_rows = max(1, (rect.height - 62) // row_height)
+        row_height = ROW_HEIGHT
+        max_rows = max(1, (rect.height - LIST_HEADER_HEIGHT) // row_height)
         if self.navigation.selected < self._first_visible_row:
             self._first_visible_row = self.navigation.selected
         if self.navigation.selected >= self._first_visible_row + max_rows:
@@ -441,7 +450,7 @@ class SettingsOverlay:
         y = rect.y + 56
         for row_index, item in enumerate(items[self._first_visible_row:self._first_visible_row + max_rows], start=self._first_visible_row):
             selected = row_index == self.navigation.selected
-            row_rect = pygame.Rect(rect.x + 10, y, rect.width - 20, 34)
+            row_rect = pygame.Rect(rect.x + 10, y, rect.width - 20, ROW_RECT_HEIGHT)
             row_hovered = self._region_hovered("row", row_index=row_index)
             if selected:
                 pygame.draw.rect(panel, (20, 82, 103), row_rect, border_radius=7)
@@ -456,18 +465,35 @@ class SettingsOverlay:
                 label_color = (213, 239, 245)
             if isinstance(item, ActionItem) and not self._action_enabled(item):
                 label_color = (94, 119, 132)
-            panel.blit(self._font.render(item.label, True, label_color), (row_rect.x + 9, row_rect.y + 7))
             self._register_hit_region("row", row_rect, row_index=row_index)
             if isinstance(item, Field):
                 value_text = self._format_value(item)
                 value_color = (123, 241, 220) if selected else (104, 197, 196)
                 value = self._font.render(value_text, True, value_color)
-                value_right_padding = 110 if item.requires_reset else 32
-                value_x = row_rect.right - value.get_width() - value_right_padding
-                panel.blit(value, (value_x, row_rect.y + 7))
-                left_rect = pygame.Rect(max(row_rect.x + 126, value_x - 24), row_rect.y + 5, 20, 24)
-                right_rect = pygame.Rect(row_rect.right - value_right_padding + 6, row_rect.y + 5, 20, 24)
-                value_rect = pygame.Rect(value_x - 4, row_rect.y + 4, value.get_width() + 8, 26)
+                reset_space = 86 if item.requires_reset else 0
+                control_block_width = min(178, max(130, row_rect.width // 2))
+                control_right = row_rect.right - reset_space - 8
+                right_rect = pygame.Rect(control_right - 20, row_rect.y + 15, 20, 24)
+                left_rect = pygame.Rect(control_right - control_block_width, row_rect.y + 15, 20, 24)
+                value_area = pygame.Rect(
+                    left_rect.right + 5,
+                    row_rect.y + 14,
+                    max(32, right_rect.x - left_rect.right - 10),
+                    26,
+                )
+                value_x = max(value_area.x, value_area.right - value.get_width())
+                panel.blit(value, (value_x, row_rect.y + 17))
+                value_rect = pygame.Rect(value_area.x, value_area.y, value_area.width, value_area.height)
+                label_width = max(72, left_rect.x - row_rect.x - 16)
+                self._draw_wrapped_text(
+                    panel,
+                    item.label,
+                    self._font,
+                    label_color,
+                    pygame.Rect(row_rect.x + 9, row_rect.y + 7, label_width, row_rect.height - 10),
+                    max_lines=3,
+                    line_height=18,
+                )
                 self._draw_value_control(panel, left_rect, "<", self._region_hovered("value", row_index=row_index, direction=-1))
                 self._draw_value_control(panel, right_rect, ">", self._region_hovered("value", row_index=row_index, direction=1))
                 self._register_hit_region("value", value_rect, row_index=row_index, direction=1)
@@ -476,8 +502,9 @@ class SettingsOverlay:
                 if item.requires_reset:
                     self._draw_badge(panel, "RESET", row_rect.right - 78, row_rect.y + 8, (232, 170, 91))
                 if self._field_changed(item):
-                    self._draw_badge(panel, "CHANGED", row_rect.x + 9, row_rect.y + 24, (248, 190, 108), tiny=True)
+                    self._draw_badge(panel, "CHANGED", row_rect.x + 9, row_rect.bottom - 20, (248, 190, 108), tiny=True)
             else:
+                button_width = max(52, min(86, self._small.size("Confirm")[0] + 18))
                 button_text = "Confirm" if (
                     (item.action == "reset" and self.confirm_reset)
                     or (
@@ -485,7 +512,17 @@ class SettingsOverlay:
                         and self.confirm_reset_predator_prey_dials
                     )
                 ) else "Run"
-                button_rect = pygame.Rect(row_rect.right - 62, row_rect.y + 5, 52, 24)
+                button_rect = pygame.Rect(row_rect.right - button_width - 10, row_rect.y + 16, button_width, 24)
+                label_width = max(72, button_rect.x - row_rect.x - 18)
+                self._draw_wrapped_text(
+                    panel,
+                    item.label,
+                    self._font,
+                    label_color,
+                    pygame.Rect(row_rect.x + 9, row_rect.y + 7, label_width, row_rect.height - 10),
+                    max_lines=3,
+                    line_height=18,
+                )
                 self._draw_action_button(
                     panel,
                     button_rect,
@@ -496,7 +533,7 @@ class SettingsOverlay:
                 )
                 self._register_hit_region("action", button_rect, row_index=row_index)
                 shortcut = self._tiny.render(item.shortcut, True, (133, 220, 218))
-                panel.blit(shortcut, (button_rect.x - shortcut.get_width() - 8, row_rect.y + 10))
+                panel.blit(shortcut, (button_rect.x - shortcut.get_width() - 8, row_rect.y + 20))
             y += row_height
 
         if self._first_visible_row > 0:
@@ -508,8 +545,11 @@ class SettingsOverlay:
         self._draw_box(panel, rect, (7, 24, 39), (42, 104, 132))
         item = self._selected_item()
         title = item.label if item is not None else self.navigation.category
-        panel.blit(self._section_font.render(title, True, (231, 250, 255)), (rect.x + 16, rect.y + 14))
-        y = rect.y + 50
+        title_y = rect.y + 14
+        for line in self._wrap_text(title, self._section_font, rect.width - 32)[:2]:
+            panel.blit(self._section_font.render(line, True, (231, 250, 255)), (rect.x + 16, title_y))
+            title_y += 23
+        y = title_y + 10
         if item is None:
             text = "Choose another category with Tab. Mode-specific settings appear when their mode is selected."
             for line in self._wrap_text(text, self._font, rect.width - 32):
@@ -738,6 +778,25 @@ class SettingsOverlay:
         lines.append(current)
         return lines
 
+    def _draw_wrapped_text(
+        self,
+        panel: pygame.Surface,
+        text: str,
+        font: pygame.font.Font,
+        color: tuple[int, int, int],
+        rect: pygame.Rect,
+        *,
+        max_lines: int,
+        line_height: int,
+    ) -> None:
+        lines = self._wrap_text(text, font, max(1, rect.width))[:max_lines]
+        y = rect.y
+        for line in lines:
+            if y + line_height > rect.bottom + 1:
+                break
+            panel.blit(font.render(line, True, color), (rect.x, y))
+            y += line_height
+
     def _region_hovered(
         self,
         kind: str,
@@ -773,16 +832,15 @@ class SettingsOverlay:
         )
 
     def _visible_row_capacity(self) -> int:
-        panel_height = max(520, min(620, int(720 * 0.84)))
-        # Runtime drawing recalculates this exactly from the current screen.
-        # This fallback keeps wheel handling bounded before the first draw.
-        if self._last_panel_rect.height:
-            panel_height = self._last_panel_rect.height
-        body_top = 86
-        footer_height = 94
-        body_bottom = panel_height - footer_height
-        list_height = body_bottom - body_top - 12
-        return max(1, (list_height - 62) // 40)
+        if self._last_list_rect.height:
+            list_height = self._last_list_rect.height
+        else:
+            panel_height = max(520, min(620, int(720 * 0.84)))
+            body_top = 86
+            footer_height = 94
+            body_bottom = panel_height - footer_height
+            list_height = body_bottom - body_top - 12
+        return max(1, (list_height - LIST_HEADER_HEIGHT) // ROW_HEIGHT)
 
     def _format_value(self, field: Field) -> str:
         value = self.pending[self._ensure_pending_value(field)]
