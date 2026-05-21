@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import os
+import sys
 
-from primordial.utils.cli import parse_runtime_args
+from primordial.utils.cli import format_runtime_help, parse_runtime_args, should_print_runtime_help
 from primordial.utils.screensaver import parse_screensaver_args
 
 
 def run() -> None:
     """Launch Primordial from the installed package/module name."""
+    if should_print_runtime_help(sys.argv[1:]):
+        print(format_runtime_help(), end="")
+        return
+
     scr_args = parse_screensaver_args()
     runtime_args = parse_runtime_args()
 

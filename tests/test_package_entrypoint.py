@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import runpy
+import io
 import sys
 import types
 import unittest
@@ -51,3 +52,18 @@ class PackageEntrypointTests(unittest.TestCase):
             self.assertEqual(os.environ.get("SDL_WINDOWID"), "123")
 
         self.assertEqual(calls, [(scr_args, runtime_args)])
+
+    def test_module_entrypoint_prints_help_and_skips_runtime_startup(self) -> None:
+        fake_stdout = io.StringIO()
+
+        with (
+            patch.object(sys, "argv", ["primordial", "--help"]),
+            patch("primordial.utils.screensaver.parse_screensaver_args") as parse_scr,
+            patch("primordial.utils.cli.parse_runtime_args") as parse_runtime,
+            patch("sys.stdout", fake_stdout),
+        ):
+            runpy.run_module("primordial", run_name="__main__", alter_sys=True)
+
+        self.assertIn("usage: primordial", fake_stdout.getvalue())
+        parse_scr.assert_not_called()
+        parse_runtime.assert_not_called()

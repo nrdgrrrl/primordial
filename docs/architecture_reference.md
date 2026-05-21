@@ -13,6 +13,9 @@ Top-level entry points:
 
 - `main.py` parses screensaver/runtime arguments and delegates to
   `primordial.main.main`.
+- `primordial.__main__` is the package launcher. It handles `-h` / `--help`
+  before importing the pygame runtime entrypoint, then parses screensaver and
+  tolerant runtime args for normal startup.
 - `build.py`, `primordial.spec`, and `Makefile` support packaging and common
   development commands.
 

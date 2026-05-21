@@ -2,6 +2,14 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — feat: add command-line help output
+
+Added a standard `-h` / `--help` path that prints conventional CLI help for
+runtime flags and the Windows screensaver argument forms, then exits before
+pygame initialization or config/runtime startup. The tolerant
+`parse_runtime_args()` path still uses `parse_known_args()` so `/s`, `/p`,
+`/c`, and unknown launcher arguments do not become fatal during normal startup.
+
 ## [2026-05-21] — feat: add mouse-activated action bar
 
 Added a renderer-owned bottom action bar that appears when the mouse moves

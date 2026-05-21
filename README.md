@@ -59,6 +59,7 @@ The screensaver will launch in fullscreen mode by default.
 
 | Flag | Effect |
 |---|---|
+| `-h`, `--help` | Print command-line help and exit before pygame startup |
 | `--debug` | Enables debug HUD timing lines, FPS/population graph overlay, and verbose console logging |
 | `--profile` | Runs for 60 seconds, writes `.pstats` + text profile report to config directory, then exits |
 | `--mode <name>` | Launch override: `energy`, `predator_prey`, `boids`, `drift` |
@@ -67,6 +68,10 @@ The screensaver will launch in fullscreen mode by default.
 | `--save <path>` | Save the current world snapshot to the given path on exit |
 | `--log=csv` | Append predator-prey run and dial-reset telemetry rows to `run_logs/predator_prey_runs.csv` |
 | `--tutorial`, `--show-tutorial` | Open the in-game onboarding tutorial for this run without changing seen state |
+
+Windows screensaver hosting still uses separate startup arguments: `/s` for
+fullscreen screensaver mode, `/p <HWND>` for preview embedding, and `/c` for
+config mode.
 
 ### Make Targets
 
