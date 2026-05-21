@@ -263,7 +263,7 @@ def _handle_load_snapshot(context: SettingsActionContext) -> SettingsActionResul
 
 def _handle_help(context: SettingsActionContext) -> SettingsActionResult:
     context.renderer.open_help_overlay()
-    status_message = "Opened in-app predator-prey guide."
+    status_message = "Opened in-app help browser."
     if context.renderer.help_overlay.status_message:
         status_message = context.renderer.help_overlay.status_message
     context.renderer.settings_overlay.set_snapshot_status(

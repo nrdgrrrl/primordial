@@ -46,6 +46,58 @@ class HelpDocument:
         return self.error is None
 
 
+@dataclass(frozen=True)
+class HelpDocEntry:
+    """One registered help document in the in-app browser."""
+
+    doc_id: str
+    title: str
+    description: str
+    rel_path: str
+
+    def resolve_path(self) -> Path:
+        return get_base_path() / self.rel_path
+
+
+HELP_DOCUMENTS: tuple[HelpDocEntry, ...] = (
+    HelpDocEntry(
+        doc_id="predator_prey_guide",
+        title="Predator-Prey Guide",
+        description="How the predator-prey system works: hunting, fleeing, depth, and population cycles.",
+        rel_path="docs/predator_prey_system_guide.md",
+    ),
+    HelpDocEntry(
+        doc_id="organism_biology",
+        title="Organism Biology",
+        description="What organisms are, how genomes work, what you can read from their appearance, and how to watch evolution happen.",
+        rel_path="docs/organism_biology.md",
+    ),
+)
+
+HELP_DOC_BY_ID: dict[str, HelpDocEntry] = {entry.doc_id: entry for entry in HELP_DOCUMENTS}
+
+DEFAULT_HELP_DOC_ID = "predator_prey_guide"
+
+
+def load_help_document_by_id(doc_id: str) -> HelpDocument:
+    """Load a registered help document by its doc_id. Falls back to error document."""
+    entry = HELP_DOC_BY_ID.get(doc_id)
+    if entry is None:
+        return HelpDocument(
+            title="Unknown Document",
+            sections=(
+                HelpSection(
+                    title="Unknown Document",
+                    level=1,
+                    body=f"No help document registered with id {doc_id!r}.",
+                ),
+            ),
+            source_path=Path(f"<unknown:{doc_id}>"),
+            error=f"unknown doc_id: {doc_id}",
+        )
+    return load_help_document(entry.resolve_path())
+
+
 def bundled_predator_prey_guide_path() -> Path:
     """Resolve the bundled human-facing predator/prey guide."""
     return get_base_path() / "docs" / "predator_prey_system_guide.md"

@@ -11,9 +11,14 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 import pygame
 
 from primordial.help import (
+    DEFAULT_HELP_DOC_ID,
+    HELP_DOC_BY_ID,
+    HELP_DOCUMENTS,
     HelpDocument,
+    HelpDocEntry,
     HelpSection,
     load_help_document,
+    load_help_document_by_id,
     parse_markdown_document,
     search_sections,
 )
@@ -76,6 +81,46 @@ class HelpDocumentModelTests(unittest.TestCase):
         self.assertEqual([result.section_index for result in title_results], [0])
         self.assertEqual([result.section_index for result in body_results], [1])
         self.assertEqual(no_results, [])
+
+
+class HelpDocumentRegistryTests(unittest.TestCase):
+    def test_registry_has_at_least_two_documents(self) -> None:
+        self.assertGreaterEqual(len(HELP_DOCUMENTS), 2)
+
+    def test_predator_prey_guide_in_registry(self) -> None:
+        self.assertIn("predator_prey_guide", HELP_DOC_BY_ID)
+
+    def test_organism_biology_in_registry(self) -> None:
+        self.assertIn("organism_biology", HELP_DOC_BY_ID)
+
+    def test_all_registered_docs_resolve_to_existing_files(self) -> None:
+        for entry in HELP_DOCUMENTS:
+            path = entry.resolve_path()
+            self.assertTrue(
+                path.exists(),
+                f"Registered help doc {entry.doc_id!r} path does not exist: {path}",
+            )
+
+    def test_all_registered_docs_load_successfully(self) -> None:
+        for entry in HELP_DOCUMENTS:
+            doc = load_help_document_by_id(entry.doc_id)
+            self.assertTrue(
+                doc.ok,
+                f"Registered help doc {entry.doc_id!r} failed to load: {doc.error}",
+            )
+            self.assertGreater(
+                len(doc.sections),
+                0,
+                f"Registered help doc {entry.doc_id!r} has no sections",
+            )
+
+    def test_default_doc_id_exists_in_registry(self) -> None:
+        self.assertIn(DEFAULT_HELP_DOC_ID, HELP_DOC_BY_ID)
+
+    def test_load_unknown_doc_id_returns_error_document(self) -> None:
+        doc = load_help_document_by_id("nonexistent")
+        self.assertFalse(doc.ok)
+        self.assertIn("Unknown Document", doc.title)
 
 
 class HelpNavigationTests(unittest.TestCase):
@@ -199,6 +244,41 @@ class HelpOverlayTests(unittest.TestCase):
         self.assertEqual(action, "close")
         self.assertEqual(overlay.fade_dir, -1)
         self.assertEqual(overlay.navigation.selected_section_index, 2)
+
+    def test_doc_tab_clicks_switch_document(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
+        overlay.fade = 20
+        overlay.draw(screen)
+
+        doc_tab_regions = [r for r in overlay._hit_regions if r.kind == "doc_tab" and r.doc_id is not None]
+        if not doc_tab_regions:
+            return
+
+        other_tab = next(r for r in doc_tab_regions if r.doc_id != overlay.doc_id)
+        overlay.handle_event(
+            pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=other_tab.rect.center)
+        )
+
+        self.assertNotEqual(overlay.doc_id, DEFAULT_HELP_DOC_ID)
+
+    def test_tab_key_cycles_documents(self) -> None:
+        overlay = self._overlay()
+        initial_doc_id = overlay.doc_id
+
+        overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_TAB))
+
+        self.assertNotEqual(overlay.doc_id, initial_doc_id)
+
+    def test_shift_tab_cycles_documents_in_reverse(self) -> None:
+        overlay = self._overlay()
+        initial_doc_id = overlay.doc_id
+
+        overlay.handle_event(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_TAB, mod=pygame.KMOD_SHIFT)
+        )
+
+        self.assertNotEqual(overlay.doc_id, initial_doc_id)
 
 
 if __name__ == "__main__":

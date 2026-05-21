@@ -325,7 +325,7 @@ class SettingsActionTests(unittest.TestCase):
         self.assertEqual(runtime_loop.accumulator_seconds, 0.0)
         self.assertEqual(
             renderer.settings_overlay.statuses[-1],
-            ("Opened in-app predator-prey guide.", False),
+            ("Opened in-app help browser.", False),
         )
 
     def test_tutorial_action_opens_tutorial_and_pauses_simulation(self) -> None:

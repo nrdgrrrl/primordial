@@ -472,10 +472,10 @@ def build_action_items() -> list[ActionItem]:
             "Loads the active snapshot path into the running app and pauses on the loaded world.",
         ),
         ActionItem(
-            "Predator-Prey Guide",
+            "Help",
             "help",
             "H",
-            "Opens the in-app predator-prey guide with section navigation and search.",
+            "Opens the in-app help browser with guides for predator-prey mode and organism biology.",
         ),
         ActionItem(
             "Start Tutorial",

@@ -364,3 +364,10 @@ lineage.
 fleeing, scarcity pressure, kill distance, kill energy, and food-cycle amplitude.
 
 **Zone**: Soft environmental region that changes energy and sensing pressure.
+
+## Related Guides
+
+For a deeper explanation of what organisms are, how their genomes determine
+both behavior and appearance, what you can learn by looking at them, and how to
+watch evolution happen over time, switch to the **Organism Biology** tab in the
+help browser.

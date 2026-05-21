@@ -13,3 +13,4 @@ class HelpHitRegion:
     rect: pygame.Rect
     section_index: int | None = None
     action: str | None = None
+    doc_id: str | None = None

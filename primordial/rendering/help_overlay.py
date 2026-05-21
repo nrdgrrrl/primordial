@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pygame
 
-from primordial.help import HelpDocument, HelpSection, load_help_document
+from primordial.help import (
+    DEFAULT_HELP_DOC_ID,
+    HELP_DOC_BY_ID,
+    HELP_DOCUMENTS,
+    HelpDocument,
+    HelpDocEntry,
+    HelpSection,
+    load_help_document_by_id,
+)
 
 from .help_layout import (
     NAV_ROW_HEIGHT,
@@ -15,11 +23,17 @@ from .help_mouse import HelpHitRegion
 from .help_navigation import HelpNavigation
 
 
+_DOC_TAB_PAD_X = 10
+_DOC_TAB_PAD_Y = 4
+_DOC_TAB_GAP = 6
+
+
 class HelpOverlay:
     """Render and operate the in-app help/documentation browser."""
 
-    def __init__(self, document: HelpDocument | None = None) -> None:
-        self.document = document or load_help_document()
+    def __init__(self, document: HelpDocument | None = None, doc_id: str | None = None) -> None:
+        self.doc_id = doc_id or DEFAULT_HELP_DOC_ID
+        self.document = document or load_help_document_by_id(self.doc_id)
         self.navigation = HelpNavigation(self.document)
         self.visible = False
         self.fade = 0
@@ -38,9 +52,11 @@ class HelpOverlay:
         self._small = pygame.font.Font(None, 20)
         self._tiny = pygame.font.Font(None, 18)
 
-    def open(self, *, reload_document: bool = True) -> None:
+    def open(self, *, reload_document: bool = True, doc_id: str | None = None) -> None:
+        if doc_id is not None:
+            self.doc_id = doc_id
         if reload_document:
-            self.set_document(load_help_document())
+            self.set_document(load_help_document_by_id(self.doc_id))
         self.visible = True
         self.fade_dir = 1
         self.navigation.search_focused = False
@@ -49,10 +65,18 @@ class HelpOverlay:
         self.fade_dir = -1
         self.navigation.search_focused = False
 
-    def set_document(self, document: HelpDocument) -> None:
+    def set_document(self, document: HelpDocument, *, doc_id: str | None = None) -> None:
         self.document = document
+        if doc_id is not None:
+            self.doc_id = doc_id
         self.navigation.set_document(document)
         self.status_message = document.error or ""
+
+    def switch_document(self, doc_id: str) -> None:
+        if doc_id == self.doc_id:
+            return
+        self.doc_id = doc_id
+        self.set_document(load_help_document_by_id(doc_id), doc_id=doc_id)
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
         if event.type == pygame.MOUSEMOTION:
@@ -73,6 +97,9 @@ class HelpOverlay:
             self.navigation.search_focused = True
             return None
         if event.key == pygame.K_TAB:
+            if not self.navigation.search_focused:
+                self._cycle_document(reverse=bool(getattr(event, "mod", 0) & pygame.KMOD_SHIFT))
+                return None
             self.navigation.search_focused = not self.navigation.search_focused
             return None
         if event.key == pygame.K_BACKSPACE:
@@ -139,6 +166,7 @@ class HelpOverlay:
         self._draw_panel_glow(panel, fade_ratio)
         self._draw_header(panel, layout.header_rect, layout.close_rect)
         self._draw_search(panel, layout.search_rect)
+        self._draw_doc_tabs(panel, layout.doc_tabs_rect)
         self._draw_nav(panel, layout.nav_rect)
         self._draw_content(panel, layout.content_rect)
         self._draw_footer(panel, layout.footer_rect)
@@ -165,6 +193,9 @@ class HelpOverlay:
             return None
         if region.kind == "section" and region.section_index is not None:
             self.navigation.select_section(region.section_index)
+            self.navigation.search_focused = False
+        elif region.kind == "doc_tab" and region.doc_id is not None:
+            self.switch_document(region.doc_id)
             self.navigation.search_focused = False
         elif region.kind == "search":
             self.navigation.search_focused = True
@@ -194,7 +225,9 @@ class HelpOverlay:
         pygame.draw.rect(panel, (20, 77, 102, int(120 * fade_ratio)), rect.inflate(-8, -8), 1, border_radius=8)
 
     def _draw_header(self, panel: pygame.Surface, rect: pygame.Rect, close_rect: pygame.Rect) -> None:
-        title = self._title_font.render("PRIMORDIAL GUIDE", True, (221, 249, 255))
+        entry = HELP_DOC_BY_ID.get(self.doc_id)
+        header_title = entry.title if entry else "PRIMORDIAL GUIDE"
+        title = self._title_font.render(header_title, True, (221, 249, 255))
         panel.blit(title, (rect.x + 6, rect.y + 10))
         subtitle_text = self._header_summary()
         subtitle = self._small.render(subtitle_text, True, (139, 202, 225))
@@ -221,6 +254,45 @@ class HelpOverlay:
             self._draw_button(panel, clear_rect, "x", hovered=self._region_hovered("button", action="clear_search"))
             self._register_hit_region("button", clear_rect, action="clear_search")
         self._register_hit_region("search", rect)
+
+    def _draw_doc_tabs(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
+        if len(HELP_DOCUMENTS) <= 1:
+            return
+        x = rect.x
+        for entry in HELP_DOCUMENTS:
+            active = entry.doc_id == self.doc_id
+            hovered = self._region_hovered("doc_tab", doc_id=entry.doc_id)
+            label_surf = self._small.render(entry.title, True, (225, 250, 252))
+            tab_w = label_surf.get_width() + _DOC_TAB_PAD_X * 2
+            tab_rect = pygame.Rect(x, rect.y, tab_w, rect.height)
+            if active:
+                pygame.draw.rect(panel, (14, 55, 74), tab_rect, border_radius=8)
+                pygame.draw.rect(panel, (83, 210, 220), tab_rect, 1, border_radius=8)
+            elif hovered:
+                pygame.draw.rect(panel, (10, 38, 56), tab_rect, border_radius=8)
+                pygame.draw.rect(panel, (50, 130, 158), tab_rect, 1, border_radius=8)
+            else:
+                pygame.draw.rect(panel, (7, 25, 42), tab_rect, border_radius=8)
+                pygame.draw.rect(panel, (35, 88, 112), tab_rect, 1, border_radius=8)
+            text_color = (232, 252, 255) if active else (160, 195, 210)
+            panel.blit(
+                self._small.render(entry.title, True, text_color),
+                (tab_rect.x + _DOC_TAB_PAD_X, tab_rect.y + _DOC_TAB_PAD_Y + 2),
+            )
+            self._register_hit_region("doc_tab", tab_rect, doc_id=entry.doc_id)
+            x += tab_w + _DOC_TAB_GAP
+
+    def _cycle_document(self, *, reverse: bool = False) -> None:
+        doc_ids = [entry.doc_id for entry in HELP_DOCUMENTS]
+        if len(doc_ids) <= 1:
+            return
+        try:
+            current = doc_ids.index(self.doc_id)
+        except ValueError:
+            current = 0
+        delta = -1 if reverse else 1
+        next_index = (current + delta) % len(doc_ids)
+        self.switch_document(doc_ids[next_index])
 
     def _draw_nav(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (6, 23, 39), (40, 103, 132))
@@ -307,7 +379,7 @@ class HelpOverlay:
         if self.status_message:
             status += " · " + self.status_message
         panel.blit(self._small.render(status, True, (190, 230, 238)), (rect.x + 12, rect.y + 10))
-        hint = "Mouse: click sections, search, scroll. Keyboard: type to search, Up/Down section, PageUp/PageDown scroll, Del clear search, Esc close."
+        hint = "Mouse: click tabs/sections. Keyboard: Tab cycle docs, Up/Down section, PageUp/PageDown scroll, / search, Esc close."
         for line in self._wrap_text(hint, self._small, rect.width - 24)[:1]:
             panel.blit(self._small.render(line, True, (141, 190, 210)), (rect.x + 12, rect.y + 35))
 
@@ -354,6 +426,7 @@ class HelpOverlay:
         *,
         section_index: int | None = None,
         action: str | None = None,
+        doc_id: str | None = None,
     ) -> None:
         self._hit_regions.append(
             HelpHitRegion(
@@ -361,6 +434,7 @@ class HelpOverlay:
                 rect=rect.move(self._last_panel_rect.topleft),
                 section_index=section_index,
                 action=action,
+                doc_id=doc_id,
             )
         )
 
@@ -376,6 +450,7 @@ class HelpOverlay:
         *,
         section_index: int | None = None,
         action: str | None = None,
+        doc_id: str | None = None,
     ) -> bool:
         region = self._hover_region
         if region is None or region.kind != kind:
@@ -383,6 +458,8 @@ class HelpOverlay:
         if section_index is not None and region.section_index != section_index:
             return False
         if action is not None and region.action != action:
+            return False
+        if doc_id is not None and region.doc_id != doc_id:
             return False
         return True
 

@@ -50,11 +50,17 @@ primordial/                  ← project root
     │   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
     │   ├── food.py          # Food particle and FoodManager with spatial bucketing
     │   ├── simulation.py    # Simulation — orchestrates creatures, food, evolution, events
+    ├── help/
+    │   └── document_model.py # HelpDocEntry registry, document loading, markdown parsing
     └── rendering/
         ├── glyphs.py        # Glyph rendering system — stroke vocabulary, deterministic assembly
         ├── animations.py    # AnimationManager — death/birth animations, decoupled from sim
         ├── themes.py        # Theme ABC and implementations (OceanTheme, StubTheme)
         ├── hud.py           # HUD overlay for simulation stats
+        ├── help_overlay.py  # In-app help browser with multi-document tabs, section nav, search
+        ├── help_layout.py   # Layout geometry for help overlay
+        ├── help_navigation.py # Section selection, search, scroll state
+        ├── help_mouse.py    # Mouse hit regions for help overlay
         └── renderer.py      # Renderer — draws state, kin lines, territory shimmer, animations
 ```
 
@@ -128,7 +134,8 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 - Type mismatches are coerced safely; invalid values fall back to defaults and are clamped on save.
 - In normal mode, `S` opens an in-app renderer-owned settings overlay.
 - Overlay behavior: Arrow keys navigate/adjust, Enter applies+saves, Esc/S discards, R twice resets defaults. Mouse support is renderer-owned: click categories, rows, value controls, and footer/action buttons; wheel scrolls the active category list.
-- The settings Guide action opens a renderer-owned in-app help browser above settings. Help content is loaded from `docs/predator_prey_system_guide.md` through `primordial/help/document_model.py`; help rendering/layout/navigation/mouse logic lives in `primordial/rendering/help_overlay.py`, `help_layout.py`, `help_navigation.py`, and `help_mouse.py`.
+- The settings Guide action opens a renderer-owned in-app help browser above settings. The help browser supports multiple documents via a tab strip. Registered help documents are defined in `HELP_DOCUMENTS` in `primordial/help/document_model.py`. Each entry has a `doc_id`, title, description, and `rel_path` (relative to `get_base_path()`). Document tabs are shown above the section nav; click a tab or press Tab/Shift+Tab to switch documents. Help rendering/layout/navigation/mouse logic lives in `primordial/rendering/help_overlay.py`, `help_layout.py`, `help_navigation.py`, and `help_mouse.py`.
+- When adding a new help document, update all of: `HELP_DOCUMENTS` in `primordial/help/document_model.py`, the `__init__.py` exports, `build.py` (PyInstaller `--add-data`), and `primordial.spec` (datas list). Add a test guard that the new document loads and has sections.
 - The tutorial is a peer renderer-owned overlay, not part of settings/help internals. Tutorial content/state/persistence live in `primordial/tutorial/steps.py`, `state.py`, and `persistence.py`; tutorial rendering/layout/mouse hit regions live in `primordial/rendering/tutorial_overlay.py`, `tutorial_layout.py`, and `tutorial_mouse.py`. First-launch completion is stored in `tutorial_state.json` next to `config.toml`; it is not a snapshot or adaptive tuning file.
 - The runtime mouse-activated bottom action bar lives in `primordial/rendering/action_bar.py`. Keep its displayed shortcut metadata aligned with the real handlers in `primordial/input/keyboard.py` and the small `K_p` hold path in `primordial/main.py`.
 - Settings overlay geometry lives in `primordial/rendering/settings_layout.py`; keep future modal/sidebar/list/details/footer sizing there instead of adding one-off rectangle math in the renderer.

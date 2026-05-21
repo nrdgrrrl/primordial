@@ -2,6 +2,35 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — docs/help: expose organism biology in app help browser
+
+Wired the organism biology documentation into the in-app help browser so
+users can discover and read it directly from the app, not just as a markdown
+file in the repo.
+
+Changed:
+
+- Extended the in-app help browser to support multiple documents with a tab
+  strip for document switching (click or Tab/Shift+Tab to cycle).
+- Added a `HelpDocEntry` / `HELP_DOCUMENTS` registry in
+  `primordial/help/document_model.py` that lists available help documents
+  with titles, descriptions, and relative paths.
+- Added `load_help_document_by_id()` to load registered documents by ID.
+- Added `organism_biology` as a registered help document alongside the
+  existing `predator_prey_guide`.
+- Help overlay header now shows the active document title instead of the
+  generic "PRIMORDIAL GUIDE".
+- Cross-references added between the predator-prey guide and organism biology
+  doc (the predator-prey guide now ends with a section pointing to the
+  Organism Biology tab; organism biology doc references the Predator-Prey
+  Guide tab).
+- Renamed the settings overlay "Predator-Prey Guide" action to "Help" with an
+  updated description mentioning both guides.
+- Added `docs/organism_biology.md` to the PyInstaller bundle (build.py and
+  primordial.spec).
+- Added 10 new tests: 7 for the document registry and 3 for document
+  switching in the help overlay.
+
 ## [2026-05-21] — docs: explain organism biology and visual evolution
 
 Added comprehensive documentation explaining what organisms are biologically,

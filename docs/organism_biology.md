@@ -5,7 +5,8 @@ determine both behavior and appearance, what you can learn by looking at them,
 and what you cannot. It is written for a curious user, not for contributors
 reading the code.
 
-For the predator-prey system guide, see
+For the predator-prey system guide, switch to the **Predator-Prey Guide**
+tab in the help browser, or see
 [predator_prey_system_guide.md](predator_prey_system_guide.md).
 For architecture and implementation notes, see
 [architecture_reference.md](architecture_reference.md).

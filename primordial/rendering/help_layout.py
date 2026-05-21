@@ -12,6 +12,8 @@ HEADER_HEIGHT = 82
 FOOTER_HEIGHT = 72
 GUTTER = 18
 SEARCH_HEIGHT = 38
+DOC_TAB_HEIGHT = 36
+DOC_TAB_ROW_GAP = 6
 NAV_ROW_HEIGHT = 50
 
 
@@ -20,6 +22,7 @@ class HelpOverlayLayout:
     panel_rect: pygame.Rect
     header_rect: pygame.Rect
     search_rect: pygame.Rect
+    doc_tabs_rect: pygame.Rect
     nav_rect: pygame.Rect
     content_rect: pygame.Rect
     footer_rect: pygame.Rect
@@ -64,11 +67,17 @@ def calculate_help_layout(
         content_width = available_width - nav_width
 
     search_rect = pygame.Rect(18, body_top, nav_width, SEARCH_HEIGHT)
+    doc_tabs_rect = pygame.Rect(
+        18,
+        search_rect.bottom + DOC_TAB_ROW_GAP,
+        nav_width,
+        DOC_TAB_HEIGHT,
+    )
     nav_rect = pygame.Rect(
         18,
-        search_rect.bottom + 10,
+        doc_tabs_rect.bottom + DOC_TAB_ROW_GAP,
         nav_width,
-        footer_y - search_rect.bottom - 22,
+        footer_y - doc_tabs_rect.bottom - 22,
     )
     content_rect = pygame.Rect(
         nav_rect.right + GUTTER,
@@ -82,6 +91,7 @@ def calculate_help_layout(
         panel_rect=panel_rect,
         header_rect=pygame.Rect(18, 12, panel_width - 36, HEADER_HEIGHT - 18),
         search_rect=search_rect,
+        doc_tabs_rect=doc_tabs_rect,
         nav_rect=nav_rect,
         content_rect=content_rect,
         footer_rect=footer_rect,
