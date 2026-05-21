@@ -475,7 +475,13 @@ def build_action_items() -> list[ActionItem]:
             "Predator-Prey Guide",
             "help",
             "H",
-            "Opens the local predator-prey guide in a browser; fullscreen may be released first.",
+            "Opens the in-app predator-prey guide with section navigation and search.",
+        ),
+        ActionItem(
+            "Start Tutorial",
+            "tutorial",
+            "T",
+            "Starts the guided in-game onboarding tour.",
         ),
         ActionItem(
             "Reset Predator-Prey Dials",

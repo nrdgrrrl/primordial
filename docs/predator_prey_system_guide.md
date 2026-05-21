@@ -260,6 +260,7 @@ Settings overlay controls:
 | `V` | Save snapshot |
 | `L` | Load snapshot |
 | `H` | Open this guide in the in-app help browser |
+| `T` | Start the onboarding tutorial from the Actions category |
 | `R R` | Confirm reset settings defaults |
 | `D D` | Confirm predator-prey dial reset, when available |
 
@@ -267,6 +268,15 @@ The **Guide** action opens this document inside Primordial. The help browser has
 section navigation on the left, readable guide content on the right, search,
 mouse scrolling, and keyboard navigation. Press `Esc` or click **Close** to
 return to settings.
+
+## Tutorial
+
+Primordial includes a guided onboarding tutorial for new users. It runs on a
+fresh normal-mode launch, can be replayed with `python main.py --tutorial`, and
+can be started from the settings **Actions** category. The tutorial explains app
+controls first, then walks through creatures, food, predators and prey, births
+and deaths, lineages, zones, depth bands, collapse, and evolution. It is a quick
+tour; this guide is the deeper reference.
 
 ## Save, Load, and Persistent Tuning State
 

@@ -30,6 +30,10 @@ Several earlier roadmap items are implemented:
   that loads `docs/predator_prey_system_guide.md`, parses Markdown headings
   into sections, supports search, mouse, keyboard, and scrolling, and keeps help
   state separate from settings.
+- **In-game tutorial**: fresh normal-mode launches can open a guided onboarding
+  overlay; `--tutorial` / `--show-tutorial` force replay; tutorial content,
+  state, persistence, layout, mouse, and rendering are split into focused
+  modules separate from settings and help.
 - **Current-state documentation**: `docs/architecture_reference.md` and
   `docs/predator_prey_system_guide.md` were refreshed from code.
 
@@ -69,14 +73,15 @@ Every milestone should preserve these rules:
 | Settings overlay redesign | Complete | Recent refactor split metadata, navigation, layout, mouse hit regions, rendering, cursor behavior, and runtime actions. |
 | Current-state docs refresh | Complete | Architecture and predator-prey guide now reflect current code. |
 | M6 in-app documentation/help browser | Complete | Guide opens the in-app browser; parser/search/navigation/layout/mouse/rendering are split across focused modules. |
+| M7 in-game tutorial/onboarding flow | Complete as first version | First-launch onboarding, CLI replay, settings Actions launch, broad highlights, pause restore, and tutorial sidecar persistence exist. |
 
 ## Immediate Next Milestones
 
 Recommended order:
 
-1. **M7: In-Game Tutorial / Onboarding Flow**
-2. Revisit deeper observability and ecology work.
-3. Then return to deeper strategy diversity where measurements justify it.
+1. **M8: Richer Observability and Evolution Readability**
+2. Expand help/tutorial content where new user-facing behavior needs it.
+3. Then return to deeper ecology/strategy diversity where measurements justify it.
 
 This order is intentional. The refreshed guide now powers in-app help. The
 tutorial should use that knowledge and the help browser as support rather than
@@ -176,6 +181,8 @@ documentation and makes it usable while the simulation is running.
 
 ## M7: In-Game Tutorial / Onboarding Flow
 
+Status: **Complete as first version.**
+
 ### Purpose
 
 Give new users a guided first-run path that explains how to use Primordial and
@@ -183,9 +190,9 @@ what they are seeing without requiring external reading first.
 
 ### Scope
 
-- Run tutorial on first launch, using a stored user-state/config flag.
+- Run tutorial on first launch, using a stored user-state sidecar.
 - Add a command-line option to force the tutorial for developers/testers.
-- Eventually make it launchable from help/settings/actions.
+- Make it launchable from settings/actions.
 - Launch the simulation and control tutorial progression through overlay steps.
 - Support Next / Back with mouse and keyboard.
 - Pause or slow the simulation when a step needs a stable scene.
@@ -224,16 +231,16 @@ Simulation basics:
 
 ### Likely Files / Modules
 
-- New tutorial data/model module, for example
+- Tutorial data/model module:
   `primordial/tutorial/steps.py`.
-- New tutorial runtime state module, for example
-  `primordial/tutorial/state.py`.
-- New rendering modules under `primordial/rendering/`, for example:
+- Tutorial runtime state/persistence modules:
+  `primordial/tutorial/state.py` and `primordial/tutorial/persistence.py`.
+- Rendering modules under `primordial/rendering/`:
   - `tutorial_overlay.py`
   - `tutorial_layout.py`
   - `tutorial_mouse.py`
-- `primordial/utils/cli.py` for the force-tutorial flag.
-- User-state/config support only if needed and narrowly scoped.
+- `primordial/utils/cli.py` for `--tutorial` / `--show-tutorial`.
+- `tutorial_state.json` sidecar next to `config.toml`.
 - `primordial/main.py` only for high-level routing and lifecycle hooks.
 
 ### Architecture Notes
@@ -279,6 +286,12 @@ Simulation basics:
 - Do not teach every setting.
 - Do not make tutorial text the only source of help; keep the guide as the
   deeper reference.
+
+### Remaining Follow-Up
+
+- Highlights are broad conceptual regions, not tracked moving world objects.
+- The tutorial is linear and does not yet open linked help sections.
+- Future content changes should remain declarative and tested.
 
 ### Risks
 
@@ -368,5 +381,5 @@ Each spec should include:
 The near-term program is not about adding more simulation machinery. It is about
 making the existing world understandable from inside the app.
 
-Build the tutorial next. Then return to deeper observability and ecology with
+Build richer observability next. Then return to deeper ecology with
 better user-facing context already in place.

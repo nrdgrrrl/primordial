@@ -42,6 +42,9 @@ class FakeSettingsOverlay:
     def set_snapshot_status(self, message: str, *, is_error: bool = False) -> None:
         self.statuses.append((message, is_error))
 
+    def close(self) -> None:
+        self.fade_dir = -1
+
 
 class FakeRenderer:
     def __init__(
@@ -61,7 +64,11 @@ class FakeRenderer:
         self.reset_runtime_state = mock.Mock()
         self.resize = mock.Mock()
         self.help_overlay = SimpleNamespace(status_message="")
+        self.tutorial_overlay = SimpleNamespace(
+            wants_simulation_paused=mock.Mock(return_value=True),
+        )
         self.open_help_overlay = mock.Mock()
+        self.open_tutorial_overlay = mock.Mock()
 
     def set_theme(self, theme: str) -> None:
         self.theme_changes.append(theme)
@@ -320,6 +327,31 @@ class SettingsActionTests(unittest.TestCase):
             renderer.settings_overlay.statuses[-1],
             ("Opened in-app predator-prey guide.", False),
         )
+
+    def test_tutorial_action_opens_tutorial_and_pauses_simulation(self) -> None:
+        settings = _settings(fullscreen=False)
+        simulation = FakeSimulation()
+        simulation.paused = False
+        renderer = FakeRenderer("tutorial")
+        runtime_loop = create_fixed_step_loop_state(settings)
+        runtime_loop.accumulator_seconds = 2.0
+        context = _context(
+            action="tutorial",
+            settings=settings,
+            simulation=simulation,
+            renderer=renderer,
+            runtime_loop=runtime_loop,
+        )
+
+        result = handle_settings_overlay_event(object(), context)
+
+        self.assertIs(result.renderer, renderer)
+        renderer.open_tutorial_overlay.assert_called_once_with(
+            forced=True,
+            previous_paused=False,
+        )
+        self.assertTrue(simulation.paused)
+        self.assertEqual(runtime_loop.accumulator_seconds, 0.0)
 
     def test_reset_predator_prey_dials_preserves_existing_branch_behavior(self) -> None:
         settings = _settings(sim_mode="predator_prey")

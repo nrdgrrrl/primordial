@@ -16,6 +16,7 @@ from .hud import HUD
 from .inspect_mode import InspectMode
 from .settings_overlay import SettingsOverlay
 from .themes import AmbientParticle, OceanTheme, Theme, get_theme
+from .tutorial_overlay import TutorialOverlay
 
 # Zone type → background RGB (same palette as zones.py, duplicated here
 # so renderer has no import from simulation/)
@@ -240,6 +241,7 @@ class Renderer:
 
         self.settings_overlay = SettingsOverlay(settings)
         self.help_overlay = HelpOverlay()
+        self.tutorial_overlay = TutorialOverlay()
 
     # ------------------------------------------------------------------
     # Public API
@@ -493,6 +495,12 @@ class Renderer:
             self.help_overlay.draw(target)
         timings["help_ms"] = (time.perf_counter() - t0) * 1000.0
 
+        t0 = time.perf_counter()
+        if self.tutorial_overlay.visible or self.tutorial_overlay.fade > 0:
+            self.tutorial_overlay.update()
+            self.tutorial_overlay.draw(target)
+        timings["tutorial_ms"] = (time.perf_counter() - t0) * 1000.0
+
         timings["render_core_ms"] = (time.perf_counter() - frame_t0) * 1000.0
         if self.debug_enabled:
             self._debug_timing = timings
@@ -530,6 +538,22 @@ class Renderer:
     def close_help_overlay(self) -> None:
         """Close the in-app documentation browser."""
         self.help_overlay.close()
+
+    def open_tutorial_overlay(
+        self,
+        *,
+        forced: bool = False,
+        previous_paused: bool | None = None,
+    ) -> None:
+        """Open the in-game onboarding tutorial above other runtime overlays."""
+        self.tutorial_overlay.open(
+            forced=forced,
+            previous_paused=previous_paused,
+        )
+
+    def close_tutorial_overlay(self) -> str:
+        """Close the in-game onboarding tutorial."""
+        return self.tutorial_overlay.close()
 
     def set_predator_highlight(self, active: bool) -> None:
         """Toggle the temporary predator locator overlay."""

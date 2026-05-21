@@ -126,8 +126,9 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 - In normal mode, `S` opens an in-app renderer-owned settings overlay.
 - Overlay behavior: Arrow keys navigate/adjust, Enter applies+saves, Esc/S discards, R twice resets defaults. Mouse support is renderer-owned: click categories, rows, value controls, and footer/action buttons; wheel scrolls the active category list.
 - The settings Guide action opens a renderer-owned in-app help browser above settings. Help content is loaded from `docs/predator_prey_system_guide.md` through `primordial/help/document_model.py`; help rendering/layout/navigation/mouse logic lives in `primordial/rendering/help_overlay.py`, `help_layout.py`, `help_navigation.py`, and `help_mouse.py`.
+- The tutorial is a peer renderer-owned overlay, not part of settings/help internals. Tutorial content/state/persistence live in `primordial/tutorial/steps.py`, `state.py`, and `persistence.py`; tutorial rendering/layout/mouse hit regions live in `primordial/rendering/tutorial_overlay.py`, `tutorial_layout.py`, and `tutorial_mouse.py`. First-launch completion is stored in `tutorial_state.json` next to `config.toml`; it is not a snapshot or adaptive tuning file.
 - Settings overlay geometry lives in `primordial/rendering/settings_layout.py`; keep future modal/sidebar/list/details/footer sizing there instead of adding one-off rectangle math in the renderer.
-- Runtime cursor behavior lives in `primordial/display/cursor.py`: normal simulation playback hides the OS cursor, interactive UI states such as settings/help/inspect show it, and clean shutdown restores it.
+- Runtime cursor behavior lives in `primordial/display/cursor.py`: normal simulation playback hides the OS cursor, interactive UI states such as tutorial/settings/help/inspect show it, and clean shutdown restores it.
 - Settings that require reset are marked in the overlay; simulation reset is only triggered by explicit `R`.
 
 When adding a new setting, update all of:

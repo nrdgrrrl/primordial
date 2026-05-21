@@ -91,6 +91,7 @@ from .hud import HUD
 from .inspect_mode import InspectMode
 from .renderer import _ZONE_BG_COLORS
 from .settings_overlay import SettingsOverlay
+from .tutorial_overlay import TutorialOverlay
 from .snapshot import (
     GlyphSprite,
     KinLineStyle,
@@ -407,6 +408,7 @@ class PredatorPreyGpuRenderer:
         self.hud.visible = settings.show_hud
         self.settings_overlay = SettingsOverlay(settings)
         self.help_overlay = HelpOverlay()
+        self.tutorial_overlay = TutorialOverlay()
         self._ui_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._ui_texture: int | None = None
         self._overlay_font = pygame.font.Font(None, 72)
@@ -605,6 +607,20 @@ class PredatorPreyGpuRenderer:
 
     def close_help_overlay(self) -> None:
         self.help_overlay.close()
+
+    def open_tutorial_overlay(
+        self,
+        *,
+        forced: bool = False,
+        previous_paused: bool | None = None,
+    ) -> None:
+        self.tutorial_overlay.open(
+            forced=forced,
+            previous_paused=previous_paused,
+        )
+
+    def close_tutorial_overlay(self) -> str:
+        return self.tutorial_overlay.close()
 
     def set_predator_highlight(self, active: bool) -> None:
         self.show_predator_highlight = active
@@ -1007,6 +1023,8 @@ class PredatorPreyGpuRenderer:
             or self.settings_overlay.fade > 0
             or self.help_overlay.visible
             or self.help_overlay.fade > 0
+            or self.tutorial_overlay.visible
+            or self.tutorial_overlay.fade > 0
             or simulation.predator_prey_game_over_active
             or self.inspect_mode.enabled
         )
@@ -1024,6 +1042,9 @@ class PredatorPreyGpuRenderer:
         if self.help_overlay.visible or self.help_overlay.fade > 0:
             self.help_overlay.update()
             self.help_overlay.draw(self._ui_surface)
+        if self.tutorial_overlay.visible or self.tutorial_overlay.fade > 0:
+            self.tutorial_overlay.update()
+            self.tutorial_overlay.draw(self._ui_surface)
         self._draw_surface_texture(self._ui_surface)
 
     def _draw_inspect_overlay(self, simulation) -> None:

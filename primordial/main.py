@@ -60,12 +60,17 @@ from .runtime.settings_actions import (
     handle_settings_overlay_event,
 )
 from .settings import Settings
+from .config.config import get_config_path
 from .simulation import (
     Simulation,
     SnapshotError,
     inspect_snapshot_dimensions,
     load_snapshot,
     save_snapshot,
+)
+from .tutorial import (
+    save_tutorial_user_state,
+    should_auto_start_tutorial,
 )
 from .utils.cli import RuntimeArgs
 from .utils.screensaver import ScreensaverArgs
@@ -98,6 +103,8 @@ def main(
 
     # Initialize pygame
     pygame.init()
+
+    config_existed_before_startup = get_config_path().exists()
 
     # Load settings and apply runtime overrides.
     settings = Settings()
@@ -174,6 +181,47 @@ def main(
     )
     renderer.settings_overlay.set_snapshot_path(str(active_snapshot_path))
 
+    def _apply_tutorial_pause_policy() -> None:
+        if not renderer.tutorial_overlay.visible:
+            return
+        previous_paused = renderer.tutorial_overlay.restore_pause_value()
+        if renderer.tutorial_overlay.wants_simulation_paused():
+            simulation.paused = True
+        else:
+            simulation.paused = bool(previous_paused) if previous_paused is not None else False
+        runtime_loop.reset_timing_debt()
+
+    def _open_tutorial(*, forced: bool = False) -> None:
+        renderer.close_help_overlay()
+        renderer.settings_overlay.close()
+        renderer.open_tutorial_overlay(
+            forced=forced,
+            previous_paused=simulation.paused,
+        )
+        _apply_tutorial_pause_policy()
+        show_interactive_cursor()
+
+    def _finish_tutorial_action(action: str | None) -> None:
+        if action not in {"close", "skip", "finish"}:
+            return
+        save_tutorial_user_state(
+            settings,
+            completed=action == "finish",
+            skipped=action in {"close", "skip"},
+        )
+        restore_paused = renderer.tutorial_overlay.restore_pause_value()
+        if restore_paused is not None:
+            simulation.paused = restore_paused
+        runtime_loop.reset_timing_debt()
+        if (
+            renderer.help_overlay.visible
+            or renderer.settings_overlay.visible
+            or renderer.inspect_mode.enabled
+        ):
+            show_interactive_cursor()
+        else:
+            hide_runtime_cursor()
+
     # Clock for FPS limiting
     clock = pygame.time.Clock()
     runtime_loop = create_fixed_step_loop_state(settings)
@@ -194,6 +242,18 @@ def main(
             pygame.quit()
             logger.info("Profile run complete: %s.[pstats|txt|timing.json]", profile_base)
             sys.exit(0)
+
+    if (
+        scr_args.mode == "normal"
+        and (
+            runtime_args.tutorial
+            or should_auto_start_tutorial(
+                settings,
+                config_existed_before_startup=config_existed_before_startup,
+            )
+        )
+    ):
+        _open_tutorial(forced=runtime_args.tutorial)
 
     # Grace period for screensaver mode: ignore all input for 2 seconds after
     # launch to absorb any spurious mouse events some systems emit at startup.
@@ -240,6 +300,18 @@ def main(
                 # Preview pane: no input handling except QUIT (already handled above).
                 pass
 
+            elif renderer.tutorial_overlay.visible and event.type in (
+                pygame.KEYDOWN,
+                pygame.MOUSEBUTTONDOWN,
+                pygame.MOUSEMOTION,
+                pygame.MOUSEWHEEL,
+            ):
+                tutorial_action = renderer.tutorial_overlay.handle_event(event)
+                _apply_tutorial_pause_policy()
+                _finish_tutorial_action(tutorial_action)
+                if tutorial_action not in {"close", "skip", "finish"}:
+                    show_interactive_cursor()
+
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_p:
                     renderer.set_predator_highlight(False)
@@ -284,9 +356,17 @@ def main(
                 renderer = action_result.renderer
                 active_snapshot_path = action_result.active_snapshot_path
                 _prev_mode = action_result.previous_mode
+                if renderer.tutorial_overlay.visible:
+                    _apply_tutorial_pause_policy()
+                    show_interactive_cursor()
                 if action_result.begin_mode_transition:
                     _begin_mode_transition()
-                if renderer.settings_overlay.fade_dir < 0 and not renderer.inspect_mode.enabled:
+                if (
+                    renderer.settings_overlay.fade_dir < 0
+                    and not renderer.inspect_mode.enabled
+                    and not renderer.help_overlay.visible
+                    and not renderer.tutorial_overlay.visible
+                ):
                     hide_runtime_cursor()
                 elif renderer.settings_overlay.visible:
                     show_interactive_cursor()

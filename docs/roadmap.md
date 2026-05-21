@@ -36,6 +36,8 @@ includes:
 - an in-app documentation browser that loads the predator-prey guide, parses it
   into sections, supports search, scrolling, mouse, and keyboard input, and
   remains separate from settings overlay internals;
+- an in-game tutorial that auto-runs for fresh normal-mode installs, can be
+  forced with `--tutorial`, and remains separate from settings/help internals;
 - refreshed current-state architecture and predator-prey user documentation.
 
 This foundation enables the next phase: making the existing system easier for a
@@ -54,32 +56,11 @@ normal user to understand.
 | Settings overlay polish | Complete for current needs. Future settings work should extend the refactored modules rather than rewrite the overlay. |
 | Current-state docs refresh | Complete. The human guide is now source material for in-app help. |
 | In-app documentation / help browser | Complete as first version. Future help work should improve content breadth and mode-specific sections, not rebuild the browser from scratch. |
+| In-game tutorial / onboarding flow | Complete as first version. Future tutorial work should refine wording, highlights, and help links without replacing the modular overlay. |
 
 ## Near-Term Roadmap
 
-### 1. In-Game Tutorial / Onboarding Flow
-
-Add a guided tutorial that introduces Primordial from inside the running app.
-
-The tutorial should run on first launch, be forceable from the command line for
-developers/testers, and eventually be launchable from in-app help/settings.
-
-It should explain:
-
-- what Primordial is;
-- basic controls;
-- settings and help access;
-- pause, fullscreen/windowed, HUD, and reset behavior;
-- mouse and keyboard basics;
-- predators, prey, food, glyphs, trails, births, deaths, lineages, zones, depth
-  bands, food cycles, game over, adaptive tuning, and evolution at a user level;
-- what is currently hard to see or hidden.
-
-The first version should be linear and data-driven. Tutorial steps should define
-title, text, highlight target, paused/running behavior, and optional action
-requirements. Do not build complex missions or scoring in the first version.
-
-### 2. Help Content Breadth and Mode Sections
+### 1. Help Content Breadth and Mode Sections
 
 The in-app help browser currently uses the predator-prey guide as its first
 content source. Future help work should extend content carefully:
@@ -88,6 +69,19 @@ content source. Future help work should extend content carefully:
 - keep docs content in Markdown or structured content files;
 - preserve parser/rendering separation;
 - avoid hardcoding a second copy of the guide in Python.
+
+### 2. Tutorial Refinement
+
+The tutorial is now implemented as a first version. Future tutorial work should
+stay incremental:
+
+- refine wording from user testing;
+- add better mode-specific callouts;
+- improve highlight regions where the renderer exposes reliable rectangles;
+- optionally link steps to relevant help sections.
+
+Do not turn the tutorial into a mission/scoring framework unless that becomes a
+separate milestone.
 
 ### 3. Richer Observability and Evolution Readability
 
@@ -207,9 +201,9 @@ clear state boundaries.
 
 ## Current Priority Order
 
-1. Build a simple first-launch tutorial/onboarding flow.
-2. Add focused observability that makes hidden evolution/ecology legible.
-3. Extend help content breadth and mode-specific documentation where useful.
+1. Expand help content breadth and mode-specific documentation where useful.
+2. Refine tutorial content/highlights from actual use.
+3. Add focused observability that makes hidden evolution/ecology legible.
 4. Revisit deeper ecology and strategy diversity.
 5. Consider richer analysis/replay and larger architecture changes only when
    measurement and user needs justify them.

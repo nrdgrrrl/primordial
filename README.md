@@ -34,6 +34,9 @@ python main.py --mode boids --theme ocean
 # Enable debug overlays and verbose console logging
 python main.py --debug
 
+# Replay the in-game onboarding tutorial
+python main.py --tutorial
+
 # Run a 60-second cProfile capture and exit
 python main.py --profile
 
@@ -63,6 +66,7 @@ The screensaver will launch in fullscreen mode by default.
 | `--load <path>` | Load a saved simulation world snapshot instead of creating a new world |
 | `--save <path>` | Save the current world snapshot to the given path on exit |
 | `--log=csv` | Append predator-prey run and dial-reset telemetry rows to `run_logs/predator_prey_runs.csv` |
+| `--tutorial`, `--show-tutorial` | Open the in-game onboarding tutorial for this run without changing seen state |
 
 ### Make Targets
 
@@ -84,6 +88,7 @@ make clean     # remove build/dist and __pycache__ dirs
 | `F` | Toggle fullscreen/windowed mode |
 | `R` | Reset simulation (new population) |
 | `S` | Open in-app settings overlay (disabled in /s screensaver mode) |
+| `T` | In the settings overlay Actions category, start the tutorial |
 | `D` | While in Inspect Mode, toggle the creature card between compact/detail; in the settings overlay, reset predator-prey adaptive dials to baseline and clear the max tick record |
 | Hold `P` | Add a stronger locator highlight to predators while held in `predator_prey` mode |
 | `I` | Toggle Inspect Mode (read-only creature observability; see below) |
@@ -101,6 +106,16 @@ Press **I** to toggle Inspect Mode, a read-only observability overlay that does 
 - **Mouse click**: selects the nearest creature and displays a polished top-right microscope card with the creature title, a short behavior summary, state, focus, and temperament.
 - **Detail toggle** (press **D**): switches the inspect card between compact and detailed layouts. Detail mode adds raw genome values, exact age, position, and predator-only satiety / recent prey energy.
 - Exiting Inspect Mode (press **I** again) restores the prior paused/running state.
+
+### Tutorial
+
+On a fresh normal-mode launch, Primordial opens a short in-game tutorial.
+Existing installs are not forced into it after upgrades. The tutorial explains
+app controls first, then the main simulation concepts, with broad highlights and
+mouse/keyboard Next, Back, Skip, and Finish controls. It pauses stable
+explanation steps, allows motion for selected visual steps, and restores the
+prior pause state when closed. Replay it with `python main.py --tutorial` or
+from the settings Actions category.
 
 ## Performance
 
@@ -308,6 +323,8 @@ Configuration is TOML-backed and persistent across app updates.
   `docs/predator_prey_system_guide.md`, supports section navigation, search,
   scrolling, mouse input, and keyboard input, and closes with `Esc` or the
   Close button.
+- Click **Start Tutorial** in the Actions category, or press **`T`** there, to
+  replay the guided onboarding overlay.
 - Canonical repo-tracked defaults live in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml).
 - The runtime user override file is editable by hand as `config.toml`.
 - User config locations:
@@ -370,6 +387,9 @@ In-app help content is loaded from docs files through
 [`primordial/help/document_model.py`](/home/victoria/projects/primordial/primordial/help/document_model.py).
 The help browser lives in dedicated rendering modules:
 `help_overlay.py`, `help_layout.py`, `help_navigation.py`, and `help_mouse.py`.
+The tutorial similarly lives outside settings/help internals:
+`primordial/tutorial/steps.py`, `state.py`, `persistence.py`, plus
+`rendering/tutorial_overlay.py`, `tutorial_layout.py`, and `tutorial_mouse.py`.
 The overlay can edit selected mode-scoped values where a field explicitly points
 at a `[modes.<name>]` key; other mode-table tuning remains TOML-only.
 

@@ -111,6 +111,9 @@ class SettingsOverlay:
         if event.key == pygame.K_h:
             self._clear_confirmations()
             return "help"
+        if event.key == pygame.K_t:
+            self._clear_confirmations()
+            return "tutorial"
         if event.key == pygame.K_d and self.settings.sim_mode == "predator_prey":
             self.confirm_reset = False
             if self.confirm_reset_predator_prey_dials:
@@ -209,6 +212,9 @@ class SettingsOverlay:
         if action == "help":
             self._clear_confirmations()
             return "help"
+        if action == "tutorial":
+            self._clear_confirmations()
+            return "tutorial"
         if action == "reset":
             return self._activate_reset_defaults()
         if action == "reset_predator_prey_dials":

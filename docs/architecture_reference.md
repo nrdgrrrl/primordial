@@ -31,6 +31,8 @@ Runtime package:
 - `primordial/display/` contains display-mode, coordinate, and cursor helpers.
 - `primordial/help/` contains the Markdown-backed help document model, parser,
   bundled guide path resolution, and simple section search.
+- `primordial/tutorial/` contains declarative onboarding steps, tutorial
+  runtime state, and first-launch tutorial user-state persistence.
 - `primordial/simulation/` owns all simulation state and rules.
 - `primordial/rendering/` owns pygame/GPU drawing, HUDs, inspect mode, glyphs,
   settings/help UI rendering, and renderer-side visual state.
@@ -49,6 +51,9 @@ Runtime package:
 4. Route events:
    - screensaver mode quits on real user input after a short grace period;
    - preview mode ignores input except quit;
+   - tutorial events are handled before help, settings, inspect, and normal
+     simulation controls;
+   - help browser events are handled before settings events;
    - settings overlay events are passed to
      `runtime/settings_actions.py`;
    - inspect clicks use display window-to-world conversion;
@@ -172,6 +177,31 @@ The old external browser helper
 `persistence/runtime_state.py::_open_predator_prey_help` still exists as tested
 fallback infrastructure, but it is no longer the primary Guide action path.
 
+## Tutorial Overlay
+
+The tutorial is a renderer-owned peer to settings and help, not part of either
+overlay:
+
+- `tutorial/steps.py`: declarative linear content with phase, title, body,
+  highlight target, and per-step pause preference.
+- `tutorial/state.py`: current step, active/completed/skipped state, hover
+  action, text scroll bounds, and previous pause state.
+- `tutorial/persistence.py`: `tutorial_state.json` sidecar next to
+  `config.toml`; stores versioned seen/skipped state and is not part of
+  snapshots or predator-prey adaptive tuning.
+- `rendering/tutorial_layout.py`: modal, button, and highlight rectangles.
+- `rendering/tutorial_mouse.py`: hit-region dataclass.
+- `rendering/tutorial_overlay.py`: drawing, keyboard/mouse event handling, text
+  wrapping, and button registration.
+
+Fresh normal-mode launches auto-start the tutorial only when `config.toml` did
+not exist before startup and the tutorial sidecar has not marked the current
+version seen/skipped. `--tutorial` and `--show-tutorial` force it for the current
+run. Finish and Skip/Escape both mark the current tutorial version handled.
+
+Tutorial steps may pause the simulation or allow motion. The main loop applies
+that preference while active and restores the previous pause state on exit.
+
 ## Configuration
 
 `Config` is exposed as `Settings` through `primordial/settings.py` for backward
@@ -223,7 +253,7 @@ The overlay supports keyboard and mouse:
 - `Tab` / `Shift+Tab` change categories.
 - double `R` confirms settings reset.
 - action shortcuts include `V` save snapshot, `L` load snapshot, `H` in-app
-  guide, and double `D` reset predator-prey dials when available.
+  guide, `T` tutorial, and double `D` reset predator-prey dials when available.
 - mouse clicks switch categories, select rows, use value steppers, press footer
   buttons, and run action buttons; mouse wheel scrolls the active list.
 
@@ -238,7 +268,7 @@ Runtime cursor behavior lives in `primordial/display/cursor.py`:
 - `hide_runtime_cursor()` hides the OS cursor during normal simulation playback,
   screensaver mode, preview mode, display recreates, and app startup.
 - `show_interactive_cursor()` shows it while interactive UI is open, including
-  settings, the help browser, and inspect mode.
+  tutorial, settings, the help browser, and inspect mode.
 - `restore_system_cursor()` restores visibility on clean shutdown.
 
 Main-loop and input helpers coordinate these calls. Do not scatter raw
@@ -292,6 +322,7 @@ Useful commands:
 ```bash
 .venv/bin/python -m pytest -q
 .venv/bin/python -m pytest tests/test_help_browser.py -q
+.venv/bin/python -m pytest tests/test_tutorial.py -q
 .venv/bin/python -m pytest tests/test_settings_overlay.py -q
 .venv/bin/python -m pytest tests/test_settings_actions.py tests/test_fixed_step_loop.py -q
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout 5 .venv/bin/python main.py --mode energy
@@ -311,6 +342,8 @@ when possible so hit rectangles, footer layout, and cursor behavior are checked.
 - Use `settings_metadata.py` for user-facing settings labels/descriptions and
   `settings_layout.py` for overlay geometry.
 - Do not bypass `settings_navigation.py` when changing category/row behavior.
+- Keep tutorial content/state/persistence in `primordial/tutorial/`; do not
+  fold it into settings/help overlays or simulation state.
 - Keep `runtime/settings_actions.py` as the home for applying overlay actions to
   live simulation/display/runtime objects.
 - Preserve keyboard support when adding mouse features.

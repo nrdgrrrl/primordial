@@ -92,6 +92,9 @@ def handle_settings_overlay_event(
     if action == "help":
         return _handle_help(context)
 
+    if action == "tutorial":
+        return _handle_tutorial(context)
+
     if action == "reset_predator_prey_dials":
         return _handle_reset_predator_prey_dials(context)
 
@@ -267,6 +270,24 @@ def _handle_help(context: SettingsActionContext) -> SettingsActionResult:
         status_message,
         is_error=bool(context.renderer.help_overlay.status_message),
     )
+    context.runtime_loop.reset_timing_debt()
+    return SettingsActionResult(
+        simulation=context.simulation,
+        renderer=context.renderer,
+        active_snapshot_path=context.active_snapshot_path,
+        previous_mode=context.previous_mode,
+    )
+
+
+def _handle_tutorial(context: SettingsActionContext) -> SettingsActionResult:
+    previous_paused = context.simulation.paused
+    context.renderer.open_tutorial_overlay(
+        forced=True,
+        previous_paused=previous_paused,
+    )
+    context.simulation.paused = context.renderer.tutorial_overlay.wants_simulation_paused()
+    context.renderer.settings_overlay.close()
+    context.renderer.settings_overlay.set_snapshot_status("Started in-game tutorial.")
     context.runtime_loop.reset_timing_debt()
     return SettingsActionResult(
         simulation=context.simulation,
