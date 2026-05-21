@@ -27,6 +27,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame
 
+from .display.cursor import hide_runtime_cursor
 from .graphics_probe import _build_edge_counts, _hash_zone_state
 from .display.mode import (
     DEFAULT_WINDOWED_SIZE,
@@ -502,7 +503,7 @@ def _run_single_graphical_benchmark(
 
         world_width, world_height, screen = _create_display_for_run(settings)
         pygame.display.set_caption(f"Primordial Benchmark: {spec.run_id}")
-        pygame.mouse.set_visible(not settings.fullscreen)
+        hide_runtime_cursor()
 
         if spec.mode == "predator_prey":
             simulation = Simulation(world_width, world_height, settings, seed=run_seed)

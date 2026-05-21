@@ -32,6 +32,9 @@ from .display import (
     DEFAULT_WINDOWED_SIZE,
     _get_fullscreen_resolution,
     _log_inspect_click_diagnostics,
+    hide_runtime_cursor,
+    restore_system_cursor,
+    show_interactive_cursor,
     window_to_world,
 )
 from .input import handle_keydown
@@ -108,13 +111,13 @@ def main(
         width, height = _get_fullscreen_resolution()
         flags = display_flags_for_settings(settings, pygame.FULLSCREEN | pygame.SCALED)
         screen = pygame.display.set_mode((width, height), flags)
-        pygame.mouse.set_visible(False)
+        hide_runtime_cursor()
     elif scr_args.mode == "preview":
         # SDL_WINDOWID was already set by root main.py; just create a surface
         # that fits into the preview pane (typically ~152×112 px).
         width, height = 152, 112
         screen = pygame.display.set_mode((width, height))
-        pygame.mouse.set_visible(False)
+        hide_runtime_cursor()
     else:
         if settings.fullscreen:
             width, height = _get_fullscreen_resolution()
@@ -129,7 +132,7 @@ def main(
                 (width, height),
                 display_flags_for_settings(settings),
             )
-        pygame.mouse.set_visible(False)
+        hide_runtime_cursor()
 
     pygame.display.set_caption("Primordial")
 
@@ -241,6 +244,37 @@ def main(
                 if event.key == pygame.K_p:
                     renderer.set_predator_highlight(False)
 
+            elif renderer.settings_overlay.visible and event.type in (
+                pygame.KEYDOWN,
+                pygame.MOUSEBUTTONDOWN,
+                pygame.MOUSEMOTION,
+                pygame.MOUSEWHEEL,
+            ):
+                action_result = handle_settings_overlay_event(
+                    event,
+                    SettingsActionContext(
+                        settings,
+                        simulation,
+                        renderer,
+                        runtime_loop,
+                        active_snapshot_path,
+                        _prev_mode,
+                        runtime_args.debug,
+                        csv_run_logger=csv_run_logger,
+                        milestone_logger=milestone_logger,
+                    ),
+                )
+                simulation = action_result.simulation
+                renderer = action_result.renderer
+                active_snapshot_path = action_result.active_snapshot_path
+                _prev_mode = action_result.previous_mode
+                if action_result.begin_mode_transition:
+                    _begin_mode_transition()
+                if renderer.settings_overlay.fade_dir < 0 and not renderer.inspect_mode.enabled:
+                    hide_runtime_cursor()
+                elif renderer.settings_overlay.visible:
+                    show_interactive_cursor()
+
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
                     world_x, world_y = window_to_world(event.pos[0], event.pos[1], simulation)
@@ -257,44 +291,23 @@ def main(
                         )
 
             elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_p:
+                    renderer.set_predator_highlight(True)
+                running = handle_keydown(
+                    event,
+                    simulation,
+                    renderer,
+                    settings,
+                    renderer.screen,
+                    scr_args.mode,
+                    runtime_loop,
+                    inspect_mode=renderer.inspect_mode,
+                )
                 if renderer.settings_overlay.visible:
-                    action_result = handle_settings_overlay_event(
-                        event,
-                        SettingsActionContext(
-                            settings,
-                            simulation,
-                            renderer,
-                            runtime_loop,
-                            active_snapshot_path,
-                            _prev_mode,
-                            runtime_args.debug,
-                            csv_run_logger=csv_run_logger,
-                            milestone_logger=milestone_logger,
-                        ),
-                    )
-                    simulation = action_result.simulation
-                    renderer = action_result.renderer
-                    active_snapshot_path = action_result.active_snapshot_path
-                    _prev_mode = action_result.previous_mode
-                    if action_result.begin_mode_transition:
-                        _begin_mode_transition()
-                else:
-                    if event.key == pygame.K_p:
-                        renderer.set_predator_highlight(True)
-                    running = handle_keydown(
-                        event,
-                        simulation,
-                        renderer,
-                        settings,
-                        renderer.screen,
-                        scr_args.mode,
-                        runtime_loop,
-                        inspect_mode=renderer.inspect_mode,
-                    )
-                    if renderer.settings_overlay.visible:
-                        _prev_mode = settings.sim_mode
-                        simulation.paused = True
-                        runtime_loop.reset_timing_debt()
+                    _prev_mode = settings.sim_mode
+                    simulation.paused = True
+                    runtime_loop.reset_timing_debt()
+                    show_interactive_cursor()
         event_ms = (time.perf_counter() - event_start) * 1000.0
 
         # Mode transition: fade out → reset sim → fade in
@@ -406,6 +419,7 @@ def main(
     if milestone_logger is not None:
         milestone_logger.close()
 
+    restore_system_cursor()
     pygame.quit()
     sys.exit(0)
 

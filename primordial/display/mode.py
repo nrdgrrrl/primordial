@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pygame
 
+from primordial.display.cursor import hide_runtime_cursor
 from primordial.rendering import (
     Renderer,
     create_renderer,
@@ -132,7 +133,7 @@ def _recreate_renderer_for_backend(
         display_size,
         display_flags_for_settings(settings, base_flags),
     )
-    pygame.mouse.set_visible(not settings.fullscreen)
+    hide_runtime_cursor()
     simulation.resize(*display_size)
     renderer = create_renderer(screen, settings, debug=debug)
     renderer.resize(*display_size, screen=screen)
@@ -157,7 +158,7 @@ def _apply_display_mode(
 
     flags = display_flags_for_settings(settings, base_flags)
     screen = pygame.display.set_mode((width, height), flags)
-    pygame.mouse.set_visible(not settings.fullscreen)
+    hide_runtime_cursor()
     simulation.resize(width, height)
     renderer.resize(width, height, screen=screen)
     renderer.reset_runtime_state()

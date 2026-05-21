@@ -13,6 +13,7 @@ from primordial.display import (
     _apply_display_mode,
     _desired_renderer_backend_name,
     _recreate_renderer_for_backend,
+    hide_runtime_cursor,
 )
 from primordial.persistence.runtime_state import (
     _open_predator_prey_help,
@@ -61,7 +62,7 @@ def handle_settings_overlay_event(
     event: pygame.event.Event,
     context: SettingsActionContext,
 ) -> SettingsActionResult:
-    """Handle one key event while the settings overlay is visible."""
+    """Handle one keyboard or mouse event while the settings overlay is visible."""
     action = context.renderer.settings_overlay.handle_event(event)
     result = SettingsActionResult(
         simulation=context.simulation,
@@ -322,7 +323,7 @@ def _swap_loaded_simulation(
         base_flags = pygame.FULLSCREEN | pygame.SCALED if settings.fullscreen else 0
         flags = display_flags_for_settings(settings, base_flags)
         screen = pygame.display.set_mode((simulation.width, simulation.height), flags)
-        pygame.mouse.set_visible(not settings.fullscreen)
+        hide_runtime_cursor()
         renderer.resize(simulation.width, simulation.height, screen=screen)
     renderer.set_mode(settings.sim_mode)
     renderer.reset_runtime_state()

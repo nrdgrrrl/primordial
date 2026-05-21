@@ -17,6 +17,7 @@ from .display.mode import (
     _apply_display_mode,
     _get_fullscreen_resolution,
 )
+from .display.cursor import hide_runtime_cursor, show_interactive_cursor
 from .rendering import (
     Renderer,
     create_renderer,
@@ -77,7 +78,7 @@ def run_display_toggle_probe(
 
         screen = pygame.display.set_mode((world_width, world_height), flags)
         pygame.display.set_caption("Primordial Graphics Toggle Probe")
-        pygame.mouse.set_visible(not settings.fullscreen)
+        hide_runtime_cursor()
 
         simulation = Simulation(world_width, world_height, settings)
         renderer = create_renderer(screen, settings, debug=True)
@@ -114,6 +115,7 @@ def run_display_toggle_probe(
         if open_settings_overlay:
             renderer.settings_overlay.open()
             renderer.settings_overlay.pending["fullscreen"] = settings.fullscreen
+            show_interactive_cursor()
         runtime_loop.reset_timing_debt()
 
         _render_probe_frames(

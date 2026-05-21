@@ -2,6 +2,15 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — input: clickable settings overlay
+
+Added mouse support to the redesigned settings overlay: category sidebar items,
+setting rows, value steppers, action rows, and footer buttons are now clickable,
+with hover feedback and wheel scrolling. Normal simulation playback now keeps
+the OS cursor hidden in both fullscreen and windowed mode, shows it while the
+settings overlay or Inspect Mode is interactive, and restores it on clean
+shutdown through `primordial/display/cursor.py`.
+
 ## [2026-05-21] — redesign: categorized settings overlay
 
 Reworked the in-app settings overlay from a single cramped list into a

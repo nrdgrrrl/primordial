@@ -8,6 +8,7 @@ from .coordinates import (
     window_to_world,
     world_to_window,
 )
+from .cursor import hide_runtime_cursor, restore_system_cursor, show_interactive_cursor
 from .mode import (
     DEFAULT_WINDOWED_SIZE,
     _apply_display_mode,
@@ -34,6 +35,9 @@ __all__ = [
     "_log_inspect_click_diagnostics",
     "_recreate_renderer_for_backend",
     "toggle_fullscreen",
+    "hide_runtime_cursor",
+    "restore_system_cursor",
+    "show_interactive_cursor",
     "window_to_world",
     "world_to_window",
 ]

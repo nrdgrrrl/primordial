@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pygame
 
+from primordial.display.cursor import hide_runtime_cursor, show_interactive_cursor
 from primordial.display.mode import toggle_fullscreen
 from primordial.rendering import Renderer
 from primordial.rendering.inspect_mode import InspectMode
@@ -39,7 +40,7 @@ def handle_keydown(
             inspect_mode.toggle(simulation_paused=simulation.paused)
             if inspect_mode.enabled:
                 simulation.paused = True
-                pygame.mouse.set_visible(True)
+                show_interactive_cursor()
                 renderer.show_cursor = True
             else:
                 restore_paused = inspect_mode.was_paused_before
@@ -52,7 +53,10 @@ def handle_keydown(
                     or bool(screen.get_flags() & pygame.FULLSCREEN)
                     or mode == "screensaver"
                 )
-                pygame.mouse.set_visible(not hide_cursor)
+                if hide_cursor:
+                    hide_runtime_cursor()
+                else:
+                    show_interactive_cursor()
                 renderer.show_cursor = False
                 inspect_mode.clear_selection()
             runtime_loop.reset_timing_debt()

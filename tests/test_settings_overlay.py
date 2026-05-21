@@ -11,6 +11,11 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
+from primordial.display.cursor import (
+    hide_runtime_cursor,
+    restore_system_cursor,
+    show_interactive_cursor,
+)
 from primordial.rendering.settings_overlay import SettingsOverlay
 from primordial.rendering.settings_metadata import (
     CATEGORY_ACTIONS,
@@ -315,6 +320,255 @@ class SettingsOverlayTests(unittest.TestCase):
             overlay.draw(surface)
 
             self.assertGreater(surface.get_bounding_rect().width, 0)
+
+    def test_mouse_click_category_switches_category(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            surface = pygame.Surface((1024, 768), pygame.SRCALPHA)
+            overlay.draw(surface)
+            display_region = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "category" and region.category == "Display"
+            )
+
+            action = overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=display_region.rect.center,
+                )
+            )
+
+            self.assertIsNone(action)
+            self.assertEqual(overlay.navigation.category, "Display")
+            self.assertEqual(overlay.selected, 0)
+
+    def test_mouse_click_setting_row_selects_without_changing_value(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            surface = pygame.Surface((1024, 768), pygame.SRCALPHA)
+            overlay.draw(surface)
+            row_region = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "row" and region.row_index == 2
+            )
+
+            overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=row_region.rect.center,
+                )
+            )
+
+            self.assertEqual(overlay.selected, 2)
+
+    def test_mouse_value_controls_change_enum_bool_and_numeric_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            surface = pygame.Surface((1024, 768), pygame.SRCALPHA)
+            overlay.draw(surface)
+            enum_value = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "value" and region.row_index == 0 and region.direction == 1
+            )
+            overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=enum_value.rect.center,
+                )
+            )
+            self.assertEqual(overlay.pending["sim_mode"], "predator_prey")
+
+            overlay.navigation.set_category("Display", overlay._item_count_for_category("Display"))
+            overlay.draw(surface)
+            fullscreen_row = next(
+                index
+                for index, item in enumerate(overlay._visible_items_for_active_category())
+                if getattr(item, "attr", "") == "fullscreen"
+            )
+            bool_value = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "value" and region.row_index == fullscreen_row and region.direction == 1
+            )
+            old_fullscreen = overlay.pending["fullscreen"]
+            overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=bool_value.rect.center,
+                )
+            )
+            self.assertEqual(overlay.pending["fullscreen"], (not old_fullscreen))
+
+            overlay.navigation.set_category(CATEGORY_SIMULATION, overlay._item_count_for_category(CATEGORY_SIMULATION))
+            overlay.draw(surface)
+            numeric_value = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "value" and region.row_index == 1 and region.direction == 1
+            )
+            old_population = overlay.pending["mode_param:predator_prey:initial_population"]
+            overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=numeric_value.rect.center,
+                )
+            )
+            self.assertGreater(
+                overlay.pending["mode_param:predator_prey:initial_population"],
+                old_population,
+            )
+
+    def test_mouse_wheel_scrolls_setting_list_within_bounds(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.navigation.set_category(CATEGORY_ECOLOGY, overlay._item_count_for_category(CATEGORY_ECOLOGY))
+            overlay.pending["sim_mode"] = "predator_prey"
+            surface = pygame.Surface((720, 520), pygame.SRCALPHA)
+            overlay.draw(surface)
+
+            overlay.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, y=-10))
+            self.assertGreaterEqual(overlay._first_visible_row, 0)
+            scrolled_row = overlay._first_visible_row
+
+            overlay.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, y=10))
+            self.assertLessEqual(overlay._first_visible_row, scrolled_row)
+            self.assertGreaterEqual(overlay._first_visible_row, 0)
+
+    def test_mouse_footer_apply_and_discard_use_keyboard_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.pending["sim_mode"] = "boids"
+            surface = pygame.Surface((1024, 768), pygame.SRCALPHA)
+            overlay.draw(surface)
+            apply_region = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "footer" and region.action == "apply"
+            )
+
+            action = overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=apply_region.rect.center,
+                )
+            )
+
+            self.assertEqual(action, "apply")
+            self.assertEqual(settings.sim_mode, "boids")
+
+            overlay.open()
+            overlay.pending["sim_mode"] = "drift"
+            overlay.draw(surface)
+            discard_region = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "footer" and region.action == "discard"
+            )
+            action = overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=discard_region.rect.center,
+                )
+            )
+
+            self.assertEqual(action, "discard")
+            self.assertEqual(settings.sim_mode, "boids")
+
+    def test_mouse_action_buttons_dispatch_save_and_confirm_reset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            surface = pygame.Surface((1024, 768), pygame.SRCALPHA)
+            overlay.navigation.set_category(CATEGORY_ACTIONS, overlay._item_count_for_category(CATEGORY_ACTIONS))
+            overlay.draw(surface)
+            save_button = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "action" and region.row_index == 0
+            )
+
+            action = overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=save_button.rect.center,
+                )
+            )
+            self.assertEqual(action, "save_snapshot")
+
+            overlay.draw(surface)
+            reset_button = next(
+                region
+                for region in overlay._hit_regions
+                if region.kind == "footer" and region.action == "reset"
+            )
+            first_click = overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=reset_button.rect.center,
+                )
+            )
+            second_click = overlay.handle_event(
+                pygame.event.Event(
+                    pygame.MOUSEBUTTONDOWN,
+                    button=1,
+                    pos=reset_button.rect.center,
+                )
+            )
+
+            self.assertIsNone(first_click)
+            self.assertEqual(second_click, "reset")
+
+    def test_cursor_helpers_hide_runtime_and_restore_interactive_visibility(self) -> None:
+        with patch("primordial.display.cursor.pygame.mouse.set_visible") as set_visible:
+            hide_runtime_cursor()
+            show_interactive_cursor()
+            restore_system_cursor()
+
+        self.assertEqual(
+            [call.args[0] for call in set_visible.call_args_list],
+            [False, True, True],
+        )
 
 
 if __name__ == "__main__":

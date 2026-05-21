@@ -124,7 +124,8 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 - Unknown config keys are ignored with warning logs (not fatal).
 - Type mismatches are coerced safely; invalid values fall back to defaults and are clamped on save.
 - In normal mode, `S` opens an in-app renderer-owned settings overlay.
-- Overlay behavior: Arrow keys navigate/adjust, Enter applies+saves, Esc/S discards, R twice resets defaults.
+- Overlay behavior: Arrow keys navigate/adjust, Enter applies+saves, Esc/S discards, R twice resets defaults. Mouse support is renderer-owned: click categories, rows, value controls, and footer/action buttons; wheel scrolls the active category list.
+- Runtime cursor behavior lives in `primordial/display/cursor.py`: normal simulation playback hides the OS cursor, interactive UI states show it, and clean shutdown restores it.
 - Settings that require reset are marked in the overlay; simulation reset is only triggered by explicit `R`.
 
 When adding a new setting, update all of:

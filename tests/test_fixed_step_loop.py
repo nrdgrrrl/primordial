@@ -396,7 +396,7 @@ class FixedStepLoopTests(unittest.TestCase):
 
         self.assertFalse(settings.fullscreen)
         set_mode_mock.assert_called_once_with(DEFAULT_WINDOWED_SIZE, 0)
-        set_visible_mock.assert_called_once_with(True)
+        set_visible_mock.assert_called_once_with(False)
         simulation.resize.assert_called_once_with(1280, 720)
         renderer.resize.assert_called_once_with(
             1280,
@@ -477,7 +477,7 @@ class FixedStepLoopTests(unittest.TestCase):
             _apply_display_mode(settings, simulation, renderer)
 
         set_mode_mock.assert_called_once_with(DEFAULT_WINDOWED_SIZE, 0)
-        set_visible_mock.assert_called_once_with(True)
+        set_visible_mock.assert_called_once_with(False)
         simulation.resize.assert_called_once_with(1280, 720)
         renderer.resize.assert_called_once_with(1280, 720, screen=replacement_screen)
         renderer.reset_runtime_state.assert_called_once_with()

@@ -88,7 +88,7 @@ make clean     # remove build/dist and __pycache__ dirs
 | Hold `P` | Add a stronger locator highlight to predators while held in `predator_prey` mode |
 | `I` | Toggle Inspect Mode (read-only creature observability; see below) |
 | `M` | While in Inspect Mode, toggle between pause and slow-motion (2 Hz) sub-modes |
-| Mouse click | While in Inspect Mode, select a creature to view its info card |
+| Mouse click | While in Inspect Mode, select a creature; while settings are open, click categories, rows, value controls, and action buttons |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
 
@@ -298,6 +298,11 @@ Configuration is TOML-backed and persistent across app updates.
 - The overlay is grouped by category, with one category visible at a time and a
   details panel explaining the selected setting, range, internal key, and reset
   behavior.
+- The mouse cursor is hidden during normal simulation playback and appears while
+  the settings overlay is open. Click categories to switch sections, click rows
+  to select them, use value steppers to edit fields, use the mouse wheel to
+  scroll long categories, and use footer buttons for Apply, Discard, Save, Load,
+  Guide, and reset actions.
 - Press **`H`** while the settings overlay is open to launch the local predator/prey guide in your browser; Primordial drops out of fullscreen first if needed.
 - Canonical repo-tracked defaults live in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml).
 - The runtime user override file is editable by hand as `config.toml`.
@@ -351,6 +356,9 @@ Mode-specific tuning keys:
 
 Settings overlay labels, categories, descriptions, ranges, and action help live
 in [`primordial/rendering/settings_metadata.py`](/home/victoria/projects/primordial/primordial/rendering/settings_metadata.py).
+Mouse hit regions are produced by the overlay draw pass with the small
+`primordial/rendering/settings_mouse.py` hit-region type so visible controls and
+click targets stay aligned.
 The overlay can edit selected mode-scoped values where a field explicitly points
 at a `[modes.<name>]` key; other mode-table tuning remains TOML-only.
 

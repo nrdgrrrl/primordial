@@ -12,6 +12,7 @@ from .settings_metadata import (
     build_action_items,
     build_settings_fields,
 )
+from .settings_mouse import SettingsHitRegion
 from .settings_navigation import SettingsNavigation
 
 
@@ -32,6 +33,9 @@ class SettingsOverlay:
         self.actions = build_action_items()
         self.navigation = SettingsNavigation(SETTING_CATEGORIES)
         self._first_visible_row = 0
+        self._hit_regions: list[SettingsHitRegion] = []
+        self._hover_region: SettingsHitRegion | None = None
+        self._last_panel_rect = pygame.Rect(0, 0, 0, 0)
 
         self._shade: pygame.Surface | None = None
         self._title_font = pygame.font.Font(None, 34)
@@ -76,6 +80,15 @@ class SettingsOverlay:
         self.snapshot_status_is_error = is_error
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
+        if event.type == pygame.MOUSEMOTION:
+            self._hover_region = self._hit_region_at(event.pos)
+            return None
+        if event.type == pygame.MOUSEWHEEL:
+            self._scroll_items(-int(event.y))
+            self._clear_confirmations()
+            return None
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            return self._handle_mouse_button(event)
         if event.type != pygame.KEYDOWN:
             return None
         if event.key in (pygame.K_ESCAPE, pygame.K_s):
@@ -123,12 +136,7 @@ class SettingsOverlay:
         elif event.key == pygame.K_SPACE:
             return self._run_selected_action()
         elif event.key == pygame.K_RETURN:
-            for field in self.fields:
-                pending_key = self._ensure_pending_value(field)
-                self._set_field_value(field, self.pending[pending_key])
-            self.settings.save()
-            self.close()
-            return "apply"
+            return self._apply_pending_settings()
         elif event.key == pygame.K_r:
             self.confirm_reset_predator_prey_dials = False
             if self.confirm_reset:
@@ -138,6 +146,74 @@ class SettingsOverlay:
                 return "reset"
             self.confirm_reset = True
         return None
+
+    def _handle_mouse_button(self, event: pygame.event.Event) -> str | None:
+        if event.button in (4, 5):
+            self._scroll_items(-1 if event.button == 4 else 1)
+            self._clear_confirmations()
+            return None
+        if event.button != 1:
+            return None
+
+        region = self._hit_region_at(event.pos)
+        self._hover_region = region
+        if region is None:
+            return None
+        if region.kind == "category" and region.category:
+            self.navigation.set_category(
+                region.category,
+                self._item_count_for_category(region.category),
+            )
+            self._first_visible_row = 0
+            self._clear_confirmations()
+            return None
+        if region.kind == "row" and region.row_index is not None:
+            self.navigation.selected = region.row_index
+            self._clamp_selected()
+            self._clear_confirmations()
+            return None
+        if region.kind == "value" and region.row_index is not None:
+            self.navigation.selected = region.row_index
+            self._clamp_selected()
+            direction = region.direction or 1
+            self._adjust(direction)
+            return None
+        if region.kind == "action" and region.row_index is not None:
+            self.navigation.selected = region.row_index
+            self._clamp_selected()
+            return self._run_selected_action()
+        if region.kind == "footer" and region.action:
+            return self._run_footer_action(region.action)
+        return None
+
+    def _run_footer_action(self, action: str) -> str | None:
+        if action == "apply":
+            return self._apply_pending_settings()
+        if action == "discard":
+            self.close()
+            return "discard"
+        if action == "save_snapshot":
+            self._clear_confirmations()
+            return "save_snapshot"
+        if action == "load_snapshot":
+            self._clear_confirmations()
+            return "load_snapshot"
+        if action == "help":
+            self._clear_confirmations()
+            return "help"
+        if action == "reset":
+            return self._activate_reset_defaults()
+        if action == "reset_predator_prey_dials":
+            return self._activate_predator_prey_dial_reset()
+        return None
+
+    def _apply_pending_settings(self) -> str:
+        for field in self.fields:
+            pending_key = self._ensure_pending_value(field)
+            self._set_field_value(field, self.pending[pending_key])
+        self.settings.save()
+        self.close()
+        return "apply"
 
     def _run_selected_action(self) -> str | None:
         item = self._selected_item()
@@ -150,23 +226,35 @@ class SettingsOverlay:
             )
             return None
         if item.action == "reset_predator_prey_dials":
-            if self.confirm_reset_predator_prey_dials:
-                self.confirm_reset_predator_prey_dials = False
-                return "reset_predator_prey_dials"
-            self.confirm_reset = False
-            self.confirm_reset_predator_prey_dials = True
-            return None
+            return self._activate_predator_prey_dial_reset()
         if item.action == "reset":
-            if self.confirm_reset:
-                self.settings.reset_to_defaults()
-                self.sync_from_settings()
-                self.confirm_reset = False
-                return "reset"
-            self.confirm_reset_predator_prey_dials = False
-            self.confirm_reset = True
-            return None
+            return self._activate_reset_defaults()
         self._clear_confirmations()
         return item.action
+
+    def _activate_predator_prey_dial_reset(self) -> str | None:
+        if self.settings.sim_mode != "predator_prey":
+            self.set_snapshot_status(
+                "Reset Predator-Prey Dials is only available in predator_prey mode.",
+                is_error=True,
+            )
+            return None
+        if self.confirm_reset_predator_prey_dials:
+            self.confirm_reset_predator_prey_dials = False
+            return "reset_predator_prey_dials"
+        self.confirm_reset = False
+        self.confirm_reset_predator_prey_dials = True
+        return None
+
+    def _activate_reset_defaults(self) -> str | None:
+        if self.confirm_reset:
+            self.settings.reset_to_defaults()
+            self.sync_from_settings()
+            self.confirm_reset = False
+            return "reset"
+        self.confirm_reset_predator_prey_dials = False
+        self.confirm_reset = True
+        return None
 
     def _clear_confirmations(self) -> None:
         self.confirm_reset = False
@@ -222,9 +310,11 @@ class SettingsOverlay:
         panel.fill((6, 18, 34, int(244 * fade_ratio)))
         self._draw_panel_glow(panel, fade_ratio)
         self._draw_header(panel)
+        self._hit_regions = []
+        self._last_panel_rect = panel_rect
 
         body_top = 86
-        footer_height = 64
+        footer_height = 94
         body_bottom = panel.get_height() - footer_height
         sidebar_rect = pygame.Rect(18, body_top, 184, body_bottom - body_top - 12)
         list_rect = pygame.Rect(sidebar_rect.right + 18, body_top, 360, sidebar_rect.height)
@@ -237,6 +327,33 @@ class SettingsOverlay:
         self._draw_footer(panel, footer_rect)
 
         screen.blit(panel, panel_rect.topleft)
+
+    def _register_hit_region(
+        self,
+        kind: str,
+        rect: pygame.Rect,
+        *,
+        category: str | None = None,
+        row_index: int | None = None,
+        direction: int = 0,
+        action: str | None = None,
+    ) -> None:
+        self._hit_regions.append(
+            SettingsHitRegion(
+                kind=kind,
+                rect=rect.move(self._last_panel_rect.topleft),
+                category=category,
+                row_index=row_index,
+                direction=direction,
+                action=action,
+            )
+        )
+
+    def _hit_region_at(self, pos: tuple[int, int]) -> SettingsHitRegion | None:
+        for region in reversed(self._hit_regions):
+            if region.rect.collidepoint(pos):
+                return region
+        return None
 
     def _panel_rect(self, screen: pygame.Surface) -> pygame.Rect:
         margin = 24
@@ -283,14 +400,21 @@ class SettingsOverlay:
             count = self._item_count_for_category(category)
             selected = index == self.navigation.category_index
             item_rect = pygame.Rect(rect.x + 10, y, rect.width - 20, 34)
+            hovered = self._region_hovered("category", category=category)
             if selected:
                 pygame.draw.rect(panel, (18, 76, 98), item_rect, border_radius=6)
                 pygame.draw.rect(panel, (91, 221, 236), item_rect, 1, border_radius=6)
+            elif hovered:
+                pygame.draw.rect(panel, (12, 47, 66), item_rect, border_radius=6)
+                pygame.draw.rect(panel, (55, 146, 174), item_rect, 1, border_radius=6)
             label_color = (226, 250, 255) if selected else (142, 184, 204)
+            if hovered and not selected:
+                label_color = (190, 232, 240)
             count_color = (116, 210, 210) if count else (88, 116, 132)
             panel.blit(self._font.render(category, True, label_color), (item_rect.x + 9, item_rect.y + 7))
             count_surf = self._tiny.render(str(count), True, count_color)
             panel.blit(count_surf, (item_rect.right - count_surf.get_width() - 10, item_rect.y + 9))
+            self._register_hit_region("category", item_rect, category=category)
             y += 39
 
     def _draw_item_list(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
@@ -318,28 +442,61 @@ class SettingsOverlay:
         for row_index, item in enumerate(items[self._first_visible_row:self._first_visible_row + max_rows], start=self._first_visible_row):
             selected = row_index == self.navigation.selected
             row_rect = pygame.Rect(rect.x + 10, y, rect.width - 20, 34)
+            row_hovered = self._region_hovered("row", row_index=row_index)
             if selected:
                 pygame.draw.rect(panel, (20, 82, 103), row_rect, border_radius=7)
                 pygame.draw.rect(panel, (103, 236, 239), row_rect, 1, border_radius=7)
+            elif row_hovered:
+                pygame.draw.rect(panel, (13, 47, 64), row_rect, border_radius=7)
+                pygame.draw.rect(panel, (55, 144, 170), row_rect, 1, border_radius=7)
             elif isinstance(item, ActionItem) and item.destructive:
                 pygame.draw.rect(panel, (31, 24, 36), row_rect, border_radius=7)
             label_color = (238, 253, 255) if selected else (180, 211, 225)
+            if row_hovered and not selected:
+                label_color = (213, 239, 245)
             if isinstance(item, ActionItem) and not self._action_enabled(item):
                 label_color = (94, 119, 132)
             panel.blit(self._font.render(item.label, True, label_color), (row_rect.x + 9, row_rect.y + 7))
+            self._register_hit_region("row", row_rect, row_index=row_index)
             if isinstance(item, Field):
                 value_text = self._format_value(item)
                 value_color = (123, 241, 220) if selected else (104, 197, 196)
                 value = self._font.render(value_text, True, value_color)
-                value_right_padding = 88 if item.requires_reset else 10
-                panel.blit(value, (row_rect.right - value.get_width() - value_right_padding, row_rect.y + 7))
+                value_right_padding = 110 if item.requires_reset else 32
+                value_x = row_rect.right - value.get_width() - value_right_padding
+                panel.blit(value, (value_x, row_rect.y + 7))
+                left_rect = pygame.Rect(max(row_rect.x + 126, value_x - 24), row_rect.y + 5, 20, 24)
+                right_rect = pygame.Rect(row_rect.right - value_right_padding + 6, row_rect.y + 5, 20, 24)
+                value_rect = pygame.Rect(value_x - 4, row_rect.y + 4, value.get_width() + 8, 26)
+                self._draw_value_control(panel, left_rect, "<", self._region_hovered("value", row_index=row_index, direction=-1))
+                self._draw_value_control(panel, right_rect, ">", self._region_hovered("value", row_index=row_index, direction=1))
+                self._register_hit_region("value", value_rect, row_index=row_index, direction=1)
+                self._register_hit_region("value", left_rect, row_index=row_index, direction=-1)
+                self._register_hit_region("value", right_rect, row_index=row_index, direction=1)
                 if item.requires_reset:
                     self._draw_badge(panel, "RESET", row_rect.right - 78, row_rect.y + 8, (232, 170, 91))
                 if self._field_changed(item):
                     self._draw_badge(panel, "CHANGED", row_rect.x + 9, row_rect.y + 24, (248, 190, 108), tiny=True)
             else:
+                button_text = "Confirm" if (
+                    (item.action == "reset" and self.confirm_reset)
+                    or (
+                        item.action == "reset_predator_prey_dials"
+                        and self.confirm_reset_predator_prey_dials
+                    )
+                ) else "Run"
+                button_rect = pygame.Rect(row_rect.right - 62, row_rect.y + 5, 52, 24)
+                self._draw_action_button(
+                    panel,
+                    button_rect,
+                    button_text,
+                    destructive=item.destructive,
+                    disabled=not self._action_enabled(item),
+                    hovered=self._region_hovered("action", row_index=row_index),
+                )
+                self._register_hit_region("action", button_rect, row_index=row_index)
                 shortcut = self._tiny.render(item.shortcut, True, (133, 220, 218))
-                panel.blit(shortcut, (row_rect.right - shortcut.get_width() - 10, row_rect.y + 10))
+                panel.blit(shortcut, (button_rect.x - shortcut.get_width() - 8, row_rect.y + 10))
             y += row_height
 
         if self._first_visible_row > 0:
@@ -388,7 +545,8 @@ class SettingsOverlay:
             self._draw_detail_row(panel, rect.x + 16, y, "Status", mode_line, mode_color)
             y += 32
             if item.destructive:
-                for line in self._wrap_text("This action asks for a second key press before it runs.", self._small, rect.width - 32):
+                text = "This action asks for a second key press or click before it runs."
+                for line in self._wrap_text(text, self._small, rect.width - 32):
                     panel.blit(self._small.render(line, True, (232, 170, 91)), (rect.x + 16, y))
                     y += 22
 
@@ -401,7 +559,40 @@ class SettingsOverlay:
 
     def _draw_footer(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (5, 20, 32), (34, 88, 112))
-        hint = "Enter Apply   Esc/S Discard   Up/Down Select   Left/Right Change   Tab Category   V Save   L Load   H Guide   R R Defaults"
+        actions = [
+            ("apply", "Apply", False),
+            ("discard", "Discard", False),
+            ("save_snapshot", "Save", False),
+            ("load_snapshot", "Load", False),
+            ("help", "Guide", False),
+            ("reset", "Reset", True),
+        ]
+        if self.settings.sim_mode == "predator_prey":
+            actions.append(("reset_predator_prey_dials", "Reset Dials", True))
+
+        x = rect.x + 10
+        y = rect.y + 9
+        for action, label, destructive in actions:
+            button_width = max(56, self._small.size(label)[0] + 22)
+            button_rect = pygame.Rect(x, y, button_width, 28)
+            display_label = label
+            if action == "reset" and self.confirm_reset:
+                display_label = "Confirm Reset"
+                button_rect.width = max(button_rect.width, self._small.size(display_label)[0] + 22)
+            elif action == "reset_predator_prey_dials" and self.confirm_reset_predator_prey_dials:
+                display_label = "Confirm Dials"
+                button_rect.width = max(button_rect.width, self._small.size(display_label)[0] + 22)
+            self._draw_action_button(
+                panel,
+                button_rect,
+                display_label,
+                destructive=destructive,
+                hovered=self._region_hovered("footer", action=action),
+            )
+            self._register_hit_region("footer", button_rect, action=action)
+            x += button_rect.width + 8
+
+        hint = "Mouse: click categories, rows, value controls, or action buttons. Keyboard: Enter Apply, Esc/S Discard, Arrows Change, Tab Category, R R Defaults"
         if self.navigation.category == CATEGORY_ACTIONS:
             hint = "Space Run Action   Enter Apply Settings   Esc/S Discard   Up/Down Select   Tab Category   R R Defaults"
         if self.settings.sim_mode == "predator_prey":
@@ -411,8 +602,8 @@ class SettingsOverlay:
         elif self.confirm_reset_predator_prey_dials:
             hint = "Press D again, or Space on Reset Predator-Prey Dials, to reset adaptive ecological dials and restart the run."
         lines = self._wrap_text(hint, self._small, rect.width - 24)
-        y = rect.y + 11
-        for line in lines[:2]:
+        y = rect.y + 41
+        for line in lines[:1]:
             panel.blit(self._small.render(line, True, (189, 225, 235)), (rect.x + 12, y))
             y += 22
         path = self.snapshot_path or "(default path pending)"
@@ -445,6 +636,59 @@ class SettingsOverlay:
         pygame.draw.rect(panel, (24, 38, 42), rect, border_radius=5)
         pygame.draw.rect(panel, color, rect, 1, border_radius=5)
         panel.blit(surf, (rect.x + 5, rect.y + 2))
+
+    def _draw_value_control(
+        self,
+        panel: pygame.Surface,
+        rect: pygame.Rect,
+        text: str,
+        hovered: bool,
+    ) -> None:
+        fill = (18, 70, 88) if hovered else (10, 38, 54)
+        border = (102, 232, 230) if hovered else (51, 132, 154)
+        pygame.draw.rect(panel, fill, rect, border_radius=5)
+        pygame.draw.rect(panel, border, rect, 1, border_radius=5)
+        surf = self._tiny.render(text, True, (203, 248, 250))
+        panel.blit(
+            surf,
+            (
+                rect.centerx - surf.get_width() // 2,
+                rect.centery - surf.get_height() // 2,
+            ),
+        )
+
+    def _draw_action_button(
+        self,
+        panel: pygame.Surface,
+        rect: pygame.Rect,
+        text: str,
+        *,
+        destructive: bool = False,
+        disabled: bool = False,
+        hovered: bool = False,
+    ) -> None:
+        if disabled:
+            fill = (18, 28, 36)
+            border = (54, 76, 88)
+            text_color = (96, 118, 130)
+        elif destructive:
+            fill = (70, 42, 46) if hovered else (42, 28, 38)
+            border = (244, 151, 119) if hovered else (164, 91, 84)
+            text_color = (255, 211, 188)
+        else:
+            fill = (18, 72, 92) if hovered else (10, 42, 60)
+            border = (103, 232, 230) if hovered else (54, 135, 158)
+            text_color = (222, 250, 252)
+        pygame.draw.rect(panel, fill, rect, border_radius=6)
+        pygame.draw.rect(panel, border, rect, 1, border_radius=6)
+        surf = self._small.render(text, True, text_color)
+        panel.blit(
+            surf,
+            (
+                rect.centerx - surf.get_width() // 2,
+                rect.centery - surf.get_height() // 2,
+            ),
+        )
 
     def _draw_detail_row(
         self,
@@ -493,6 +737,52 @@ class SettingsOverlay:
                 current = word
         lines.append(current)
         return lines
+
+    def _region_hovered(
+        self,
+        kind: str,
+        *,
+        category: str | None = None,
+        row_index: int | None = None,
+        direction: int = 0,
+        action: str | None = None,
+    ) -> bool:
+        region = self._hover_region
+        if region is None or region.kind != kind:
+            return False
+        if category is not None and region.category != category:
+            return False
+        if row_index is not None and region.row_index != row_index:
+            return False
+        if direction and region.direction != direction:
+            return False
+        if action is not None and region.action != action:
+            return False
+        return True
+
+    def _scroll_items(self, amount: int) -> None:
+        items = self._visible_items_for_active_category()
+        if not items:
+            self._first_visible_row = 0
+            return
+        max_rows = self._visible_row_capacity()
+        max_first = max(0, len(items) - max_rows)
+        self._first_visible_row = max(
+            0,
+            min(max_first, self._first_visible_row + amount),
+        )
+
+    def _visible_row_capacity(self) -> int:
+        panel_height = max(520, min(620, int(720 * 0.84)))
+        # Runtime drawing recalculates this exactly from the current screen.
+        # This fallback keeps wheel handling bounded before the first draw.
+        if self._last_panel_rect.height:
+            panel_height = self._last_panel_rect.height
+        body_top = 86
+        footer_height = 94
+        body_bottom = panel_height - footer_height
+        list_height = body_bottom - body_top - 12
+        return max(1, (list_height - 62) // 40)
 
     def _format_value(self, field: Field) -> str:
         value = self.pending[self._ensure_pending_value(field)]
