@@ -2,6 +2,16 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — docs: refresh roadmap and implementation plan
+
+Updated `docs/implementation_program.md` and `docs/roadmap.md` from the
+current codebase and recent documentation/settings work. The planning docs now
+mark completed early milestones, preserve remaining ecology/observability goals,
+and make the next near-term priorities explicit: an in-app documentation/help
+browser followed by a first-launch tutorial/onboarding flow. Added architecture
+guardrails so future help/tutorial work does not collapse into the settings
+overlay or hardcode documentation in renderer code.
+
 ## [2026-05-21] — docs: refresh architecture and predator-prey guide
 
 Rewrote `docs/architecture_reference.md` around the current module layout,

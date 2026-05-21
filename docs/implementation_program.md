@@ -1,551 +1,364 @@
-# IMPLEMENTATION_PROGRAM.md
+# Primordial Implementation Program
 
-## Purpose
+This document turns the strategic roadmap into practical, bounded work for
+future coding agents. It should stay tactical: what to do next, where the work
+belongs, how to validate it, and what not to accidentally turn it into.
 
-This document translates the roadmap into a development process that an AI coding agent can follow without quietly taking over the design.
+Current architecture reference: `docs/architecture_reference.md`.
+Current human-facing guide: `docs/predator_prey_system_guide.md`.
 
-The roadmap remains the strategic north star. It explains what matters, why the order matters, and what should not be done too early.
+## Current Project Status
 
-This implementation program exists to:
+Primordial is no longer at the beginning of the original milestone sequence.
+Several earlier roadmap items are implemented:
 
-- turn roadmap direction into bounded milestones
-- preserve milestone intent, not just milestone names
-- define what each milestone is trying to accomplish
-- define what each milestone must not accidentally turn into
-- create a repeatable path from strategy to code changes
-- support strong automated verification without pretending every important truth is fully automatable
-- reduce the risk of broad speculative changes by AI coding agents
+- **Fixed-step runtime and instrumentation**: implemented in
+  `primordial/runtime/`, integrated from `primordial/main.py`, with tests.
+- **Performance/headroom work**: pygame and GPU renderer paths exist, kin-line
+  and render-cache work has landed, and benchmark/probe tooling is present.
+- **Lightweight observability**: HUDs, debug timing, CSV run logging,
+  milestone logging, observability snapshots, and graphical probes exist.
+- **Predator-prey ecology**: predator/prey roles, food cycles, zones,
+  imperfect sensing, depth bands, collapse/game-over, and optional adaptive
+  tuning machinery exist.
+- **Persistence**: versioned world snapshots and predator-prey tuning sidecar
+  persistence exist.
+- **Settings UX**: the settings overlay is now categorized, readable,
+  mouse-capable, cursor-aware, and split across metadata, layout, navigation,
+  mouse, rendering, and runtime-action modules.
+- **Current-state documentation**: `docs/architecture_reference.md` and
+  `docs/predator_prey_system_guide.md` were refreshed from code.
 
-This project combines performance engineering, architecture work, simulation design, rendering richness, and long-horizon ecological goals. That makes sequencing important. A milestone can be implemented correctly in local code terms and still be strategically wrong if it breaks the roadmap order or smuggles in later concerns too early.
-
-benchmark coverage for performance milestones should be representative across major active sim modes
-benchmark payloads should share a stable core summary shape across scenarios, with scenario-specific sections only where meaningful
-
-The intended workflow is:
-
-**Roadmap -> Implementation Program -> Milestone Spec -> Acceptance File -> Runner -> Code Changes**
-
-Do not skip the spec layer.
-Do not treat passing checks as permission to ignore the roadmap.
-
----
-
-## Core Position
-
-The project is trying to protect two things at once:
-
-1. visual spectacle
-2. simulation integrity and future evolvability
-
-The governing principle is:
-
-**Protect simulation truth, spend rendering budget artistically.**
-
-That means visual compromise is often acceptable if it protects simulation integrity. The reverse is much more dangerous.
-
----
+The next gap is not simulation capability. The next gap is user understanding:
+the app has enough behavior that users need in-app help and guided onboarding.
 
 ## Development Principles
 
-Every milestone and every task should respect these principles.
+Every milestone should preserve these rules:
 
-### 1. Protect simulation integrity first
+- Protect simulation/rendering decoupling.
+- Keep `primordial/main.py` as orchestration and event routing, not as the owner
+  of overlay internals.
+- Keep configuration defaults and validation in `primordial/config/`.
+- Keep documentation content in docs or structured content files, not hardcoded
+  into renderer logic.
+- Keep parsing/loading models separate from rendering.
+- Let settings UI, help UI, and tutorial UI share layout concepts without
+  becoming one monolithic overlay file.
+- Use pygame event screen coordinates for UI hit testing. Do not apply
+  simulation/world transforms to overlay clicks.
+- Keep cursor visibility intentional through `primordial/display/cursor.py`.
+- Preserve keyboard support when adding mouse support.
+- Add tests and smoke checks for UI/navigation work.
 
-Rendering pressure must not silently rewrite simulation history. If render load changes what survives, reproduces, or goes extinct, the system is lying about its own rules.
+## Milestone Status Review
 
-### 2. Prefer bounded change over broad rewrite
+| Original Item | Decision | Current Notes |
+| --- | --- | --- |
+| M1 fixed-step simulation and instrumentation | Complete | Runtime helpers, fixed-step state, profile/session support, and tests exist. |
+| M2 headroom and lightweight observability | Mostly complete | Renderer/backend work, probes, logs, and observability snapshots exist. Continue targeted performance work only when measurement justifies it. |
+| M3 ecology deepening and imperfect sensing | Partially complete | Predator-prey includes imperfect sensing, zones, food cycles, role pressure, and tuning dials. Deeper strategy diversity remains valid but should wait behind help/tutorial. |
+| M3.5 simulation persistence | Complete | Versioned world snapshots and predator-prey runtime/tuning state persistence exist. Future persistence work should be schema evolution, not first-version design. |
+| M4 rich observability and analysis tooling | Partially complete | CSV logging, benchmark summaries, probes, inspect mode, and HUDs exist. Rich in-app evolution visualization remains future work. |
+| M5 constrained depth-layer model | Complete as first ecological version | Predator-prey has surface/mid/deep bands, depth-aware sensing, food access, escape, and cross-band misses. Better visualization can be future observability work. |
+| Settings overlay redesign | Complete | Recent refactor split metadata, navigation, layout, mouse hit regions, rendering, cursor behavior, and runtime actions. |
+| Current-state docs refresh | Complete | Architecture and predator-prey guide now reflect current code. |
 
-The project already has meaningful structure. Most milestones should be implemented as targeted, minimally invasive improvements rather than ambitious rewrites.
+## Immediate Next Milestones
 
-### 3. Separate architecture work from ecology work
+Recommended order:
 
-Do not mix major loop or control-flow changes with ecological redesign in the same milestone unless the spec explicitly requires it.
+1. **M6: In-App Documentation / Help Browser**
+2. **M7: In-Game Tutorial / Onboarding Flow**
+3. Revisit deeper observability and ecology work.
 
-### 4. Make success measurable
+This order is intentional. The refreshed guide already exists and can become
+source material for in-app help. The tutorial should then use that knowledge and
+the help browser as support rather than inventing a parallel explanation system.
 
-Every milestone must define how it will be validated. “Runs successfully” is not enough.
+## M6: In-App Documentation / Help Browser
 
-### 5. Keep future milestones flexible
+### Purpose
 
-Only the current milestone should be decomposed into implementation tasks. Later milestones should remain at roadmap or spec level until earlier work is complete and reality has been checked.
+Replace the current external browser-only Guide workflow with an in-app help
+browser that reads the existing human-facing documentation and makes it usable
+while the simulation is running.
 
-### 6. Avoid accidental side projects
+### Scope
 
-An AI agent must not helpfully rewrite unrelated systems, rename broad surfaces, perform generic cleanup, or smuggle later-milestone work into the current milestone.
+- Use `docs/predator_prey_system_guide.md` as the first content source.
+- Parse Markdown headings and body text into a simple section model.
+- Display sections in a modal overlay with:
+  - left section navigation;
+  - main reading area;
+  - search;
+  - scrolling;
+  - mouse support;
+  - keyboard support;
+  - readable ocean/bioluminescent styling consistent with settings.
+- Route the existing Guide/Documentation action to the in-app browser.
+- Preserve a fallback or error status if the docs file is missing.
+- Design the content model so other modes can eventually have help sections.
 
-### 7. Use automation aggressively, but not naively
+### Likely Files / Modules
 
-Automated checks are essential, but not every important design constraint is reducible to a simple pass or fail assertion. Specs and review gates must still encode sequencing, non-goals, and anti-drift rules.
+- New module such as `primordial/docs_browser/model.py` or
+  `primordial/help/document_model.py` for loading/parsing docs.
+- New rendering modules under `primordial/rendering/`, for example:
+  - `help_overlay.py`
+  - `help_layout.py`
+  - `help_navigation.py`
+  - `help_mouse.py`
+- `primordial/runtime/settings_actions.py` for routing the Guide action.
+- `primordial/main.py` only for high-level event routing if a new overlay state
+  requires it.
+- Tests under `tests/` for parser, search, navigation, and action routing.
 
-### 8. Preserve long-horizon ecological intent
+### Architecture Notes
 
-The aim is not raw complexity, raw agent count, or more knobs. The aim is a richer living system with more durable branching, niche differentiation, and strategy-level divergence.
+- Start simple: parse headings and content from Markdown. Do not build a full
+  Markdown renderer unless a real need appears.
+- Keep documentation text in docs files. Rendering code should receive parsed
+  content, not contain a giant string copy of the guide.
+- Reuse settings overlay layout ideas, but do not put help logic into
+  `settings_overlay.py`.
+- Help overlay hit testing should register rectangles from layout/draw logic,
+  as the settings overlay does.
+- Cursor visibility should follow interactive overlay rules.
+- The Guide action should no longer force a browser-only workflow as the primary
+  path once in-app help exists.
 
----
+### Validation
 
-## Milestone Artifact Structure
+- Parser tests:
+  - headings become sections;
+  - empty/malformed sections are handled safely;
+  - source file missing returns a clear error.
+- Search tests:
+  - title/body matches are found;
+  - results navigate to the expected section;
+  - search is case-insensitive.
+- Overlay state tests:
+  - section navigation bounds;
+  - scrolling bounds;
+  - keyboard and mouse actions preserve selected section;
+  - Escape closes without applying settings changes.
+- Runtime tests:
+  - settings Guide action opens in-app help;
+  - existing fullscreen/cursor behavior remains intentional.
+- Smoke checks:
+  - headless draw at common window sizes;
+  - normal app startup;
+  - settings overlay still opens and works.
 
-Each milestone should have its own spec and acceptance file before implementation begins.
+### Non-Goals
 
-Recommended repository paths:
+- Do not create a new documentation authoring framework.
+- Do not implement a full Markdown renderer.
+- Do not add tutorial behavior.
+- Do not remove the docs file from packaging.
+- Do not collapse settings/help/tutorial UI into one generic mega-overlay.
 
-- `docs/spec_M<N>.md`
-- `docs/acceptance_M<N>.yaml`
-- `tools/run_milestone.py`
+### Risks
 
-Recommended milestone names:
+- Long documents can create wrapping and scrolling bugs.
+- Search can become too broad or too slow if it tries to be a full text engine.
+- Reusing settings code too directly could entangle unrelated UI state.
+- Browser fallback behavior needs a deliberate decision once in-app help exists.
 
-- `M1` Fixed-step simulation and core instrumentation
-- `M2` Headroom and lightweight observability
-- `M3` Ecology deepening and imperfect sensing
-- `M3_5` Simulation persistence, save, and resume
-- `M4` Rich observability and analysis tooling
-- `M5` Constrained depth-layer model
+## M7: In-Game Tutorial / Onboarding Flow
 
-Each spec should define:
+### Purpose
 
-- purpose
-- goals
-- in-scope work
-- non-goals
-- invariants
-- affected subsystems
-- risks and hidden dependencies
-- implementation boundaries
-- acceptance shape
-- testing and measurement plan
-- rollback or containment notes
-- milestone-specific review questions
+Give new users a guided first-run path that explains how to use Primordial and
+what they are seeing without requiring external reading first.
 
-Each acceptance file should define a machine-readable completion contract using a small JSON-compatible YAML subset.
+### Scope
 
-It should include:
+- Run tutorial on first launch, using a stored user-state/config flag.
+- Add a command-line option to force the tutorial for developers/testers.
+- Eventually make it launchable from help/settings/actions.
+- Launch the simulation and control tutorial progression through overlay steps.
+- Support Next / Back with mouse and keyboard.
+- Pause or slow the simulation when a step needs a stable scene.
+- Highlight important UI/world elements.
+- Keep the first version linear and simple.
 
-- milestone metadata
-- checks
-- commands
-- required files
-- JSON assertions
-- thresholds and invariants where relevant
+### Tutorial Content
 
----
+App basics:
 
-## Acceptance Check Model
+- what Primordial is;
+- opening settings;
+- opening help/documentation;
+- pause/unpause;
+- fullscreen/windowed behavior;
+- HUD basics;
+- reset behavior;
+- mouse and keyboard basics.
 
-The runner should stay deliberately small.
+Simulation basics:
 
-Preferred check styles:
+- predators and prey;
+- food particles;
+- creature glyphs;
+- trails and movement;
+- hunting/fleeing;
+- births and deaths;
+- lineages and kin lines;
+- zones;
+- depth bands;
+- food cycle/famine;
+- game over/collapse;
+- adaptive tuning at a simple high level;
+- what evolution means in this simulation;
+- what is currently hidden or subtle.
 
-- `command`
-  Run a repository-local command and verify exit status and optional output.
+### Likely Files / Modules
 
-- `file_exists`
-  Require that a path exists.
+- New tutorial data/model module, for example
+  `primordial/tutorial/steps.py`.
+- New tutorial runtime state module, for example
+  `primordial/tutorial/state.py`.
+- New rendering modules under `primordial/rendering/`, for example:
+  - `tutorial_overlay.py`
+  - `tutorial_layout.py`
+  - `tutorial_mouse.py`
+- `primordial/utils/cli.py` for the force-tutorial flag.
+- User-state/config support only if needed and narrowly scoped.
+- `primordial/main.py` only for high-level routing and lifecycle hooks.
 
-- `json_assert`
-  Load a JSON artifact and verify required fields, thresholds, or invariants.
+### Architecture Notes
 
-Prefer expressing milestone verification through repository-local commands before extending the runner. Extend the runner only when a new check type clearly improves reuse and clarity.
+- Use a declarative tutorial step structure:
+  - `title`;
+  - explanatory text;
+  - target/highlight type;
+  - optional UI/world anchor;
+  - paused/slow/running state;
+  - optional action required to continue.
+- Tutorial state should be separate from simulation state where practical.
+- The tutorial must not corrupt saved config, snapshots, or adaptive tuning
+  history.
+- First-launch completion state should be stored carefully in config or a small
+  user-state sidecar.
+- Highlight overlays should be clear and tasteful, not a pile of debug boxes.
+- Cursor visibility should be shown while tutorial UI is interactive and hidden
+  again afterward when appropriate.
 
-Good acceptance checks are:
+### Validation
 
-- fast enough to run regularly
-- specific enough to fail usefully
-- stable enough to avoid flaky milestone state
-- close to milestone-facing outcomes
+- Unit tests:
+  - tutorial step schema;
+  - next/back bounds;
+  - first-launch flag behavior;
+  - command-line force option parsing;
+  - required-action step behavior if included.
+- Overlay tests:
+  - buttons and keyboard navigation;
+  - hit rectangles align with drawn controls;
+  - cursor visibility transitions.
+- Runtime smoke:
+  - first-launch path starts tutorial without changing user settings unexpectedly;
+  - forced tutorial works;
+  - closing/completing tutorial returns to normal simulation;
+  - settings/help still work after tutorial closes.
 
-Avoid checks that are:
+### Non-Goals
 
-- vague
-- purely stylistic
-- overly broad and hard to diagnose
-- dependent on manual interpretation as the primary completion signal
+- Do not build interactive missions or scoring in the first version.
+- Do not require the user to perform complex actions to proceed.
+- Do not teach every setting.
+- Do not make tutorial text the only source of help; keep the guide as the
+  deeper reference.
 
-For performance milestones, prefer:
+### Risks
 
-- bounded benchmark scripts
-- structured JSON summaries
-- explicit thresholds such as mean frame time, p95 frame time, clamp counts, event counts, or output completeness
+- First-launch state can annoy returning users if stored incorrectly.
+- Pausing/controlling the sim from tutorial state can interfere with inspect,
+  settings, or game-over state if not carefully routed.
+- Highlighting world elements may require stable selectors for creatures, food,
+  zones, or HUD regions.
 
-For correctness milestones, prefer:
+## M8: Richer Observability and Evolution Readability
 
-- focused unit and integration tests
-- invariant checks on structured output
-- deterministic or tightly bounded comparisons
+### Purpose
 
----
+Make long-term adaptation easier to see after users can access help and basic
+onboarding.
 
-## What the Runner Can and Cannot Decide
+### Candidate Scope
 
-The runner is the source of truth for milestone status, but not the sole source of truth for project wisdom.
+- Trait trend summaries for speed, sense, efficiency, depth preference, and
+  role-specific averages.
+- Better death-cause visibility.
+- Depth-band visualization improvements.
+- More legible kill events.
+- In-app views or exported reports that explain whether lineages are diverging.
 
-A milestone should not be declared complete unless:
+### Notes
 
-1. `python tools/run_milestone.py` reports all checks passing
-2. the work still respects the roadmap order and milestone non-goals
-3. no material design drift has been introduced under the cover of passing checks
+This should not be started as a vague "improve UX" pass. Each observability
+feature should answer a concrete question a user currently cannot answer.
 
-Important implication:
+## M9: Deeper Ecology and Strategy Diversity
 
-If the spec says something matters and the runner cannot detect it, either:
+### Purpose
 
-- tighten the milestone definition and add a better automated check, or
-- record that it remains a required human review gate for that milestone
+Continue the older roadmap goal of more durable branching, niches, and
+strategy-level divergence.
 
-Do not pretend a subtle design constraint is unimportant merely because it is inconvenient to automate.
+### Candidate Scope
 
----
+- Stronger tradeoffs.
+- Sharper niches.
+- More meaningful species/lineage concepts.
+- Additional imperfect sensing variations only if they create measurable
+  ecological tension.
+- Environmental variation that does not overwhelm legibility.
+
+### Notes
+
+The project already has many dials. Future ecology should add new tensions, not
+just more parameters.
 
 ## Standard Agent Workflow
 
-The default workflow for non-trivial milestones is a three-pass process. This is a recommended default, not empty ceremony.
-
-### Pass A: Audit and Design
-
-The agent reads the relevant code and produces:
-
-- affected files and subsystems
-- current control flow
-- hidden dependencies
-- risks and edge cases
-- recommended implementation shape
-- testing and measurement plan
-- a list of things the milestone must not accidentally turn into
-
-No code changes in this pass.
-
-### Pass B: Scaffolding
-
-The agent adds only structural changes needed to support the milestone.
-
-Examples:
-
-- interfaces
-- config flags
-- instrumentation hooks
-- adapters
-- helper extraction for testability
-- benchmark or test harness support
-- acceptance-file plumbing
-
-Still not the full feature.
-
-### Pass C: Implementation
-
-The agent implements the actual behavior inside the approved scaffold.
-
-This structure exists to reduce the chance of large speculative changes before the shape of the work is understood.
-
-For very small and well-bounded milestones, Pass A and Pass B may be compressed, but only if the spec is already unusually clear and the surface area is genuinely small.
-
----
-
-## Agent Execution Rules
-
-When working a milestone, an agent should:
-
-1. Read the roadmap, current spec, and acceptance file first.
-2. Treat the acceptance file as the completion contract, but not as permission to ignore non-goals.
-3. Implement the smallest coherent change that satisfies the milestone.
-4. Add or update automated tests as part of the milestone, not afterward.
-5. Run `python tools/run_milestone.py` before declaring completion.
-6. Update `CHANGELOG.md` in the same change for user-visible or behavior-affecting work; if the repository does not already have a changelog, create `CHANGELOG.md`.
-7. Make meaningful, reviewable git commits as coherent chunks of progress land.
-8. Avoid unrelated cleanup and speculative refactors.
-9. Stop and report if the work appears to require broader architectural change than the current spec allows.
-
-Agents should not invent unrelated task hierarchies or broad new workflows unless the repository deliberately chooses to reintroduce them.
-
----
-
-## How to Create a New Milestone
-
-When starting a new milestone:
-
-1. Choose the next milestone identifier.
-2. Create the spec at `docs/spec_M<N>.md`.
-3. Create the acceptance file at `docs/acceptance_M<N>.yaml`.
-4. Define the milestone in terms of verifiable outcomes.
-5. Include explicit non-goals and anti-drift constraints.
-6. Include milestone-specific review questions for anything not fully reducible to automated checks.
-7. Implement code and tests until the runner passes.
-8. Perform the milestone review gate before moving on.
-
----
-
-## Review Gate Before Starting the Next Milestone
-
-Before moving to the next milestone, confirm:
-
-- acceptance criteria for the current milestone were actually met
-- validation results were captured
-- any temporary flags or experimental code were either removed or deliberately retained
-- profiler or benchmark outputs still make sense for the milestone just completed
-- the next milestone spec still matches reality after the changes made
-- no new assumptions were introduced that would distort later milestones
-
-If the previous milestone changed assumptions materially, update the implementation program and milestone specs before creating more implementation work.
-
----
-
-## Program Overview
-
-## Milestone 1: Fixed-Step Simulation and Core Instrumentation
-
-### Goal
-
-Decouple simulation cadence from render cadence and establish trustworthy measurement of where time is actually being spent.
-
-### Why it comes first
-
-If rendering load changes the simulation’s effective history, then long-run ecological behavior cannot be trusted.
-
-### Expected outputs
-
-- fixed-step simulation loop
-- variable-rate rendering
-- clean simulation, update, render, and pacing instrumentation
-- initial frame pacing telemetry
-- hard caps or guardrails for catastrophic visual spikes if needed for stability
-
-### Must not turn into
-
-- a renderer rewrite
-- ecology changes
-- speculative multithreading
-- broad UI cleanup
-
-### Success looks like
-
-- simulation progression no longer depends on render cadence
-- timing breakdown is available and trustworthy
-- benchmark and profile runs can distinguish simulation cost from render cost
-
----
-
-## Milestone 2: Headroom and Lightweight Observability
-
-### Goal
-
-Buy near-term performance headroom and introduce lightweight ecology telemetry before tradeoff-heavy ecology work begins.
-
-### Why it comes next
-
-If headroom is not created early, future ecology will be shaped by current bottlenecks rather than by design goals. At the same time, ecology changes should not land blind.
-
-### Expected outputs
-
-- early render-cost governance
-- rendering acceleration for the highest-value hotspots where measurement supports it
-- possibly one targeted compiled or native simulation hotspot if measurement supports it
-- Tier 1 ecological telemetry
-- run-to-run comparable machine-readable output
-Benchmark coverage for this milestone must be representative across major active sim modes. A single dense or hotspot-heavy scenario is not sufficient unless the milestone spec explicitly justifies that limitation. Scenario-specific summary fields are allowed, but all benchmark outputs must share a stable core observability shape so runs remain comparable across modes.
-
-### Priority order inside the milestone
-
-1. rendering acceleration first
-2. targeted simulation acceleration second, only if measurement still justifies it
-3. Tier 1 observability early enough that later ecology work is measurable
-
-### Tier 1 telemetry should include
-
-- lineage divergence summaries or metrics
-- phenotype cluster summaries
-- strategy ratio logging
-- simple zone occupancy summaries
-- comparable CSV or JSON logs per run
-
-### Must not turn into
-
-- full dashboard work
-- full replay tooling
-- open-ended optimization without measurement
-- a premature thread-based sim and render split
-
-### Success looks like
-
-- more headroom is available for future ecological work
-- ecology changes in later milestones can be measured rather than guessed
-- the milestone leaves behind clearer evidence about whether rendering or simulation is the next true bottleneck
-
----
-
-## Milestone 3: Ecology Deepening and Imperfect Sensing
-
-### Goal
-
-Increase the system’s capacity for durable branching, niche differentiation, and strategy-level divergence.
-
-### Why it comes here
-
-Once simulation truth is protected, there is more headroom, and Tier 1 observability exists, ecology can be deepened with less guesswork and less risk of tuning blind.
-
-### Expected outputs
-
-- stronger ecological tradeoffs
-- sharper niche structure
-- temporal environmental variation where appropriate
-- improved lineage or species differentiation logic
-- imperfect sensing mechanisms
-
-### Imperfect sensing directions
-
-- distance-based uncertainty
-- directional blind spots
-- noisy target estimation
-- delayed information refresh
-- differentiated sensing quality for food, prey, and predators
-- heritable sensing reliability or acuity
-
-### Must not turn into
-
-- a pile of extra knobs with no ecological rationale
-- a bundled depth-layer implementation
-- rich visualization work unrelated to ecology behavior
-
-### Success looks like
-
-- more stable coexistence of multiple viable strategies
-- measurable branching and niche differentiation using Tier 1 telemetry
-- changes that create new ecological tension rather than just more parameters
-
----
-
-## Milestone 3.5: Simulation Persistence, Save and Resume
-
-### Goal
-
-Allow the world to persist across sessions as simulation history accumulates.
-
-### Why it is its own milestone
-
-Persistence has real architectural implications and should not be smuggled in as a side effect of ecology work.
-
-### Expected outputs
-
-- versioned save format
-- simulation-state serialization and loading
-- resume capability
-- deliberate omission of transient renderer-state persistence in the first version
-
-### Likely saved state includes
-
-- creature state and genomes
-- lineage and ID allocator state
-- food state
-- world or zone state that materially affects future evolution
-- cycle phases and environmental state
-- RNG state if continuity quality matters
-
-### Must not turn into
-
-- full replay system
-- renderer-state snapshotting
-- aggressive schema complexity before the first save format exists
-
-### Success looks like
-
-- a world can be resumed without breaking ecological continuity
-- save format is explicit and versioned
-
----
-
-## Milestone 4: Rich Observability and Analysis Tooling
-
-### Goal
-
-Add deeper tooling for interpretation, comparison, and long-run understanding of the ecosystem.
-
-### Why it waits until here
-
-Tier 1 observability belongs earlier to support tuning. Richer observability should wait until the ecosystem is mature enough to justify deeper interpretation and comparison tooling.
-
-### Expected outputs
-
-- replay tooling
-- seeded comparison harnesses and reports
-- richer dashboards and ecology visualizations
-- lineage history and zone occupancy analysis
-
-### Must not turn into
-
-- premature analysis tooling before the ecosystem is interesting enough to study
-
-### Success looks like
-
-- the system supports structured comparison and interpretation of ecological histories
-- observability answers whether lineages are diverging, niches are persisting, or the ecosystem is collapsing into one dominant strategy
-
----
-
-## Milestone 5: Constrained Depth-Layer Model
-
-### Goal
-
-Introduce a bounded ecological depth axis that creates new forms of niche differentiation and predator-prey strategy without leaping to full 3D.
-
-### Why it comes after imperfect sensing
-
-Imperfect sensing should be understood on its own first. Depth can then add a new ecological axis without multiplying ambiguity too early.
-
-### Expected outputs
-
-- bounded depth state or trait
-- depth-dependent resources, hazards, or comfort ranges
-- depth-aware detection and predation interactions
-- lineage specialization by depth preference or tolerance
-- simple readable rendering support for depth
-
-### Must not turn into
-
-- full 3D engine work
-- 2.5D presentation polish as the primary goal
-- speculative camera or rendering overhauls before ecological value is proven
-
-### Success looks like
-
-- depth creates real new ecological structure rather than just extra coordinates
-- the project gains a new axis for coexistence and strategy divergence without sacrificing legibility
-
----
-
-## Suggested Prompt Pattern for Future Milestones
-
-```text
-We are working from these project documents:
-- roadmap.md
-- IMPLEMENTATION_PROGRAM.md
-- [current milestone spec]
-- [current acceptance file]
-
-We are currently on Pass [A/B/C] for [milestone name].
-
-Your job is to work only within that milestone.
-Do not redesign later milestones.
-Do not mix unrelated refactors into this work.
-Preserve existing behavior unless the spec explicitly allows change.
-Prefer minimal invasive changes.
-
-Deliver:
-1. A short summary of the milestone objective.
-2. A list of affected files and subsystems.
-3. Risks, hidden dependencies, and edge cases.
-4. A bounded plan for this pass only.
-5. Validation steps and measurements.
-6. Anything the milestone must not accidentally turn into.
-
-If the work appears to require broader architectural change than the spec allows, stop and say so instead of improvising.
-```
-
----
+For non-trivial work:
+
+1. Read `docs/architecture_reference.md`, this implementation program, and the
+   current roadmap.
+2. Inspect code before assuming ownership boundaries.
+3. Write a short implementation plan.
+4. Keep edits scoped to the milestone.
+5. Add or update tests with the implementation.
+6. Run targeted tests, then the full suite when practical.
+7. Run a headless smoke check for UI/runtime work.
+8. Update `CHANGELOG.md`.
+9. Make a meaningful git commit.
+
+## Creating a Milestone Spec
+
+Large milestones should still get a focused spec before implementation. Use
+`docs/spec_M<N>.md` and `docs/acceptance_M<N>.yaml` when the work is broad
+enough to need staged delivery. For smaller self-contained passes, this document
+plus the user prompt may be enough.
+
+Each spec should include:
+
+- purpose;
+- scope;
+- likely files;
+- architecture constraints;
+- non-goals;
+- risks;
+- validation plan;
+- human review gates where automation is insufficient.
 
 ## Final Guidance
 
-This project should be developed as a guided sequence of bounded architectural and ecological steps, not as a single open-ended optimization campaign.
+The near-term program is not about adding more simulation machinery. It is about
+making the existing world understandable from inside the app.
 
-Use the roadmap for direction.
-Use the implementation program for sequencing and anti-drift rules.
-Use milestone specs for constraints.
-Use acceptance files and the runner for verification.
-Use human review gates where the project’s deeper intent cannot yet be reduced safely to automation.
+Build the help browser first. Build the tutorial second. Then return to deeper
+observability and ecology with better user-facing context already in place.
