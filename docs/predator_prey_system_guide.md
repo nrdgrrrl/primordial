@@ -188,7 +188,7 @@ predator-prey run.
 
 ## HUD Guide
 
-Press `H` to show or hide the HUD. In predator-prey mode, it shows:
+Press `U` to show or hide the HUD. In predator-prey mode, it shows:
 
 - predator and prey counts;
 - average actual speed for each role;
@@ -237,18 +237,8 @@ unless an interactive overlay or Inspect Mode is active.
 | Control | Action |
 | --- | --- |
 | `Esc` / `Q` | Quit |
-| `H` | Toggle HUD |
-| `Space` | Pause/unpause, or skip predator-prey game-over countdown |
-| `F` | Toggle fullscreen/windowed |
-| `R` | Reset the current simulation run |
-| `S` | Open or close settings |
-| `I` | Toggle Inspect Mode |
-| `M` | In Inspect Mode, switch between pause and slow motion |
-| `D` | In Inspect Mode, toggle compact/detailed card |
-| mouse click | In Inspect Mode, select a creature |
-| hold `P` | Highlight predators |
-| `+` / `=` | Increase food spawn rate |
-| `-` / `_` | Decrease food spawn rate |
+| `H` | Open in-app Help |
+| `U` | Toggle HUD |
 
 Settings overlay controls:
 

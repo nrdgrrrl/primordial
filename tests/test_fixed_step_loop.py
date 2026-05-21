@@ -350,7 +350,7 @@ class FixedStepLoopTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             docs_dir = Path(temp_dir) / "docs"
             docs_dir.mkdir()
-            guide_path = docs_dir / "primordial_guide.md"
+            guide_path = docs_dir / "help_quick_start.md"
             guide_path.write_text("# guide\n", encoding="utf-8")
 
             settings = SimpleNamespace(fullscreen=True)
@@ -373,7 +373,7 @@ class FixedStepLoopTests(unittest.TestCase):
                 )
 
             self.assertTrue(opened)
-            self.assertEqual(message, "Opened primordial_guide.md in browser")
+            self.assertEqual(message, "Opened help_quick_start.md in browser")
             force_windowed_mode_mock.assert_called_once_with(settings, simulation, renderer)
             open_browser_mock.assert_called_once_with(guide_path.resolve().as_uri())
 
@@ -394,7 +394,7 @@ class FixedStepLoopTests(unittest.TestCase):
                 )
 
             self.assertFalse(opened)
-            self.assertEqual(message, "Help file missing: primordial_guide.md")
+            self.assertEqual(message, "Help file missing: help_quick_start.md")
             open_browser_mock.assert_not_called()
 
     def test_force_windowed_mode_recreates_non_fullscreen_display(self) -> None:

@@ -4,7 +4,7 @@ This document is for AI coding agents tasked with extending or modifying the Pri
 
 Detailed design/system reference: `docs/architecture_reference.md`
 Build/integration details: `docs/build_and_integration.md`
-Unified in-app help guide: `docs/primordial_guide.md`
+In-app help documents: `docs/help_*.md` (quick_start, organisms, reading_creatures, predator_prey, controls_settings)
 Standalone biology reference: `docs/organism_biology.md`
 
 ## Agent instructions
@@ -135,7 +135,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 - Type mismatches are coerced safely; invalid values fall back to defaults and are clamped on save.
 - In normal mode, `S` opens an in-app renderer-owned settings overlay.
 - Overlay behavior: Arrow keys navigate/adjust, Enter applies+saves, Esc/S discards, R twice resets defaults. Mouse support is renderer-owned: click categories, rows, value controls, and footer/action buttons; wheel scrolls the active category list.
-- The settings Help action opens a renderer-owned in-app help browser above settings. The help browser shows a single unified Primordial Guide (`docs/primordial_guide.md`) with section navigation, search, and keyboard navigation (Up/Down, PageUp/PageDown, / search, Esc close). Pressing `?` or `F1` from normal playback opens the help browser directly. The help document registry is defined in `HELP_DOCUMENTS` in `primordial/help/document_model.py`. Help rendering/layout/navigation/mouse logic lives in `primordial/rendering/help_overlay.py`, `help_layout.py`, `help_navigation.py`, and `help_mouse.py`.
+- The settings Help action opens a renderer-owned in-app help browser above settings. The help browser shows registered help documents (`HELP_DOCUMENTS` in `primordial/help/document_model.py`) with tab switching (Tab/Shift+Tab), section navigation, search, and keyboard navigation (Up/Down, PageUp/PageDown, / search, Esc close). Pressing `H` from normal playback opens the help browser directly. Help rendering/layout/navigation/mouse logic lives in `primordial/rendering/help_overlay.py`, `help_layout.py`, `help_navigation.py`, and `help_mouse.py`.
 - When adding a new help document, update all of: `HELP_DOCUMENTS` in `primordial/help/document_model.py`, the `__init__.py` exports, `build.py` (PyInstaller `--add-data`), and `primordial.spec` (datas list). Add a test guard that the new document loads and has sections.
 - The tutorial is a peer renderer-owned overlay, not part of settings/help internals. Tutorial content/state/persistence live in `primordial/tutorial/steps.py`, `state.py`, and `persistence.py`; tutorial rendering/layout/mouse hit regions live in `primordial/rendering/tutorial_overlay.py`, `tutorial_layout.py`, and `tutorial_mouse.py`. First-launch completion is stored in `tutorial_state.json` next to `config.toml`; it is not a snapshot or adaptive tuning file.
 - The runtime mouse-activated bottom action bar lives in `primordial/rendering/action_bar.py`. Keep its displayed shortcut metadata aligned with the real handlers in `primordial/input/keyboard.py` and the small `K_p` hold path in `primordial/main.py`.

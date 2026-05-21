@@ -63,6 +63,21 @@ _primordial_guide = Path("docs") / "primordial_guide.md"
 if _primordial_guide.exists():
     args.append(f"--add-data={_primordial_guide}{os.pathsep}docs")
 
+_organism_biology = Path("docs") / "organism_biology.md"
+if _organism_biology.exists():
+    args.append(f"--add-data={_organism_biology}{os.pathsep}docs")
+
+for _help_doc in [
+    "help_quick_start.md",
+    "help_organisms.md",
+    "help_reading_creatures.md",
+    "help_predator_prey.md",
+    "help_controls_settings.md",
+]:
+    _help_path = Path("docs") / _help_doc
+    if _help_path.exists():
+        args.append(f"--add-data={_help_path}{os.pathsep}docs")
+
 _docs_assets = Path("docs") / "assets"
 if _docs_assets.exists():
     args.append(f"--add-data={_docs_assets}{os.pathsep}docs/assets")

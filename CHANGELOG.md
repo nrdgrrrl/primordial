@@ -2,6 +2,82 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — fix: organize in-app help and normalize help shortcuts
+
+Changed Help from a buried Settings sub-action to a top-level runtime
+feature, reorganized the help content from one giant 48-section document
+into five curated tabbed documents, fixed nav scrolling, and corrected
+all shortcut mappings.
+
+Shortcuts:
+
+- `H` opens Help from the main simulation (was `?`/`F1`).
+- `U` toggles the HUD (was `H`).
+- `?` and `F1` no longer open Help.
+- Settings overlay Help action shows keyboard shortcut `H` (was `?`).
+
+Help content:
+
+- Split `docs/primordial_guide.md` (48 flat sections) into five focused
+  in-app help documents with short tab labels:
+  - "Start" (`help_quick_start.md`): what Primordial is, screen elements,
+    basic controls, HUD reading.
+  - "Organisms" (`help_organisms.md`): what organisms are, genome traits,
+    reproduction, mutation, lineages, evolution, model limits.
+  - "Reading" (`help_reading_creatures.md`): visual morphology, what you
+    can/cannot infer, limits of visual inference, watching evolution.
+  - "Predator-Prey" (`help_predator_prey.md`): predator/prey behavior,
+    depth bands, scarcity, food cycles, game over, adaptive tuning.
+  - "Controls" (`help_controls_settings.md`): runtime controls, settings
+    guide, tutorial, save/load, other modes, glossary.
+- `HELP_DOCUMENTS` registry now has five entries (was one).
+- `DEFAULT_HELP_DOC_ID` changed from `primordial_guide` to `quick_start`.
+- Tab key cycles help documents (was toggling search focus in single-doc
+  mode).
+- Help browser doc tab strip visible again (was hidden for single doc).
+
+Nav scrolling fix:
+
+- Mouse wheel over the left nav panel no longer snaps the scroll position
+  back to the selected item on every draw. `ensure_selected_nav_visible`
+  now skips when the scroll was set by a wheel event, and only fires after
+  keyboard selection, click selection, or search changes.
+- Nav wheel scroll amount increased from 1 to 3 rows per notch.
+
+Code:
+
+- Renamed `bundled_primordial_guide_path()` to `bundled_help_doc_path()`.
+- Updated `_predator_prey_help_path()` to resolve `help_quick_start.md`.
+- Action bar normal shortcuts: `H Help`, `U HUD` (was `H HUD`, `? Help`).
+- Action bar game-over shortcuts: `U HUD` (was `H HUD`).
+- Settings overlay Help action: shortcut `H` (was `?`).
+- Keyboard handler: `pygame.K_h` opens Help, `pygame.K_u` toggles HUD,
+  removed `pygame.K_QUESTION`/`pygame.K_F1` Help handling.
+
+Docs:
+
+- Updated `docs/primordial_guide.md`, `docs/predator_prey_system_guide.md`,
+  `README.md`, and `AGENTS.md` — all `H` references now point to Help, all
+  HUD references now point to `U`, no `?` or `F1` Help shortcuts remain
+  in user-facing text.
+- Original deep reference docs (`organism_biology.md`,
+  `predator_prey_system_guide.md`, `primordial_guide.md`) kept in repo
+  and PyInstaller bundle.
+
+Build:
+
+- Added five `docs/help_*.md` files to `build.py` and `primordial.spec`.
+- Added `docs/organism_biology.md` to `build.py` and `primordial.spec`.
+
+Tests:
+
+- Updated `test_help_browser.py`: registry checks for all five docs, tab
+  cycling test for multi-doc case, nav scroll test proving wheel scroll
+  is not undone by draw.
+- Updated `test_action_bar.py`: normal shortcuts show `H Help` and `U HUD`.
+- Updated `test_fixed_step_loop.py`: help path resolves
+  `help_quick_start.md`.
+
 ## [2026-05-21] — docs/help: unify organism biology into single help guide
 
 The organism biology content was previously in a separate help document

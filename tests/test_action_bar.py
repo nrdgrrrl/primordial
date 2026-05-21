@@ -50,8 +50,8 @@ class ActionBarTests(unittest.TestCase):
             [(item.key_label, item.action_label) for item in items],
             [
                 ("S", "Settings"),
-                ("H", "HUD"),
-                ("?", "Help"),
+                ("H", "Help"),
+                ("U", "HUD"),
                 ("Space", "Pause/Resume"),
                 ("F", "Fullscreen"),
                 ("R", "Reset"),

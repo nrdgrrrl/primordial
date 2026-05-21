@@ -121,8 +121,8 @@ def _resolve_snapshot_path(
 
 
 def _predator_prey_help_path() -> Path:
-    """Resolve the bundled Primordial guide path."""
-    return get_base_path() / "docs" / "primordial_guide.md"
+    """Resolve the bundled quick start help path for browser launch."""
+    return get_base_path() / "docs" / "help_quick_start.md"
 
 
 def _open_predator_prey_help(

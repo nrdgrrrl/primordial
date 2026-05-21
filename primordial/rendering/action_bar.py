@@ -66,8 +66,8 @@ class ActionBarLayout:
 
 _NORMAL_SHORTCUTS: tuple[ShortcutHint, ...] = (
     ShortcutHint("S", "Settings"),
-    ShortcutHint("H", "HUD"),
-    ShortcutHint("?", "Help"),
+    ShortcutHint("H", "Help"),
+    ShortcutHint("U", "HUD"),
     ShortcutHint("Space", "Pause/Resume"),
     ShortcutHint("F", "Fullscreen"),
     ShortcutHint("R", "Reset"),
@@ -92,7 +92,7 @@ _INSPECT_SHORTCUTS: tuple[ShortcutHint, ...] = (
 _GAME_OVER_SHORTCUTS: tuple[ShortcutHint, ...] = (
     ShortcutHint("Space", "Skip countdown"),
     ShortcutHint("S", "Settings"),
-    ShortcutHint("H", "HUD"),
+    ShortcutHint("U", "HUD"),
     ShortcutHint("F", "Fullscreen"),
     ShortcutHint("Esc/Q", "Quit"),
 )

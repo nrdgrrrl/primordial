@@ -214,7 +214,7 @@ class HelpOverlay:
         pos = pygame.mouse.get_pos()
         amount = -y
         if self._last_nav_rect.move(self._last_panel_rect.topleft).collidepoint(pos):
-            self.navigation.scroll_nav(amount, self._visible_nav_rows())
+            self.navigation.scroll_nav(amount * 3, self._visible_nav_rows())
         else:
             self.navigation.scroll_content(amount * 3)
 
@@ -379,7 +379,7 @@ class HelpOverlay:
         if self.status_message:
             status += " · " + self.status_message
         panel.blit(self._small.render(status, True, (190, 230, 238)), (rect.x + 12, rect.y + 10))
-        hint = "Mouse: click sections. Keyboard: Up/Down section, PageUp/PageDown scroll, / search, Esc close."
+        hint = "Mouse: click sections, Tab doc. Keyboard: Up/Down section, PageUp/PageDown scroll, / search, Tab doc, Esc close."
         for line in self._wrap_text(hint, self._small, rect.width - 24)[:1]:
             panel.blit(self._small.render(line, True, (141, 190, 210)), (rect.x + 12, rect.y + 35))
 

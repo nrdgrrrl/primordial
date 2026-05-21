@@ -61,16 +61,40 @@ class HelpDocEntry:
 
 HELP_DOCUMENTS: tuple[HelpDocEntry, ...] = (
     HelpDocEntry(
-        doc_id="primordial_guide",
-        title="Primordial Guide",
-        description="What organisms are, how genomes drive behavior and appearance, predator-prey biology, how to read the creatures, and how to watch evolution happen.",
-        rel_path="docs/primordial_guide.md",
+        doc_id="quick_start",
+        title="Start",
+        description="What Primordial is, what you see on screen, basic controls, and how to read the HUD.",
+        rel_path="docs/help_quick_start.md",
+    ),
+    HelpDocEntry(
+        doc_id="organisms",
+        title="Organisms",
+        description="What organisms are, how genomes drive behavior and appearance, reproduction, mutation, lineages, and evolution.",
+        rel_path="docs/help_organisms.md",
+    ),
+    HelpDocEntry(
+        doc_id="reading_creatures",
+        title="Reading",
+        description="How to read creature appearance, what is hidden, limits of visual inference, and how to watch evolution happen.",
+        rel_path="docs/help_reading_creatures.md",
+    ),
+    HelpDocEntry(
+        doc_id="predator_prey",
+        title="Predator-Prey",
+        description="How predators and prey behave, depth bands, scarcity, food cycles, game over, and adaptive tuning.",
+        rel_path="docs/help_predator_prey.md",
+    ),
+    HelpDocEntry(
+        doc_id="controls_settings",
+        title="Controls",
+        description="Runtime controls, settings guide, tutorial, save/load, other modes, and glossary.",
+        rel_path="docs/help_controls_settings.md",
     ),
 )
 
 HELP_DOC_BY_ID: dict[str, HelpDocEntry] = {entry.doc_id: entry for entry in HELP_DOCUMENTS}
 
-DEFAULT_HELP_DOC_ID = "primordial_guide"
+DEFAULT_HELP_DOC_ID = "quick_start"
 
 
 def load_help_document_by_id(doc_id: str) -> HelpDocument:
@@ -92,14 +116,17 @@ def load_help_document_by_id(doc_id: str) -> HelpDocument:
     return load_help_document(entry.resolve_path())
 
 
-def bundled_primordial_guide_path() -> Path:
-    """Resolve the bundled human-facing Primordial guide."""
-    return get_base_path() / "docs" / "primordial_guide.md"
+def bundled_help_doc_path(doc_id: str = DEFAULT_HELP_DOC_ID) -> Path:
+    """Resolve the path for a registered help document."""
+    entry = HELP_DOC_BY_ID.get(doc_id)
+    if entry is not None:
+        return entry.resolve_path()
+    return get_base_path() / "docs" / "help_quick_start.md"
 
 
 def load_help_document(path: Path | None = None) -> HelpDocument:
     """Load and parse a Markdown help document, returning an error document on failure."""
-    source_path = path or bundled_primordial_guide_path()
+    source_path = path or bundled_help_doc_path()
     try:
         text = source_path.read_text(encoding="utf-8")
     except OSError as exc:

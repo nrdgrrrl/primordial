@@ -754,7 +754,7 @@ atmospheric and meaningful, but it is incomplete.
 
 ## HUD Guide
 
-Press `H` to show or hide the HUD. In predator-prey mode, it shows:
+Press `U` to show or hide the HUD. In predator-prey mode, it shows:
 
 - predator and prey counts;
 - average actual speed for each role;
@@ -803,8 +803,8 @@ unless an interactive overlay or Inspect Mode is active.
 | Control | Action |
 | --- | --- |
 | `Esc` / `Q` | Quit |
-| `?` / `F1` | Open in-app help |
-| `H` | Toggle HUD |
+| `H` | Open in-app help |
+| `U` | Toggle HUD |
 | `Space` | Pause/unpause, or skip predator-prey game-over countdown |
 | `F` | Toggle fullscreen/windowed |
 | `R` | Reset the current simulation run |
@@ -831,7 +831,7 @@ Settings overlay controls:
 | `Space` | Run selected action in the Actions category |
 | `V` | Save snapshot |
 | `L` | Load snapshot |
-| `?` | Open the in-app help browser |
+| `H` | Open the in-app help browser |
 | `T` | Start the onboarding tutorial from the Actions category |
 | `R R` | Confirm reset settings defaults |
 | `D D` | Confirm predator-prey dial reset, when available |

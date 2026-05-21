@@ -93,7 +93,8 @@ remains hidden during normal simulation playback.
 | Key | Action |
 |-----|--------|
 | `ESC` or `Q` | Quit the screensaver |
-| `H` | Toggle HUD (heads-up display) |
+| `H` | Open in-app Help browser |
+| `U` | Toggle HUD (heads-up display) |
 | `Space` | Pause/unpause simulation, or skip the predator_prey `GAME OVER` wait and restart immediately |
 | `F` | Toggle fullscreen/windowed mode |
 | `R` | Reset simulation (new population) |
@@ -384,10 +385,9 @@ Configuration is TOML-backed and persistent across app updates.
   scroll long categories, and use footer buttons for Apply, Discard, Save, Load,
   Guide, and reset actions.
 - Press **`H`** while the settings overlay is open, or click **Guide**, to open
-  the in-app documentation browser. It loads
-  `docs/predator_prey_system_guide.md`, supports section navigation, search,
-  scrolling, mouse input, and keyboard input, and closes with `Esc` or the
-  Close button.
+  the in-app documentation browser. It loads the in-app help documents,
+  supports section navigation, search, scrolling, mouse input, and keyboard
+  input, and closes with `Esc` or the Close button.
 - Click **Start Tutorial** in the Actions category, or press **`T`** there, to
   replay the guided onboarding overlay.
 - Canonical repo-tracked defaults live in [`primordial/config/defaults.toml`](/home/victoria/projects/primordial/primordial/config/defaults.toml).

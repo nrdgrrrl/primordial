@@ -18,6 +18,7 @@ class HelpNavigation:
         self.search_query = ""
         self.search_focused = False
         self.results: list[SearchResult] = []
+        self._nav_scroll_from_wheel = False
 
     @property
     def visible_section_indices(self) -> list[int]:
@@ -44,6 +45,7 @@ class HelpNavigation:
         self.search_query = ""
         self.search_focused = False
         self.results = []
+        self._nav_scroll_from_wheel = False
 
     def set_search_query(self, query: str) -> None:
         self.search_query = query
@@ -55,6 +57,7 @@ class HelpNavigation:
             self.selected_section_index = indices[0]
         self.nav_first_visible = min(self.nav_first_visible, max(0, len(indices) - 1))
         self.content_scroll = 0
+        self._nav_scroll_from_wheel = False
 
     def append_search_text(self, text: str) -> None:
         if not text:
@@ -81,18 +84,24 @@ class HelpNavigation:
         position = max(0, min(len(indices) - 1, position + delta))
         self.selected_section_index = indices[position]
         self.content_scroll = 0
+        self._nav_scroll_from_wheel = False
 
     def select_section(self, section_index: int) -> None:
         if 0 <= section_index < len(self.document.sections):
             self.selected_section_index = section_index
             self.content_scroll = 0
+            self._nav_scroll_from_wheel = False
 
     def scroll_nav(self, amount: int, visible_rows: int) -> None:
         indices = self.visible_section_indices
         max_first = max(0, len(indices) - max(1, visible_rows))
         self.nav_first_visible = max(0, min(max_first, self.nav_first_visible + amount))
+        self._nav_scroll_from_wheel = True
 
     def ensure_selected_nav_visible(self, visible_rows: int) -> None:
+        if self._nav_scroll_from_wheel:
+            self._nav_scroll_from_wheel = False
+            return
         position = self.selected_visible_position
         if position < self.nav_first_visible:
             self.nav_first_visible = position

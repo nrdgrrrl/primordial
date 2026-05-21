@@ -474,8 +474,8 @@ def build_action_items() -> list[ActionItem]:
         ActionItem(
             "Help",
             "help",
-            "?",
-            "Opens the in-app help browser with the Primordial guide.",
+            "H",
+            "Opens the in-app help browser.",
         ),
         ActionItem(
             "Start Tutorial",
