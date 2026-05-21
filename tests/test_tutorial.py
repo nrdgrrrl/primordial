@@ -10,7 +10,11 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
-from primordial.rendering.tutorial_layout import calculate_tutorial_layout
+from primordial.rendering.tutorial_layout import (
+    TutorialHighlightContext,
+    calculate_tutorial_layout,
+    highlight_rect_for_screen,
+)
 from primordial.rendering.tutorial_overlay import TutorialOverlay
 from primordial.tutorial import (
     TUTORIAL_SEEN_VERSION,
@@ -67,6 +71,14 @@ class TutorialModelTests(unittest.TestCase):
         self.assertEqual(state.text_scroll, 15)
         state.scroll_text(-100)
         self.assertEqual(state.text_scroll, 0)
+
+    def test_tutorial_exit_policy_resumes_playback(self) -> None:
+        state = TutorialState()
+        state.start(previous_paused=False)
+        self.assertFalse(state.paused_after_exit())
+
+        state.start(previous_paused=True)
+        self.assertFalse(state.paused_after_exit())
 
 
 class TutorialPersistenceTests(unittest.TestCase):
@@ -130,6 +142,43 @@ class TutorialOverlayTests(unittest.TestCase):
         self.assertTrue(layout.back_rect.width > 0)
         self.assertTrue(layout.next_rect.width > 0)
 
+    def test_conceptual_targets_do_not_produce_fake_highlight_rects(self) -> None:
+        panel_rect = pygame.Rect(600, 180, 620, 360)
+        context = TutorialHighlightContext()
+
+        for target in ("none", "world", "settings", "help", "depth", "game_over"):
+            self.assertIsNone(
+                highlight_rect_for_screen((1280, 720), target, panel_rect, context)
+            )
+
+    def test_hud_highlight_requires_visible_hud(self) -> None:
+        panel_rect = pygame.Rect(600, 180, 620, 360)
+
+        self.assertIsNone(
+            highlight_rect_for_screen(
+                (1280, 720),
+                "hud",
+                panel_rect,
+                TutorialHighlightContext(hud_visible=False),
+            )
+        )
+        self.assertIsNotNone(
+            highlight_rect_for_screen(
+                (1280, 720),
+                "hud",
+                panel_rect,
+                TutorialHighlightContext(hud_visible=True),
+            )
+        )
+
+    def test_panel_position_stays_stable_for_conceptual_steps(self) -> None:
+        welcome_layout = calculate_tutorial_layout((1280, 720), highlight="none")
+        settings_layout = calculate_tutorial_layout((1280, 720), highlight="settings")
+        help_layout = calculate_tutorial_layout((1280, 720), highlight="help")
+
+        self.assertEqual(welcome_layout.panel_rect.topleft, settings_layout.panel_rect.topleft)
+        self.assertEqual(welcome_layout.panel_rect.topleft, help_layout.panel_rect.topleft)
+
     def test_overlay_draws_headlessly_and_mouse_buttons_advance(self) -> None:
         screen = pygame.Surface((1280, 720))
         overlay = TutorialOverlay()
@@ -152,6 +201,28 @@ class TutorialOverlayTests(unittest.TestCase):
 
         self.assertEqual(overlay.state.current_index, 0)
 
+    def test_welcome_and_settings_steps_do_not_draw_confusing_highlight_boxes(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = TutorialOverlay()
+        overlay.open(previous_paused=False)
+        overlay.fade = 20
+
+        overlay.state.current_index = 0
+        overlay.draw(screen)
+        welcome_layout = calculate_tutorial_layout(
+            screen.get_size(),
+            highlight=overlay.state.current_step.highlight,
+        )
+        self.assertIsNone(welcome_layout.highlight_rect)
+
+        overlay.state.current_index = 2
+        overlay.draw(screen)
+        settings_layout = calculate_tutorial_layout(
+            screen.get_size(),
+            highlight=overlay.state.current_step.highlight,
+        )
+        self.assertIsNone(settings_layout.highlight_rect)
+
     def test_keyboard_finish_and_escape_close_return_actions(self) -> None:
         overlay = TutorialOverlay()
         overlay.open(previous_paused=True)
@@ -168,6 +239,31 @@ class TutorialOverlayTests(unittest.TestCase):
 
         self.assertEqual(action, "close")
         self.assertEqual(overlay.fade_dir, -1)
+
+    def test_hud_step_only_highlights_when_runtime_context_says_hud_is_visible(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = TutorialOverlay()
+        overlay.open(previous_paused=False)
+        overlay.fade = 20
+        overlay.state.current_index = 4
+
+        overlay.set_runtime_context(hud_visible=False)
+        overlay.draw(screen)
+        hidden_layout = calculate_tutorial_layout(
+            screen.get_size(),
+            highlight=overlay.state.current_step.highlight,
+            highlight_context=TutorialHighlightContext(hud_visible=False),
+        )
+        self.assertIsNone(hidden_layout.highlight_rect)
+
+        overlay.set_runtime_context(hud_visible=True)
+        overlay.draw(screen)
+        visible_layout = calculate_tutorial_layout(
+            screen.get_size(),
+            highlight=overlay.state.current_step.highlight,
+            highlight_context=TutorialHighlightContext(hud_visible=True),
+        )
+        self.assertIsNotNone(visible_layout.highlight_rect)
 
 
 if __name__ == "__main__":

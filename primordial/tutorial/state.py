@@ -83,3 +83,7 @@ class TutorialState:
     def clamp_text_scroll(self) -> None:
         max_scroll = max(0, self.text_line_count - self.text_visible_lines)
         self.text_scroll = max(0, min(max_scroll, self.text_scroll))
+
+    def paused_after_exit(self) -> bool:
+        """Return the post-tutorial pause state for the first-version UX."""
+        return False

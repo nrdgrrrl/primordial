@@ -45,7 +45,7 @@ def build_default_tutorial_steps() -> tuple[TutorialStep, ...]:
                 "energy, reproduce with mutation, and disappear when they fail "
                 "to survive."
             ),
-            highlight="world",
+            highlight="none",
         ),
         TutorialStep(
             id="basic_controls",
@@ -63,22 +63,22 @@ def build_default_tutorial_steps() -> tuple[TutorialStep, ...]:
             phase="App Basics",
             title="Settings",
             body=(
-                "Press S to open settings. The settings panel supports keyboard "
-                "and mouse control, grouped categories, descriptions, and clear "
-                "reset-required markers."
+                "Press S after the tutorial to open settings. The settings panel "
+                "supports keyboard and mouse control, grouped categories, "
+                "descriptions, and clear reset-required markers."
             ),
-            highlight="settings",
+            highlight="none",
         ),
         TutorialStep(
             id="help_browser",
             phase="App Basics",
             title="Help Browser",
             body=(
-                "The Guide action opens the searchable in-app documentation "
-                "browser. Use it when you want deeper explanations than this "
-                "quick tour provides."
+                "Open Guide from the settings Actions category to use the "
+                "searchable in-app documentation browser. Use it when you want "
+                "deeper explanations than this quick tour provides."
             ),
-            highlight="help",
+            highlight="none",
         ),
         TutorialStep(
             id="hud",
@@ -172,7 +172,7 @@ def build_default_tutorial_steps() -> tuple[TutorialStep, ...]:
                 "affects sensing, food access, escape, and cross-band hunting "
                 "misses, even when the visual cue is subtle."
             ),
-            highlight="depth",
+            highlight="none",
         ),
         TutorialStep(
             id="collapse",
@@ -183,7 +183,7 @@ def build_default_tutorial_steps() -> tuple[TutorialStep, ...]:
                 "collapse long enough in predator-prey mode, the run freezes on "
                 "a GAME OVER screen, records survival, then restarts."
             ),
-            highlight="game_over",
+            highlight="none",
         ),
         TutorialStep(
             id="evolution",
@@ -194,7 +194,7 @@ def build_default_tutorial_steps() -> tuple[TutorialStep, ...]:
                 "open-ended artificial life, but mutations that help creatures "
                 "survive and reproduce can spread through future generations."
             ),
-            highlight="world",
+            highlight="none",
             pause_simulation=False,
         ),
         TutorialStep(

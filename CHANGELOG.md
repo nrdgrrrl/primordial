@@ -2,6 +2,15 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — fix: polish tutorial highlights and pause restore
+
+Removed confusing tutorial highlight boxes for conceptual steps like Welcome,
+Settings, Help Browser, Depth, and Game Over. Tutorial highlights now appear
+only for visible, stable targets such as the HUD or broad world-reading areas,
+with softer labeled treatment instead of empty panel-like boxes. Tutorial exit
+now resumes normal simulation playback on finish, skip, or close instead of
+leaving the run paused.
+
 ## [2026-05-21] — feat: add in-game tutorial onboarding
 
 Added a renderer-owned in-game tutorial overlay with declarative steps,

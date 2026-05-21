@@ -200,7 +200,10 @@ version seen/skipped. `--tutorial` and `--show-tutorial` force it for the curren
 run. Finish and Skip/Escape both mark the current tutorial version handled.
 
 Tutorial steps may pause the simulation or allow motion. The main loop applies
-that preference while active and restores the previous pause state on exit.
+that preference while active, and tutorial exit resumes normal playback instead
+of restoring a paused state. Conceptual steps should not manufacture fake
+highlight rectangles; highlight boxes are only appropriate for stable, actually
+visible targets.
 
 ## Configuration
 

@@ -6,7 +6,7 @@ import pygame
 
 from primordial.tutorial import TutorialState, TutorialStep, build_default_tutorial_steps
 
-from .tutorial_layout import calculate_tutorial_layout
+from .tutorial_layout import TutorialHighlightContext, calculate_tutorial_layout
 from .tutorial_mouse import TutorialHitRegion
 
 
@@ -22,6 +22,7 @@ class TutorialOverlay:
         self._hit_regions: list[TutorialHitRegion] = []
         self._hover_region: TutorialHitRegion | None = None
         self._last_panel_rect = pygame.Rect(0, 0, 0, 0)
+        self._highlight_context = TutorialHighlightContext()
 
         self._title_font = pygame.font.Font(None, 36)
         self._phase_font = pygame.font.Font(None, 22)
@@ -83,6 +84,7 @@ class TutorialOverlay:
         layout = calculate_tutorial_layout(
             screen.get_size(),
             highlight=self.state.current_step.highlight,
+            highlight_context=self._highlight_context,
         )
         self._last_panel_rect = layout.panel_rect
         self._hit_regions = []
@@ -91,7 +93,12 @@ class TutorialOverlay:
             self._shade = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         self._shade.fill((0, 8, 18, int(126 * fade_ratio)))
         screen.blit(self._shade, (0, 0))
-        self._draw_highlight(screen, layout.highlight_rect, fade_ratio)
+        self._draw_highlight(
+            screen,
+            layout.highlight_rect,
+            self.state.current_step.highlight,
+            fade_ratio,
+        )
 
         panel = pygame.Surface(layout.panel_rect.size, pygame.SRCALPHA)
         panel.fill((5, 18, 34, int(244 * fade_ratio)))
@@ -106,6 +113,21 @@ class TutorialOverlay:
 
     def wants_simulation_paused(self) -> bool:
         return self.visible and self.state.current_step.pause_simulation
+
+    def set_runtime_context(
+        self,
+        *,
+        hud_visible: bool,
+        settings_visible: bool = False,
+        help_visible: bool = False,
+        game_over_visible: bool = False,
+    ) -> None:
+        self._highlight_context = TutorialHighlightContext(
+            hud_visible=hud_visible,
+            settings_visible=settings_visible,
+            help_visible=help_visible,
+            game_over_visible=game_over_visible,
+        )
 
     def _handle_mouse_button(self, event: pygame.event.Event) -> str | None:
         if event.button in (4, 5):
@@ -146,16 +168,49 @@ class TutorialOverlay:
         self,
         screen: pygame.Surface,
         rect: pygame.Rect | None,
+        highlight: str,
         fade_ratio: float,
     ) -> None:
         if rect is None:
             return
         glow = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
         outer = rect.inflate(18, 18)
-        pygame.draw.rect(glow, (90, 234, 229, int(36 * fade_ratio)), outer, border_radius=18)
-        pygame.draw.rect(glow, (96, 236, 232, int(190 * fade_ratio)), rect, 2, border_radius=14)
-        pygame.draw.rect(glow, (216, 254, 255, int(105 * fade_ratio)), rect.inflate(-8, -8), 1, border_radius=10)
+        pygame.draw.rect(glow, (40, 140, 154, int(22 * fade_ratio)), outer, border_radius=18)
+        pygame.draw.rect(glow, (90, 234, 229, int(126 * fade_ratio)), rect, 2, border_radius=14)
+        pygame.draw.rect(glow, (160, 244, 248, int(54 * fade_ratio)), rect, border_radius=14)
+        label = self._highlight_label(highlight)
+        if label:
+            self._draw_highlight_label(glow, rect, label, fade_ratio)
         screen.blit(glow, (0, 0))
+
+    def _highlight_label(
+        self,
+        highlight: str,
+    ) -> str | None:
+        labels = {
+            "hud": "HUD",
+            "creatures": "Creature Field",
+            "food": "Food Field",
+            "predators": "Predator / Prey Field",
+            "lineages": "Lineage Activity",
+            "zones": "Simulation World",
+        }
+        return labels.get(highlight)
+
+    def _draw_highlight_label(
+        self,
+        surface: pygame.Surface,
+        rect: pygame.Rect,
+        label: str,
+        fade_ratio: float,
+    ) -> None:
+        text = self._small.render(label, True, (231, 252, 255))
+        pill = pygame.Rect(0, 0, text.get_width() + 18, text.get_height() + 10)
+        pill.x = max(12, min(surface.get_width() - pill.width - 12, rect.x + 8))
+        pill.y = max(12, rect.y - pill.height - 8)
+        pygame.draw.rect(surface, (9, 34, 46, int(220 * fade_ratio)), pill, border_radius=8)
+        pygame.draw.rect(surface, (96, 236, 232, int(190 * fade_ratio)), pill, 1, border_radius=8)
+        surface.blit(text, (pill.x + 9, pill.y + 5))
 
     def _draw_panel_frame(self, panel: pygame.Surface, fade_ratio: float) -> None:
         rect = panel.get_rect()

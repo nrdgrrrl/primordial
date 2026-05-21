@@ -26,11 +26,21 @@ class TutorialLayout:
     highlight_rect: pygame.Rect | None
 
 
+@dataclass(frozen=True)
+class TutorialHighlightContext:
+    hud_visible: bool = False
+    settings_visible: bool = False
+    help_visible: bool = False
+    game_over_visible: bool = False
+
+
 def calculate_tutorial_layout(
     screen_size: tuple[int, int],
     *,
     highlight: str,
+    highlight_context: TutorialHighlightContext | None = None,
 ) -> TutorialLayout:
+    highlight_context = highlight_context or TutorialHighlightContext()
     screen_width, screen_height = screen_size
     max_width = max(320, screen_width - PANEL_MARGIN * 2)
     max_height = max(260, screen_height - PANEL_MARGIN * 2)
@@ -41,7 +51,7 @@ def calculate_tutorial_layout(
 
     panel_x = screen_width - panel_width - max(PANEL_MARGIN, int(screen_width * 0.04))
     panel_y = screen_height // 2 - panel_height // 2
-    if highlight in {"hud", "settings", "help"}:
+    if highlight == "hud" and highlight_context.hud_visible:
         panel_x = max(PANEL_MARGIN, int(screen_width * 0.06))
     panel_x = max(PANEL_MARGIN, min(screen_width - panel_width - PANEL_MARGIN, panel_x))
     panel_y = max(PANEL_MARGIN, min(screen_height - panel_height - PANEL_MARGIN, panel_y))
@@ -86,7 +96,12 @@ def calculate_tutorial_layout(
         back_rect=back_rect,
         skip_rect=skip_rect,
         next_rect=next_rect,
-        highlight_rect=highlight_rect_for_screen(screen_size, highlight, panel_rect),
+        highlight_rect=highlight_rect_for_screen(
+            screen_size,
+            highlight,
+            panel_rect,
+            highlight_context,
+        ),
     )
 
 
@@ -94,16 +109,24 @@ def highlight_rect_for_screen(
     screen_size: tuple[int, int],
     highlight: str,
     panel_rect: pygame.Rect,
+    highlight_context: TutorialHighlightContext | None = None,
 ) -> pygame.Rect | None:
+    highlight_context = highlight_context or TutorialHighlightContext()
     width, height = screen_size
     if highlight == "none":
         return None
+    if highlight in {"world", "settings", "help", "depth", "game_over"}:
+        if highlight == "settings" and not highlight_context.settings_visible:
+            return None
+        if highlight == "help" and not highlight_context.help_visible:
+            return None
+        if highlight == "game_over" and not highlight_context.game_over_visible:
+            return None
+        return None
     if highlight == "hud":
+        if not highlight_context.hud_visible:
+            return None
         return pygame.Rect(16, 16, min(420, width - 32), min(190, height - 32))
-    if highlight == "settings":
-        return pygame.Rect(18, height - 92, min(380, width - 36), 58)
-    if highlight == "help":
-        return pygame.Rect(18, height - 150, min(420, width - 36), 58)
     if highlight == "food":
         return pygame.Rect(width // 2 - 180, height // 2 - 110, 360, 220)
     if highlight == "creatures":
@@ -114,14 +137,4 @@ def highlight_rect_for_screen(
         return pygame.Rect(width // 2 - 300, height // 2 - 190, 600, 380)
     if highlight == "zones":
         return pygame.Rect(60, 60, max(280, width - 120), max(220, height - 120))
-    if highlight == "depth":
-        return pygame.Rect(70, height // 2 - 95, max(280, width - 140), 190)
-    if highlight == "game_over":
-        return pygame.Rect(width // 2 - 260, height // 2 - 120, 520, 240)
-    if highlight == "world":
-        margin = 54
-        rect = pygame.Rect(margin, margin, width - margin * 2, height - margin * 2)
-        if rect.colliderect(panel_rect):
-            rect.width = max(220, panel_rect.x - margin * 2)
-        return rect
     return None

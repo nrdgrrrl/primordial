@@ -184,11 +184,10 @@ def main(
     def _apply_tutorial_pause_policy() -> None:
         if not renderer.tutorial_overlay.visible:
             return
-        previous_paused = renderer.tutorial_overlay.restore_pause_value()
         if renderer.tutorial_overlay.wants_simulation_paused():
             simulation.paused = True
         else:
-            simulation.paused = bool(previous_paused) if previous_paused is not None else False
+            simulation.paused = False
         runtime_loop.reset_timing_debt()
 
     def _open_tutorial(*, forced: bool = False) -> None:
@@ -209,9 +208,7 @@ def main(
             completed=action == "finish",
             skipped=action in {"close", "skip"},
         )
-        restore_paused = renderer.tutorial_overlay.restore_pause_value()
-        if restore_paused is not None:
-            simulation.paused = restore_paused
+        simulation.paused = renderer.tutorial_overlay.state.paused_after_exit()
         runtime_loop.reset_timing_debt()
         if (
             renderer.help_overlay.visible

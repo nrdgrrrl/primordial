@@ -497,6 +497,12 @@ class Renderer:
 
         t0 = time.perf_counter()
         if self.tutorial_overlay.visible or self.tutorial_overlay.fade > 0:
+            self.tutorial_overlay.set_runtime_context(
+                hud_visible=self.hud.visible,
+                settings_visible=self.settings_overlay.visible,
+                help_visible=self.help_overlay.visible,
+                game_over_visible=simulation.predator_prey_game_over_active,
+            )
             self.tutorial_overlay.update()
             self.tutorial_overlay.draw(target)
         timings["tutorial_ms"] = (time.perf_counter() - t0) * 1000.0
