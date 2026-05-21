@@ -51,6 +51,7 @@ class ActionBarTests(unittest.TestCase):
             [
                 ("S", "Settings"),
                 ("H", "HUD"),
+                ("?", "Help"),
                 ("Space", "Pause/Resume"),
                 ("F", "Fullscreen"),
                 ("R", "Reset"),

@@ -67,6 +67,7 @@ class ActionBarLayout:
 _NORMAL_SHORTCUTS: tuple[ShortcutHint, ...] = (
     ShortcutHint("S", "Settings"),
     ShortcutHint("H", "HUD"),
+    ShortcutHint("?", "Help"),
     ShortcutHint("Space", "Pause/Resume"),
     ShortcutHint("F", "Fullscreen"),
     ShortcutHint("R", "Reset"),

@@ -2,6 +2,22 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — keyboard: add ? and F1 shortcuts to open help browser directly
+
+The organism biology and predator-prey guides were previously only
+reachable by opening Settings (S) then finding the Help action in the
+Actions category. Now pressing ? or F1 opens the help browser directly
+from the running simulation.
+
+Changed:
+
+- Added `?` (pygame.K_QUESTION) and `F1` keyboard shortcuts to
+  `primordial/input/keyboard.py` that open the in-app help browser
+  directly from normal simulation playback.
+- Added `?` Help hint to the bottom action bar shortcut strip.
+- Updated the Settings overlay Help action key label from `H` to `?`
+  to match the direct shortcut (H already toggles the HUD).
+
 ## [2026-05-21] — docs/help: expose organism biology in app help browser
 
 Wired the organism biology documentation into the in-app help browser so

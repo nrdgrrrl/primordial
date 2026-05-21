@@ -35,6 +35,10 @@ def handle_keydown(
         return False
     elif key == pygame.K_h:
         renderer.toggle_hud()
+    elif key in (pygame.K_QUESTION, pygame.K_F1) and mode != "screensaver":
+        renderer.open_help_overlay()
+        show_interactive_cursor()
+        renderer.show_cursor = True
     elif key == pygame.K_i:
         if inspect_mode is not None:
             inspect_mode.toggle(simulation_paused=simulation.paused)
