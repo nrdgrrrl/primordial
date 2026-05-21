@@ -61,22 +61,16 @@ class HelpDocEntry:
 
 HELP_DOCUMENTS: tuple[HelpDocEntry, ...] = (
     HelpDocEntry(
-        doc_id="predator_prey_guide",
-        title="Predator-Prey Guide",
-        description="How the predator-prey system works: hunting, fleeing, depth, and population cycles.",
-        rel_path="docs/predator_prey_system_guide.md",
-    ),
-    HelpDocEntry(
-        doc_id="organism_biology",
-        title="Organism Biology",
-        description="What organisms are, how genomes work, what you can read from their appearance, and how to watch evolution happen.",
-        rel_path="docs/organism_biology.md",
+        doc_id="primordial_guide",
+        title="Primordial Guide",
+        description="What organisms are, how genomes drive behavior and appearance, predator-prey biology, how to read the creatures, and how to watch evolution happen.",
+        rel_path="docs/primordial_guide.md",
     ),
 )
 
 HELP_DOC_BY_ID: dict[str, HelpDocEntry] = {entry.doc_id: entry for entry in HELP_DOCUMENTS}
 
-DEFAULT_HELP_DOC_ID = "predator_prey_guide"
+DEFAULT_HELP_DOC_ID = "primordial_guide"
 
 
 def load_help_document_by_id(doc_id: str) -> HelpDocument:
@@ -98,14 +92,14 @@ def load_help_document_by_id(doc_id: str) -> HelpDocument:
     return load_help_document(entry.resolve_path())
 
 
-def bundled_predator_prey_guide_path() -> Path:
-    """Resolve the bundled human-facing predator/prey guide."""
-    return get_base_path() / "docs" / "predator_prey_system_guide.md"
+def bundled_primordial_guide_path() -> Path:
+    """Resolve the bundled human-facing Primordial guide."""
+    return get_base_path() / "docs" / "primordial_guide.md"
 
 
 def load_help_document(path: Path | None = None) -> HelpDocument:
     """Load and parse a Markdown help document, returning an error document on failure."""
-    source_path = path or bundled_predator_prey_guide_path()
+    source_path = path or bundled_primordial_guide_path()
     try:
         text = source_path.read_text(encoding="utf-8")
     except OSError as exc:

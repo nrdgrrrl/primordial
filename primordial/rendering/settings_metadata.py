@@ -475,7 +475,7 @@ def build_action_items() -> list[ActionItem]:
             "Help",
             "help",
             "?",
-            "Opens the in-app help browser with guides for predator-prey mode and organism biology.",
+            "Opens the in-app help browser with the Primordial guide.",
         ),
         ActionItem(
             "Start Tutorial",

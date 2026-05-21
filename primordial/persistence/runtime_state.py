@@ -121,8 +121,8 @@ def _resolve_snapshot_path(
 
 
 def _predator_prey_help_path() -> Path:
-    """Resolve the bundled predator/prey system guide path."""
-    return get_base_path() / "docs" / "predator_prey_system_guide.md"
+    """Resolve the bundled Primordial guide path."""
+    return get_base_path() / "docs" / "primordial_guide.md"
 
 
 def _open_predator_prey_help(
@@ -130,7 +130,7 @@ def _open_predator_prey_help(
     simulation: Simulation,
     renderer: Renderer,
 ) -> tuple[bool, str]:
-    """Open the predator/prey guide in the user's browser, exiting fullscreen first."""
+    """Open the Primordial guide in the user's browser, exiting fullscreen first."""
     help_path = _predator_prey_help_path()
     if not help_path.exists():
         return False, f"Help file missing: {help_path.name}"
@@ -148,5 +148,5 @@ def _open_predator_prey_help(
         logger.warning("Browser reported failure opening help file: %s", help_path)
         return False, f"Help launch failed for {help_path.name}"
 
-    logger.info("Opened predator/prey guide in browser: %s", help_path)
+    logger.info("Opened Primordial guide in browser: %s", help_path)
     return True, f"Opened {help_path.name} in browser"

@@ -2,6 +2,44 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — docs/help: unify organism biology into single help guide
+
+The organism biology content was previously in a separate help document
+tab that required tab-switching to discover. Now the in-app help browser
+shows a single unified Primordial Guide with all sections visible in one
+navigation pane: what organisms are, genome traits, reproduction,
+selection, predator-prey biology, visual morphology, how to watch
+evolution, controls, settings, and glossary.
+
+Changed:
+
+- Created `docs/primordial_guide.md`: unified guide combining the
+  predator-prey system guide and organism biology into one document with
+  logically ordered sections. No content was removed or summarized.
+- Changed `HELP_DOCUMENTS` registry from two entries (predator_prey_guide,
+  organism_biology) to one entry (primordial_guide).
+- Changed `DEFAULT_HELP_DOC_ID` from `predator_prey_guide` to
+  `primordial_guide`.
+- Removed doc tab strip from help browser UI (no longer needed with a
+  single document).
+- Tab key now toggles search focus instead of cycling documents.
+- Updated footer hint to reflect single-document navigation.
+- Renamed `bundled_predator_prey_guide_path()` to
+  `bundled_primordial_guide_path()`.
+- Updated `_predator_prey_help_path()` in persistence/runtime_state.py
+  to resolve `primordial_guide.md`.
+- Added `docs/primordial_guide.md` to PyInstaller bundle (build.py
+  and primordial.spec).
+- Updated tests: registry checks for primordial_guide, organism-biology
+  and predator-prey section presence tests, tab-focus test replaces
+  tab-cycling tests.
+
+Kept:
+
+- `docs/organism_biology.md` and `docs/predator_prey_system_guide.md`
+  remain in the repo as source docs and are still bundled in the
+  PyInstaller build.
+
 ## [2026-05-21] — keyboard: add ? and F1 shortcuts to open help browser directly
 
 The organism biology and predator-prey guides were previously only

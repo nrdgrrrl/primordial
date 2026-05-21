@@ -97,7 +97,7 @@ class HelpOverlay:
             self.navigation.search_focused = True
             return None
         if event.key == pygame.K_TAB:
-            if not self.navigation.search_focused:
+            if not self.navigation.search_focused and len(HELP_DOCUMENTS) > 1:
                 self._cycle_document(reverse=bool(getattr(event, "mod", 0) & pygame.KMOD_SHIFT))
                 return None
             self.navigation.search_focused = not self.navigation.search_focused
@@ -379,7 +379,7 @@ class HelpOverlay:
         if self.status_message:
             status += " · " + self.status_message
         panel.blit(self._small.render(status, True, (190, 230, 238)), (rect.x + 12, rect.y + 10))
-        hint = "Mouse: click tabs/sections. Keyboard: Tab cycle docs, Up/Down section, PageUp/PageDown scroll, / search, Esc close."
+        hint = "Mouse: click sections. Keyboard: Up/Down section, PageUp/PageDown scroll, / search, Esc close."
         for line in self._wrap_text(hint, self._small, rect.width - 24)[:1]:
             panel.blit(self._small.render(line, True, (141, 190, 210)), (rect.x + 12, rect.y + 35))
 

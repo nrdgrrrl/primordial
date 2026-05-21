@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('primordial/config/defaults.toml', 'primordial/config'), ('docs/predator_prey_system_guide.md', 'docs'), ('docs/organism_biology.md', 'docs'), ('docs/assets', 'docs/assets')],
+    datas=[('primordial/config/defaults.toml', 'primordial/config'), ('docs/predator_prey_system_guide.md', 'docs'), ('docs/primordial_guide.md', 'docs'), ('docs/assets', 'docs/assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
