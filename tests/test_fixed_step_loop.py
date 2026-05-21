@@ -161,6 +161,31 @@ class FixedStepLoopTests(unittest.TestCase):
             places=9,
         )
 
+    def test_boids_mode_can_override_fixed_step_rate_to_30_hz(self) -> None:
+        settings = SimpleNamespace(
+            sim_mode="boids",
+            target_fps=60,
+            mode_params={
+                "boids": {
+                    "target_fps": 30,
+                    "simulation_tick_hz": 30,
+                }
+            },
+        )
+
+        runtime_loop = create_fixed_step_loop_state(settings)
+
+        self.assertAlmostEqual(
+            runtime_loop.config.fixed_timestep_seconds,
+            1.0 / 30.0,
+            places=9,
+        )
+        self.assertAlmostEqual(
+            runtime_loop.config.max_accumulated_seconds,
+            (1.0 / 30.0) * MAX_SIM_STEPS_PER_OUTER_FRAME,
+            places=9,
+        )
+
     def test_catch_up_runs_multiple_sim_steps_in_one_frame(self) -> None:
         runtime_loop = create_fixed_step_loop_state()
         runtime_loop.last_tick_seconds = 0.0

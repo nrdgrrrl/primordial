@@ -75,7 +75,7 @@ SCENARIOS: dict[str, ScenarioDefinition] = {
         settings_overrides={
             "visual_theme": "ocean",
             "fullscreen": False,
-            "target_fps": 60,
+            "target_fps": 30,
             "show_hud": False,
             "zone_count": 5,
             "zone_strength": 0.5,
@@ -84,6 +84,8 @@ SCENARIOS: dict[str, ScenarioDefinition] = {
         mode_overrides={
             "initial_population": 100,
             "max_population": 120,
+            "target_fps": 30,
+            "simulation_tick_hz": 30,
             "mutation_rate": 0.05,
             "energy_to_reproduce": 0.80,
             "food_cycle_enabled": False,

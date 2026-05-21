@@ -440,8 +440,12 @@ class Renderer:
 
         # --- Creature trails (batched onto shared surface, then blitted once) ---
         t0 = time.perf_counter()
+        creature_render_states = {
+            id(creature): self._build_creature_render_state(creature, anim_time)
+            for creature in simulation.creatures
+        }
         if isinstance(self.theme, OceanTheme):
-            self._draw_creature_trails(simulation, anim_time)
+            self._draw_creature_trails(simulation, creature_render_states)
         timings["trails_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Creatures ---
@@ -450,9 +454,24 @@ class Renderer:
         if self.inspect_mode.enabled:
             selected_creature = self.inspect_mode.get_selected_creature(simulation)
         for creature in simulation.creatures:
-            birth_scale = self.animation_manager.get_birth_scale(creature)
-            scale = birth_scale if birth_scale is not None else 1.0
-            self.theme.render_creature(target, creature, anim_time, scale=scale)
+            render_state = creature_render_states[id(creature)]
+            if isinstance(self.theme, OceanTheme):
+                self.theme.render_creature_from_state(
+                    target,
+                    creature,
+                    color=render_state.color,
+                    radius=render_state.radius,
+                    base_radius=render_state.base_radius,
+                    scale=render_state.birth_scale,
+                    depth_scale=render_state.depth_scale,
+                )
+            else:
+                self.theme.render_creature(
+                    target,
+                    creature,
+                    anim_time,
+                    scale=render_state.birth_scale,
+                )
             if selected_creature is not None and creature is selected_creature:
                 self._draw_selection_ring(target, creature, anim_time)
                 self._draw_attention_line(target, creature, simulation, anim_time)
@@ -861,14 +880,18 @@ class Renderer:
 
         return self._zone_surf_cached
 
-    def _draw_creature_trails(self, simulation: "Simulation", anim_time: float) -> None:
+    def _draw_creature_trails(
+        self,
+        simulation: "Simulation",
+        creature_render_states: dict[int, CreatureRenderState],
+    ) -> None:
         """Render all creature trails through the tiled trail layer."""
         self._trail_layer.clear_touched()
         for creature in simulation.creatures:
             trail = creature.trail
             if not trail:
                 continue
-            state = self._build_creature_render_state(creature, anim_time)
+            state = creature_render_states[id(creature)]
             trail_len = len(trail)
             for i, (tx, ty) in enumerate(trail):
                 trail_alpha = int(25 * (i + 1) / trail_len)

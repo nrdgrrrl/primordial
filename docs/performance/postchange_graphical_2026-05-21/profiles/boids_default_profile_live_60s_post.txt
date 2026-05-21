@@ -1,0 +1,158 @@
+         88457743 function calls in 59.583 seconds
+
+   Ordered by: cumulative time
+   List reduced from 192 to 150 due to restriction <150>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     1234    0.005    0.000   30.920    0.025 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:194(advance_fixed_step_frame)
+     1234    0.011    0.000   30.908    0.025 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:168(_run_planned_simulation_steps)
+     1795    0.608    0.000   30.884    0.017 /home/victoria/projects/primordial/primordial/simulation/simulation.py:1016(step)
+     1795    1.704    0.001   30.276    0.017 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2069(_step_boids)
+     1234    0.504    0.000   23.411    0.019 /home/victoria/projects/primordial/primordial/rendering/renderer.py:362(draw)
+     1795    0.907    0.001   20.752    0.012 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2160(_build_boid_neighbor_cache_and_assignments)
+   148991    9.879    0.000   18.995    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2266(_collect_boid_neighbor_pairs)
+     1234    3.294    0.003   12.328    0.010 /home/victoria/projects/primordial/primordial/rendering/renderer.py:883(_draw_creature_trails)
+  2027609    3.403    0.000    6.476    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:112(draw_circle)
+   507656    5.510    0.000    5.510    0.000 {method 'blit' of 'pygame.surface.Surface' objects}
+   209943    1.108    0.000    4.727    0.000 /home/victoria/projects/primordial/primordial/rendering/themes.py:370(render_creature_from_state)
+     1234    4.053    0.003    4.053    0.003 {method 'tick' of 'pygame.time.Clock' objects}
+  5417246    2.565    0.000    3.648    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2842(_wrapped_delta)
+   350744    3.181    0.000    3.554    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2298(_compute_boid_forces)
+   209943    0.869    0.000    3.251    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:906(_build_creature_render_state)
+  4593105    2.021    0.000    3.238    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2199(union)
+     1234    0.021    0.000    1.841    0.001 /home/victoria/projects/primordial/primordial/rendering/renderer.py:141(blit_to)
+   350744    1.111    0.000    1.782    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:91(update_position)
+ 10043723    1.667    0.000    1.667    0.000 {method 'append' of 'list' objects}
+  7238626    1.666    0.000    1.666    0.000 {built-in method builtins.max}
+     1234    1.488    0.001    1.488    0.001 {built-in method pygame.display.flip}
+  9887698    1.306    0.000    1.306    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2193(find)
+   209943    0.144    0.000    1.253    0.000 /home/victoria/projects/primordial/primordial/rendering/themes.py:67(resolve_color_for_creature)
+  5360447    1.240    0.000    1.240    0.000 {built-in method builtins.min}
+  2076047    1.209    0.000    1.209    0.000 {built-in method pygame.draw.circle}
+  9559826    1.202    0.000    1.202    0.000 {built-in method builtins.id}
+     1234    0.014    0.000    1.182    0.001 /home/victoria/projects/primordial/primordial/rendering/renderer.py:814(_draw_static_background)
+   209943    0.316    0.000    1.161    0.000 /home/victoria/projects/primordial/primordial/rendering/themes.py:171(_get_rotated_glyph)
+   210120    0.085    0.000    1.111    0.000 /home/victoria/projects/primordial/primordial/rendering/themes.py:241(resolve_color_for_species)
+ 11045806    1.096    0.000    1.096    0.000 {built-in method builtins.abs}
+     1234    0.084    0.000    1.055    0.001 /home/victoria/projects/primordial/primordial/rendering/themes.py:438(render_ambient)
+   210120    0.760    0.000    1.025    0.000 /home/victoria/projects/primordial/primordial/rendering/themes.py:212(get_creature_color)
+     1795    0.255    0.000    0.703    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2364(_update_boids_glyph_phases)
+    97788    0.595    0.000    0.595    0.000 {built-in method pygame.transform.rotate}
+   911431    0.380    0.000    0.565    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:339(get_age_fraction)
+   350744    0.169    0.000    0.465    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:360(get_effective_sense_radius)
+  1684913    0.414    0.000    0.414    0.000 {method 'get' of 'dict' objects}
+   839772    0.272    0.000    0.411    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:916(<genexpr>)
+     1795    0.347    0.000    0.407    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2792(_build_creature_bucket)
+  1963431    0.375    0.000    0.375    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:330(get_max_lifespan)
+  2767608    0.350    0.000    0.350    0.000 {built-in method math.sqrt}
+    20148    0.084    0.000    0.325    0.000 {built-in method builtins.sum}
+   350744    0.114    0.000    0.307    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:348(get_age_speed_mult)
+   209943    0.165    0.000    0.291    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:421(get_glyph_surface)
+    40625    0.290    0.000    0.290    0.000 {method 'fill' of 'pygame.surface.Surface' objects}
+   350744    0.181    0.000    0.264    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3069(_queue_preexisting_death)
+  1892642    0.257    0.000    0.257    0.000 {built-in method builtins.len}
+   350744    0.197    0.000    0.245    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:373(get_movement_cost)
+   209943    0.102    0.000    0.175    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:394(get_birth_scale)
+   633249    0.164    0.000    0.164    0.000 {method 'get_width' of 'pygame.surface.Surface' objects}
+     1234    0.019    0.000    0.164    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:410(tick_and_draw)
+     1795    0.109    0.000    0.161    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3089(_sweep_frame_deaths)
+     1234    0.010    0.000    0.160    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:106(clear_touched)
+   900590    0.153    0.000    0.153    0.000 {built-in method math.sin}
+   209943    0.129    0.000    0.136    0.000 /home/victoria/projects/primordial/primordial/rendering/themes.py:269(_create_glow_surface)
+   360641    0.090    0.000    0.130    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2375(<genexpr>)
+   560376    0.128    0.000    0.128    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:312(get_radius)
+     7039    0.046    0.000    0.122    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:163(draw)
+   360641    0.073    0.000    0.110    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2376(<genexpr>)
+     1795    0.071    0.000    0.109    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3211(_process_deaths)
+      397    0.010    0.000    0.097    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:332(build_glyph_surface)
+   348101    0.095    0.000    0.095    0.000 {method 'pop' of 'list' objects}
+   350744    0.095    0.000    0.095    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:321(get_sense_radius)
+      397    0.006    0.000    0.064    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:269(_draw_stroke_set)
+   360068    0.064    0.000    0.064    0.000 {method 'random' of '_random.Random' objects}
+   350744    0.063    0.000    0.063    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:76(get_trail_length)
+   350567    0.057    0.000    0.057    0.000 {method 'setdefault' of 'dict' objects}
+   213516    0.056    0.000    0.056    0.000 {built-in method builtins.round}
+     9967    0.054    0.000    0.054    0.000 {built-in method pygame.transform.smoothscale}
+   403873    0.047    0.000    0.047    0.000 {built-in method math.cos}
+   209943    0.038    0.000    0.038    0.000 /home/victoria/projects/primordial/primordial/rendering/themes.py:305(_get_depth_render_style)
+   213548    0.037    0.000    0.037    0.000 {method 'get_height' of 'pygame.surface.Surface' objects}
+   219991    0.036    0.000    0.036    0.000 {built-in method builtins.isinstance}
+     1245    0.032    0.000    0.032    0.000 {method 'clear' of 'dict' objects}
+     1234    0.023    0.000    0.023    0.000 {built-in method pygame.event.get}
+   129614    0.021    0.000    0.021    0.000 {built-in method math.copysign}
+     1234    0.010    0.000    0.020    0.000 /home/victoria/projects/primordial/primordial/runtime/timing.py:161(build_frame_metrics)
+     1234    0.001    0.000    0.018    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:367(process_events)
+      231    0.011    0.000    0.018    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:162(_draw_spiral)
+    67860    0.016    0.000    0.016    0.000 {built-in method time.perf_counter}
+      177    0.000    0.000    0.015    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:336(add_death)
+     1234    0.010    0.000    0.015    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:647(_draw_inspect_overlay)
+      255    0.008    0.000    0.015    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:35(_draw_arc)
+      177    0.008    0.000    0.015    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:105(__init__)
+     1234    0.005    0.000    0.014    0.000 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:118(get_effective_target_fps)
+     1795    0.004    0.000    0.013    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3008(_get_overcrowding_penalty)
+     1234    0.006    0.000    0.012    0.000 /home/victoria/projects/primordial/primordial/rendering/action_bar.py:127(build_context)
+     5507    0.010    0.000    0.012    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:309(_get_mode_param)
+     1234    0.008    0.000    0.011    0.000 /home/victoria/projects/primordial/primordial/runtime/timing.py:65(record_frame)
+    13139    0.010    0.000    0.010    0.000 {built-in method pygame.draw.line}
+     1792    0.003    0.000    0.009    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:268(draw)
+     1917    0.003    0.000    0.009    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3016(_get_carrying_capacity)
+      122    0.001    0.000    0.009    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2388(_reproduce_boids)
+     1234    0.002    0.000    0.009    0.000 /home/victoria/projects/primordial/primordial/rendering/action_bar.py:241(draw)
+     7039    0.009    0.000    0.009    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:152(tick)
+     1795    0.003    0.000    0.008    0.000 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:81(buffer_simulation_attacks)
+      705    0.001    0.000    0.007    0.000 /usr/lib/python3.12/random.py:126(__init__)
+     7404    0.007    0.000    0.007    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:822(<genexpr>)
+    15739    0.007    0.000    0.007    0.000 {built-in method builtins.getattr}
+     1234    0.004    0.000    0.007    0.000 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:45(sample_elapsed)
+      705    0.002    0.000    0.007    0.000 /usr/lib/python3.12/random.py:135(seed)
+     2198    0.001    0.000    0.006    0.000 /usr/lib/python3.12/random.py:332(randint)
+    10385    0.006    0.000    0.006    0.000 {built-in method math.atan2}
+    20316    0.006    0.000    0.006    0.000 {method 'add' of 'set' objects}
+     1234    0.004    0.000    0.006    0.000 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:103(_get_effective_mode_param)
+     1234    0.002    0.000    0.006    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:341(_select_frame_target)
+     1234    0.002    0.000    0.006    0.000 /home/victoria/projects/primordial/primordial/rendering/action_bar.py:165(opacity)
+        1    0.004    0.004    0.006    0.006 /home/victoria/projects/primordial/primordial/rendering/renderer.py:856(_ensure_zone_background_surface)
+     1909    0.002    0.000    0.005    0.000 /usr/lib/python3.12/random.py:341(choice)
+     2198    0.002    0.000    0.005    0.000 /usr/lib/python3.12/random.py:291(randrange)
+      397    0.001    0.000    0.005    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:236(_genome_hash_seed)
+     6832    0.003    0.000    0.005    0.000 /usr/lib/python3.12/random.py:494(uniform)
+       90    0.001    0.000    0.005    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:2952(_apply_cosmic_ray)
+     4107    0.003    0.000    0.005    0.000 /usr/lib/python3.12/random.py:242(_randbelow_with_getrandbits)
+    20316    0.005    0.000    0.005    0.000 {built-in method builtins.divmod}
+     1234    0.003    0.000    0.005    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:1541(_update_fps)
+      122    0.001    0.000    0.005    0.000 /home/victoria/projects/primordial/primordial/simulation/genome.py:65(mutate)
+     1234    0.002    0.000    0.005    0.000 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:155(simulation_timing_is_suppressed)
+     2468    0.003    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/rendering/action_bar.py:148(command_items)
+     1234    0.002    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:333(_can_render_direct_to_screen)
+      304    0.002    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:96(_draw_loop)
+      705    0.004    0.000    0.004    0.000 {function Random.seed at 0x76fb424fafc0}
+     7965    0.004    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3942(predator_prey_game_over_active)
+     1795    0.003    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:960(drain_active_attacks)
+      253    0.002    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:125(_draw_fork)
+     3660    0.002    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:215(scale)
+      311    0.000    0.000    0.004    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:200(wander)
+     1234    0.002    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:74(planned_sim_steps)
+     7039    0.003    0.000    0.003    0.000 {method 'set_alpha' of 'pygame.surface.Surface' objects}
+     8526    0.003    0.000    0.003    0.000 {method 'clear' of 'list' objects}
+      311    0.001    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/simulation/creature.py:241(_wander_swim)
+       90    0.001    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/simulation/genome.py:103(mutate_one)
+     1234    0.002    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:655(_draw_predator_prey_game_over_overlay)
+     1952    0.001    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/simulation/genome.py:79(mutate_trait)
+      212    0.002    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3173(_should_branch_lineage)
+     1234    0.001    0.000    0.003    0.000 <frozen importlib._bootstrap>:645(parent)
+     1234    0.002    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:1287(_draw_territory_shimmer)
+      257    0.001    0.000    0.003    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:198(_draw_dot)
+      264    0.001    0.000    0.002    0.000 /home/victoria/projects/primordial/primordial/rendering/glyphs.py:74(_draw_line)
+      177    0.001    0.000    0.002    0.000 /home/victoria/projects/primordial/primordial/rendering/renderer.py:384(<lambda>)
+     3702    0.002    0.000    0.002    0.000 /home/victoria/projects/primordial/primordial/rendering/action_bar.py:161(is_suppressed)
+     1234    0.001    0.000    0.002    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:1970(update_predator_prey_runtime)
+     1234    0.002    0.000    0.002    0.000 /home/victoria/projects/primordial/primordial/rendering/inspect_mode.py:556(draw_inspect_overlay)
+     1234    0.002    0.000    0.002    0.000 {method 'get_size' of 'pygame.surface.Surface' objects}
+      539    0.001    0.000    0.002    0.000 /usr/lib/python3.12/random.py:551(gauss)
+     3702    0.002    0.000    0.002    0.000 {method 'append' of 'collections.deque' objects}
+     3029    0.002    0.000    0.002    0.000 {method 'items' of 'dict' objects}
+      122    0.000    0.000    0.002    0.000 /home/victoria/projects/primordial/primordial/simulation/simulation.py:3162(_branch_lineage_id)
+     1233    0.002    0.000    0.002    0.000 /home/victoria/projects/primordial/primordial/runtime/fixed_step.py:92(_clamp_accumulator)
+     3660    0.001    0.000    0.001    0.000 /home/victoria/projects/primordial/primordial/rendering/animations.py:42(_ease_out_cubic)
+
+

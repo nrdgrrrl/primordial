@@ -1,0 +1,176 @@
+{
+  "date": "2026-05-21",
+  "display_path": "live_display",
+  "desktop_resolution": [
+    1920,
+    1080
+  ],
+  "diagnosis": {
+    "top_bottleneck": "boids neighbor-cache and flock-assignment work amplified by fixed-step catch-up during startup",
+    "classification": [
+      "simulation-bound",
+      "frame-pacing-amplified",
+      "secondary pygame render cost"
+    ],
+    "prechange_profile": {
+      "_build_boid_neighbor_cache_cumulative_s": 28.804,
+      "_update_flock_assignments_cumulative_s": 11.451,
+      "renderer_draw_cumulative_s": 9.828,
+      "_draw_creature_trails_cumulative_s": 5.115
+    },
+    "postchange_profile": {
+      "_build_boid_neighbor_cache_and_assignments_cumulative_s": 20.752,
+      "_collect_boid_neighbor_pairs_cumulative_s": 18.995,
+      "renderer_draw_cumulative_s": 23.411,
+      "_draw_creature_trails_cumulative_s": 12.328
+    }
+  },
+  "changes": {
+    "simulation": [
+      "merged boids directed-neighbor collection and flock connectivity into one spatial-bucket pass"
+    ],
+    "frame_pacing": [
+      "set boids default target_fps to 30",
+      "set boids default simulation_tick_hz to 30"
+    ],
+    "rendering": [
+      "reused per-frame creature render state across trail and body passes",
+      "expanded ocean glow and age-overlay cache capacity"
+    ],
+    "gpu_offload": {
+      "considered": true,
+      "implemented": false,
+      "reason": "measured root cause was boids simulation plus catch-up pacing; extending the predator_prey GPU path would be a larger rewrite than warranted for this fix"
+    }
+  },
+  "benchmarks": {
+    "boids_default_live_90s": {
+      "seed": 130363,
+      "before": {
+        "target_fps": 60,
+        "fps_mean": 58.222,
+        "fps_median": 62.026,
+        "fps_1pct_low": 8.502,
+        "fps_min": 6.524,
+        "startup_fps_mean": 17.28,
+        "steady_fps_mean": 59.517,
+        "frame_ms_p50": 16.122,
+        "frame_ms_p95": 48.053,
+        "frame_ms_p99": 110.013,
+        "sim_ms_mean": 6.684,
+        "render_ms_mean": 7.713,
+        "event_ms_mean": 0.021,
+        "pacing_ms_mean": 4.922,
+        "population_mean": 79.402,
+        "population_max": 254
+      },
+      "after": {
+        "target_fps": 30,
+        "fps_mean": 30.192,
+        "fps_median": 30.25,
+        "fps_1pct_low": 24.191,
+        "fps_min": 20.038,
+        "startup_fps_mean": 30.04,
+        "steady_fps_mean": 30.211,
+        "frame_ms_p50": 33.058,
+        "frame_ms_p95": 33.944,
+        "frame_ms_p99": 38.319,
+        "sim_ms_mean": 6.167,
+        "render_ms_mean": 11.734,
+        "event_ms_mean": 0.028,
+        "pacing_ms_mean": 13.88,
+        "population_mean": 151.988,
+        "population_max": 266
+      }
+    },
+    "boids_stress_live_60s": {
+      "seed": 130363,
+      "override": {
+        "initial_population": 220,
+        "max_population": 320
+      },
+      "before": {
+        "target_fps": 60,
+        "fps_mean": 52.17,
+        "fps_median": 61.11,
+        "fps_1pct_low": 6.049,
+        "fps_min": 4.998,
+        "startup_fps_mean": 9.686,
+        "steady_fps_mean": 53.994,
+        "frame_ms_p50": 16.364,
+        "frame_ms_p95": 116.244,
+        "frame_ms_p99": 149.95,
+        "sim_ms_mean": 14.101,
+        "render_ms_mean": 9.978,
+        "event_ms_mean": 0.019,
+        "pacing_ms_mean": 3.497,
+        "population_max": 326
+      },
+      "after": {
+        "target_fps": 30,
+        "fps_mean": 29.702,
+        "fps_median": 30.14,
+        "fps_1pct_low": 19.223,
+        "fps_min": 11.484,
+        "startup_fps_mean": 29.645,
+        "steady_fps_mean": 29.713,
+        "frame_ms_p50": 33.178,
+        "frame_ms_p95": 39.365,
+        "frame_ms_p99": 48.604,
+        "sim_ms_mean": 9.323,
+        "render_ms_mean": 14.232,
+        "event_ms_mean": 0.024,
+        "pacing_ms_mean": 9.055,
+        "population_max": 331
+      }
+    },
+    "predator_prey_default_live_90s": {
+      "seed": 104729,
+      "before": {
+        "target_fps": 30,
+        "fps_mean": 30.34,
+        "startup_fps_mean": 30.254,
+        "steady_fps_mean": 30.351,
+        "sim_ms_mean": 6.817,
+        "render_ms_mean": 8.231
+      },
+      "after": {
+        "target_fps": 30,
+        "fps_mean": 30.333,
+        "startup_fps_mean": 30.229,
+        "steady_fps_mean": 30.346,
+        "sim_ms_mean": 6.88,
+        "render_ms_mean": 8.426
+      }
+    },
+    "predator_prey_debug_live_60s": {
+      "seed": 104729,
+      "before": {
+        "target_fps": 30,
+        "fps_mean": 30.259,
+        "startup_fps_mean": 30.149,
+        "steady_fps_mean": 30.28,
+        "sim_ms_mean": 6.657,
+        "render_ms_mean": 11.292
+      },
+      "after": {
+        "target_fps": 30,
+        "fps_mean": 30.22,
+        "startup_fps_mean": 30.075,
+        "steady_fps_mean": 30.249,
+        "sim_ms_mean": 6.498,
+        "render_ms_mean": 11.287
+      }
+    }
+  },
+  "artifacts": {
+    "prechange_root": "docs/performance/prechange_graphical_2026-05-21",
+    "postchange_root": "docs/performance/postchange_graphical_2026-05-21",
+    "representative_screenshots": [
+      "docs/performance/prechange_graphical_2026-05-21/screenshots/boids_default_live_90s_pre/t0001s.png",
+      "docs/performance/postchange_graphical_2026-05-21/screenshots/boids_default_live_90s_post/t0001s.png",
+      "docs/performance/prechange_graphical_2026-05-21/screenshots/predator_prey_default_live_90s_pre/t0001s.png",
+      "docs/performance/postchange_graphical_2026-05-21/screenshots/predator_prey_default_live_90s_post/t0001s.png"
+    ]
+  }
+}

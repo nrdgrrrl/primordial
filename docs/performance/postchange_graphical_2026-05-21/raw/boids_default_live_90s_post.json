@@ -1,0 +1,785 @@
+{
+  "name": "boids_default_live_90s_post",
+  "display": {
+    "path": "live_display",
+    "visible_display": true,
+    "driver": "x11",
+    "desktop_resolution": [
+      1920,
+      1080
+    ]
+  },
+  "mode": "boids",
+  "seed": 130363,
+  "duration_seconds_requested": 90.0,
+  "duration_seconds_actual": 90.00280410999767,
+  "render_backend": "pygame",
+  "gpu_info": {},
+  "target_fps": 30,
+  "simulation_tick_hz": 30.0,
+  "debug_overlay": false,
+  "show_hud": false,
+  "fullscreen": true,
+  "mode_overrides": {},
+  "rendering_overrides": {},
+  "timing_summary": {
+    "elapsed_wall_seconds": 90.00280410999767,
+    "frames_rendered": 2692,
+    "effective_fps_overall": 29.910179206305063,
+    "sim_steps_total": 2699,
+    "sim_steps_per_render_frame": {
+      "count": 2692,
+      "min": 0.0,
+      "mean": 1.0026002971768202,
+      "median": 1.0,
+      "p95": 1.0,
+      "p99": 1.0,
+      "max": 4.0
+    },
+    "timing_ms": {
+      "event": {
+        "count": 2692,
+        "min": 0.010636002116370946,
+        "mean": 0.02826170688176325,
+        "median": 0.025520501367282122,
+        "p95": 0.04620299660018645,
+        "p99": 0.06635300087509677,
+        "max": 0.14653600010205992
+      },
+      "sim": {
+        "count": 2692,
+        "min": 0.0,
+        "mean": 6.166572508527071,
+        "median": 5.530074498892645,
+        "p95": 12.848714999563526,
+        "p99": 19.21718399898964,
+        "max": 31.792084002518095
+      },
+      "render": {
+        "count": 2692,
+        "min": 4.974875999323558,
+        "mean": 11.733724864405204,
+        "median": 10.538672999246046,
+        "p95": 16.869531998963794,
+        "p99": 19.418359999690438,
+        "max": 36.23635199983255
+      },
+      "present": {
+        "count": 2692,
+        "min": 1.089977999072289,
+        "mean": 1.3036436230065813,
+        "median": 1.1926110000786139,
+        "p95": 1.8170570001529995,
+        "p99": 1.986522001971025,
+        "max": 3.2077689975267276
+      },
+      "pacing": {
+        "count": 2692,
+        "min": 0.027304999093757942,
+        "mean": 13.87958749375717,
+        "median": 16.174336999029038,
+        "p95": 23.12900199831347,
+        "p99": 25.085739998758072,
+        "max": 25.269130997912725
+      },
+      "frame": {
+        "count": 2692,
+        "min": 12.460221001674654,
+        "mean": 33.16571937028381,
+        "median": 33.058015500500915,
+        "p95": 33.94364800260519,
+        "p99": 38.31946100035566,
+        "max": 49.90454699873226
+      }
+    },
+    "effective_fps": {
+      "count": 2692,
+      "min": 20.038254230128636,
+      "mean": 30.19211484977823,
+      "median": 30.249849696598446,
+      "p95": 30.968374566894525,
+      "p99": 31.50599407975513,
+      "max": 80.25539834852046
+    },
+    "clamp_drop": {
+      "frame_count": 0,
+      "dropped_ms_total": 0.0,
+      "final_accumulator_ms": 0.8999073329839652
+    },
+    "runtime_loop": {
+      "fixed_timestep_ms": 33.333333333333336,
+      "max_sim_steps_per_outer_frame": 5,
+      "max_accumulated_ms": 166.66666666666666,
+      "drop_excess_accumulator": true
+    }
+  },
+  "overall": {
+    "frames": 2692,
+    "fps": {
+      "mean": 30.19211484732541,
+      "median": 30.2498495,
+      "min": 20.038254,
+      "one_percent_low": 24.191119580682596
+    },
+    "frame_ms": {
+      "count": 2692,
+      "min": 12.460221,
+      "mean": 33.16571937035661,
+      "median": 33.058015499999996,
+      "p95": 33.943648,
+      "p99": 38.319461,
+      "max": 49.904547
+    },
+    "event_ms": {
+      "count": 2692,
+      "min": 0.010636,
+      "mean": 0.028261706909361074,
+      "median": 0.0255205,
+      "p95": 0.046203,
+      "p99": 0.066353,
+      "max": 0.146536
+    },
+    "sim_ms": {
+      "count": 2692,
+      "min": 0.0,
+      "mean": 6.166572508543834,
+      "median": 5.5300745,
+      "p95": 12.848715,
+      "p99": 19.217184,
+      "max": 31.792084
+    },
+    "render_ms": {
+      "count": 2692,
+      "min": 4.974876,
+      "mean": 11.733724864413075,
+      "median": 10.538673,
+      "p95": 16.869532,
+      "p99": 19.41836,
+      "max": 36.236352
+    },
+    "present_ms": {
+      "count": 2692,
+      "min": 1.089978,
+      "mean": 1.3036436229569093,
+      "median": 1.1926109999999999,
+      "p95": 1.817057,
+      "p99": 1.986522,
+      "max": 3.207769
+    },
+    "pacing_ms": {
+      "count": 2692,
+      "min": 0.027305,
+      "mean": 13.879587493684992,
+      "median": 16.174337,
+      "p95": 23.129002,
+      "p99": 25.08574,
+      "max": 25.269131
+    },
+    "population": {
+      "count": 2692,
+      "min": 60.0,
+      "mean": 151.98848439821694,
+      "median": 138.0,
+      "p95": 266.0,
+      "p99": 266.0,
+      "max": 266.0
+    },
+    "over_budget_frames": 782
+  },
+  "startup_0_10s": {
+    "frames": 296,
+    "fps": {
+      "mean": 30.040443125000003,
+      "median": 30.211222,
+      "min": 21.935678,
+      "one_percent_low": 23.03765937380762
+    },
+    "frame_ms": {
+      "count": 296,
+      "min": 31.613283,
+      "mean": 33.337311611486484,
+      "median": 33.100283000000005,
+      "p95": 34.480591,
+      "p99": 40.633286,
+      "max": 45.587831
+    },
+    "event_ms": {
+      "count": 296,
+      "min": 0.010881,
+      "mean": 0.02139066554054054,
+      "median": 0.018938,
+      "p95": 0.029538,
+      "p99": 0.062226,
+      "max": 0.069769
+    },
+    "sim_ms": {
+      "count": 296,
+      "min": 0.0,
+      "mean": 7.381013435810812,
+      "median": 6.955944000000001,
+      "p95": 14.108728,
+      "p99": 17.442037,
+      "max": 24.925757
+    },
+    "render_ms": {
+      "count": 296,
+      "min": 8.113576,
+      "mean": 16.51198781756757,
+      "median": 16.4762785,
+      "p95": 18.772565,
+      "p99": 25.047789,
+      "max": 36.236352
+    },
+    "present_ms": {
+      "count": 296,
+      "min": 1.100944,
+      "mean": 1.168672168918919,
+      "median": 1.1433585,
+      "p95": 1.302101,
+      "p99": 1.407335,
+      "max": 1.50319
+    },
+    "pacing_ms": {
+      "count": 296,
+      "min": 0.027305,
+      "mean": 8.193855287162163,
+      "median": 8.194230000000001,
+      "p95": 14.290998,
+      "p99": 19.213961,
+      "max": 21.080286
+    },
+    "population": {
+      "count": 296,
+      "min": 150.0,
+      "mean": 238.31756756756758,
+      "median": 248.0,
+      "p95": 251.0,
+      "p99": 251.0,
+      "max": 251.0
+    },
+    "over_budget_frames": 90
+  },
+  "steady_state_after_10s": {
+    "frames": 2396,
+    "fps": {
+      "mean": 30.210852255425714,
+      "median": 30.2548015,
+      "min": 20.038254,
+      "one_percent_low": 24.41575976954351
+    },
+    "frame_ms": {
+      "count": 2396,
+      "min": 12.460221,
+      "mean": 33.1445209966611,
+      "median": 33.052605,
+      "p95": 33.919447,
+      "p99": 37.554247,
+      "max": 49.904547
+    },
+    "event_ms": {
+      "count": 2396,
+      "min": 0.010636,
+      "mean": 0.029110550083472457,
+      "median": 0.0264485,
+      "p95": 0.046432,
+      "p99": 0.067048,
+      "max": 0.146536
+    },
+    "sim_ms": {
+      "count": 2396,
+      "min": 0.0,
+      "mean": 6.0165414090150255,
+      "median": 5.115814,
+      "p95": 12.614079,
+      "p99": 19.358466,
+      "max": 31.792084
+    },
+    "render_ms": {
+      "count": 2396,
+      "min": 4.974876,
+      "mean": 11.143421928631053,
+      "median": 10.2371005,
+      "p95": 16.425747,
+      "p99": 18.982234,
+      "max": 25.648321
+    },
+    "present_ms": {
+      "count": 2396,
+      "min": 1.089978,
+      "mean": 1.3203178927378965,
+      "median": 1.210508,
+      "p95": 1.822979,
+      "p99": 2.001337,
+      "max": 3.207769
+    },
+    "pacing_ms": {
+      "count": 2396,
+      "min": 0.042641,
+      "mean": 14.581998484140234,
+      "median": 17.1398345,
+      "p95": 23.211953,
+      "p99": 25.112658,
+      "max": 25.269131
+    },
+    "population": {
+      "count": 2396,
+      "min": 60.0,
+      "mean": 141.32345575959934,
+      "median": 119.0,
+      "p95": 266.0,
+      "p99": 266.0,
+      "max": 266.0
+    },
+    "over_budget_frames": 692
+  },
+  "frame_cap": {
+    "target_fps": 30,
+    "mean_fps_error": 0.19211484732540995,
+    "median_fps_error": 0.24984949999999984,
+    "mean_pacing_ms": 13.879587493684992,
+    "mean_present_ms": 1.3036436229569093
+  },
+  "population_summary": {
+    "population": {
+      "count": 2692,
+      "min": 60.0,
+      "mean": 151.98848439821694,
+      "median": 138.0,
+      "p95": 266.0,
+      "p99": 266.0,
+      "max": 266.0
+    }
+  },
+  "render_breakdown_ms": {
+    "action_bar_ms": {
+      "count": 2692,
+      "min": 0.010255000233883038,
+      "mean": 0.014506401570148339,
+      "median": 0.012881999282399192,
+      "p95": 0.022219999664230272,
+      "p99": 0.026760000764625147,
+      "max": 0.0599470004090108
+    },
+    "ambient_ms": {
+      "count": 2692,
+      "min": 0.6673339994449634,
+      "mean": 0.9082407712204417,
+      "median": 0.8219924984587124,
+      "p95": 1.3521469991246704,
+      "p99": 1.904513999761548,
+      "max": 2.65170899729128
+    },
+    "anim_ms": {
+      "count": 2692,
+      "min": 0.001820000761654228,
+      "mean": 0.06465386662126348,
+      "median": 0.04036100108351093,
+      "p95": 0.2048900023510214,
+      "p99": 0.2738410003075842,
+      "max": 0.3899060029652901
+    },
+    "attacks_ms": {
+      "count": 2692,
+      "min": 0.0003349996404722333,
+      "mean": 0.0006625813664781985,
+      "median": 0.0006230002327356488,
+      "p95": 0.00100599936558865,
+      "p99": 0.0012689997674897313,
+      "max": 0.011251999239902943
+    },
+    "clear_ms": {
+      "count": 2692,
+      "min": 0.6265470001380891,
+      "mean": 0.9791679624856103,
+      "median": 1.0292604983987985,
+      "p95": 1.2715240009129047,
+      "p99": 2.096950000122888,
+      "max": 11.010418998921523
+    },
+    "creatures_ms": {
+      "count": 2692,
+      "min": 0.6898350002302323,
+      "mean": 2.240004875524227,
+      "median": 1.8492009985493496,
+      "p95": 3.7377640001068357,
+      "p99": 4.685165000410052,
+      "max": 23.21714700156008
+    },
+    "draw_total_ms": {
+      "count": 2692,
+      "min": 4.974875999323558,
+      "mean": 11.733724864405204,
+      "median": 10.538672999246046,
+      "p95": 16.869531998963794,
+      "p99": 19.418359999690438,
+      "max": 36.23635199983255
+    },
+    "events_ms": {
+      "count": 2692,
+      "min": 0.0012399978004395962,
+      "mean": 0.007805460575313472,
+      "median": 0.0018740011000772938,
+      "p95": 0.06498700167867355,
+      "p99": 0.10178699812968262,
+      "max": 0.2232750011899043
+    },
+    "food_ms": {
+      "count": 2692,
+      "min": 0.0012860000424552709,
+      "mean": 0.002283109262205344,
+      "median": 0.0021039995772298425,
+      "p95": 0.0032749994716141373,
+      "p99": 0.0053960029617883265,
+      "max": 0.030552000680472702
+    },
+    "help_ms": {
+      "count": 2692,
+      "min": 0.00021099913283251226,
+      "mean": 0.00035112071515313166,
+      "median": 0.0003079985617659986,
+      "p95": 0.0005410001904238015,
+      "p99": 0.0007380003808066249,
+      "max": 0.008334998710779473
+    },
+    "hud_ms": {
+      "count": 2692,
+      "min": 0.0006800000846851617,
+      "mean": 0.0011401289062621903,
+      "median": 0.0010180010576732457,
+      "p95": 0.001776999852154404,
+      "p99": 0.002172000677092001,
+      "max": 0.010017000022344291
+    },
+    "inspect_ms": {
+      "count": 2692,
+      "min": 0.007806000212440267,
+      "mean": 0.01146468201905671,
+      "median": 0.010476000170456246,
+      "p95": 0.016376001440221444,
+      "p99": 0.019445997168077156,
+      "max": 0.04116600030101836
+    },
+    "links_ms": {
+      "count": 2692,
+      "min": 0.0013329990906640887,
+      "mean": 0.002126568319321123,
+      "median": 0.0018999999156221747,
+      "p95": 0.0032509997254237533,
+      "p99": 0.005122998118167743,
+      "max": 0.03452900273259729
+    },
+    "overlay_ms": {
+      "count": 2692,
+      "min": 0.0010459989425726235,
+      "mean": 0.0021620969554915523,
+      "median": 0.002033997589023784,
+      "p95": 0.0029860020731575787,
+      "p99": 0.003740002284757793,
+      "max": 0.04845800140174106
+    },
+    "predator_highlights_ms": {
+      "count": 2692,
+      "min": 0.0005809997674077749,
+      "mean": 0.0009621319035915754,
+      "median": 0.0008770002750679851,
+      "p95": 0.0014209981600288302,
+      "p99": 0.001806001819204539,
+      "max": 0.004159999662078917
+    },
+    "presentation_copy_ms": {
+      "count": 2692,
+      "min": 0.00011200245353393257,
+      "mean": 0.00019770321762466037,
+      "median": 0.0001630032784305513,
+      "p95": 0.0003489985829219222,
+      "p99": 0.00043199906940571964,
+      "max": 0.0006119989848230034
+    },
+    "render_core_ms": {
+      "count": 2692,
+      "min": 4.973876999429194,
+      "mean": 11.732251974031684,
+      "median": 10.53662049889681,
+      "p95": 16.868203001649817,
+      "p99": 19.417276998865418,
+      "max": 36.23443900141865
+    },
+    "settings_ms": {
+      "count": 2692,
+      "min": 0.00021799860405735672,
+      "mean": 0.0004248710621191074,
+      "median": 0.0003759996616281569,
+      "p95": 0.0006680020305793732,
+      "p99": 0.0008939969120547175,
+      "max": 0.004932000592816621
+    },
+    "stub_ms": {
+      "count": 2692,
+      "min": 0.0006030022632330656,
+      "mean": 0.0009885999102902739,
+      "median": 0.0008729984983801842,
+      "p95": 0.0015039986465126276,
+      "p99": 0.0018079990695696324,
+      "max": 0.011219999578315765
+    },
+    "territory_ms": {
+      "count": 2692,
+      "min": 0.0015610021364409477,
+      "mean": 0.0027972812049443223,
+      "median": 0.0025709996407385916,
+      "p95": 0.0042289975681342185,
+      "p99": 0.006546000804519281,
+      "max": 0.0317819976771716
+    },
+    "trails_ms": {
+      "count": 2692,
+      "min": 1.164364002761431,
+      "mean": 7.474288975849601,
+      "median": 6.4367949998995755,
+      "p95": 11.46947400047793,
+      "p99": 13.14802499837242,
+      "max": 19.326096000440884
+    },
+    "tutorial_ms": {
+      "count": 2692,
+      "min": 0.00019800063455477357,
+      "mean": 0.00034576966996585954,
+      "median": 0.00030999945010989904,
+      "p95": 0.0005280016921460629,
+      "p99": 0.0006940026651136577,
+      "max": 0.008668997907079756
+    },
+    "zones_ms": {
+      "count": 2692,
+      "min": 0.0,
+      "mean": 0.0,
+      "median": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.0
+    }
+  },
+  "screenshots": [
+    {
+      "label": "t0001s",
+      "elapsed_wall_seconds": 1.006,
+      "frame_index": 30,
+      "screenshot": "docs/performance/postchange_graphical_2026-05-21/screenshots/boids_default_live_90s_post/t0001s.png",
+      "display_size": [
+        1920,
+        1080
+      ],
+      "logical_render_size": [
+        1920,
+        1080
+      ],
+      "world_size": [
+        1920,
+        1080
+      ],
+      "fullscreen": true,
+      "population": 210,
+      "food_count": 0,
+      "predator_count": 0,
+      "prey_count": 0,
+      "zone_hash": "10fed5af350ffde8de908e36384aed772ad3a3952f88ca769d102916fd704c24",
+      "edge_counts": {
+        "food_right_band": 0,
+        "food_bottom_band": 0,
+        "creatures_right_band": 10,
+        "creatures_bottom_band": 17
+      },
+      "observability": {
+        "population": 210,
+        "lineages": {
+          "active": 150
+        },
+        "strategies": {
+          "hunters": 67,
+          "grazers": 45,
+          "opportunists": 98
+        },
+        "zone_occupancy": {
+          "warm_vent": 8,
+          "open_water": 8,
+          "kelp_forest": 31,
+          "hunting_ground": 12,
+          "deep_trench": 10,
+          "unzoned": 141
+        },
+        "flocks": {
+          "count": 1,
+          "average_size": 208.0,
+          "largest": 208,
+          "loners": 2
+        }
+      }
+    },
+    {
+      "label": "t0010s",
+      "elapsed_wall_seconds": 10.028,
+      "frame_index": 297,
+      "screenshot": "docs/performance/postchange_graphical_2026-05-21/screenshots/boids_default_live_90s_post/t0010s.png",
+      "display_size": [
+        1920,
+        1080
+      ],
+      "logical_render_size": [
+        1920,
+        1080
+      ],
+      "world_size": [
+        1920,
+        1080
+      ],
+      "fullscreen": true,
+      "population": 252,
+      "food_count": 0,
+      "predator_count": 0,
+      "prey_count": 0,
+      "zone_hash": "10fed5af350ffde8de908e36384aed772ad3a3952f88ca769d102916fd704c24",
+      "edge_counts": {
+        "food_right_band": 0,
+        "food_bottom_band": 0,
+        "creatures_right_band": 19,
+        "creatures_bottom_band": 0
+      },
+      "observability": {
+        "population": 252,
+        "lineages": {
+          "active": 151
+        },
+        "strategies": {
+          "hunters": 79,
+          "grazers": 49,
+          "opportunists": 124
+        },
+        "zone_occupancy": {
+          "warm_vent": 1,
+          "open_water": 27,
+          "kelp_forest": 49,
+          "hunting_ground": 20,
+          "deep_trench": 4,
+          "unzoned": 151
+        },
+        "flocks": {
+          "count": 5,
+          "average_size": 50.2,
+          "largest": 169,
+          "loners": 1
+        }
+      }
+    },
+    {
+      "label": "t0045s",
+      "elapsed_wall_seconds": 45.002,
+      "frame_index": 1340,
+      "screenshot": "docs/performance/postchange_graphical_2026-05-21/screenshots/boids_default_live_90s_post/t0045s.png",
+      "display_size": [
+        1920,
+        1080
+      ],
+      "logical_render_size": [
+        1920,
+        1080
+      ],
+      "world_size": [
+        1920,
+        1080
+      ],
+      "fullscreen": true,
+      "population": 140,
+      "food_count": 0,
+      "predator_count": 0,
+      "prey_count": 0,
+      "zone_hash": "10fed5af350ffde8de908e36384aed772ad3a3952f88ca769d102916fd704c24",
+      "edge_counts": {
+        "food_right_band": 0,
+        "food_bottom_band": 0,
+        "creatures_right_band": 14,
+        "creatures_bottom_band": 28
+      },
+      "observability": {
+        "population": 140,
+        "lineages": {
+          "active": 92
+        },
+        "strategies": {
+          "hunters": 46,
+          "grazers": 33,
+          "opportunists": 61
+        },
+        "zone_occupancy": {
+          "warm_vent": 0,
+          "open_water": 24,
+          "kelp_forest": 0,
+          "hunting_ground": 1,
+          "deep_trench": 18,
+          "unzoned": 97
+        },
+        "flocks": {
+          "count": 5,
+          "average_size": 28.0,
+          "largest": 60,
+          "loners": 0
+        }
+      }
+    },
+    {
+      "label": "t0089s",
+      "elapsed_wall_seconds": 89.033,
+      "frame_index": 2665,
+      "screenshot": "docs/performance/postchange_graphical_2026-05-21/screenshots/boids_default_live_90s_post/t0089s.png",
+      "display_size": [
+        1920,
+        1080
+      ],
+      "logical_render_size": [
+        1920,
+        1080
+      ],
+      "world_size": [
+        1920,
+        1080
+      ],
+      "fullscreen": true,
+      "population": 65,
+      "food_count": 0,
+      "predator_count": 0,
+      "prey_count": 0,
+      "zone_hash": "10fed5af350ffde8de908e36384aed772ad3a3952f88ca769d102916fd704c24",
+      "edge_counts": {
+        "food_right_band": 0,
+        "food_bottom_band": 0,
+        "creatures_right_band": 34,
+        "creatures_bottom_band": 12
+      },
+      "observability": {
+        "population": 65,
+        "lineages": {
+          "active": 40
+        },
+        "strategies": {
+          "hunters": 27,
+          "grazers": 11,
+          "opportunists": 27
+        },
+        "zone_occupancy": {
+          "warm_vent": 0,
+          "open_water": 0,
+          "kelp_forest": 0,
+          "hunting_ground": 0,
+          "deep_trench": 0,
+          "unzoned": 65
+        },
+        "flocks": {
+          "count": 3,
+          "average_size": 21.666666666666668,
+          "largest": 37,
+          "loners": 0
+        }
+      }
+    }
+  ],
+  "frame_samples_csv_gz": "docs/performance/postchange_graphical_2026-05-21/raw/boids_default_live_90s_post.frames.csv.gz"
+}

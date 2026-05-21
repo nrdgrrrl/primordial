@@ -103,7 +103,11 @@ class BenchmarkObservabilityTests(unittest.TestCase):
                     self.assertGreaterEqual(payload["performance"]["sim_steps_total"], 1)
                     self.assertIn("frame_ms", payload["performance"])
                     self.assertIn("clamp_drop", payload["performance"])
-                    expected_tick_hz = 30 if scenario_id == "predator_prey_medium" else 60
+                    expected_tick_hz = (
+                        30
+                        if scenario_id in {"predator_prey_medium", "boids_dense"}
+                        else 60
+                    )
                     self.assertEqual(payload["run"]["target_fps"], expected_tick_hz)
                     self.assertEqual(
                         payload["run"]["simulation_tick_hz"],

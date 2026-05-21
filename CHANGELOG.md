@@ -2,6 +2,71 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — perf: smooth boids graphical mode without predator_prey regression
+
+Measured the real graphical path on a live `1920x1080` display before changing
+code. The important pre-change diagnosis was:
+
+- boids startup was mainly `simulation-bound`, not flock-line-bound;
+- `_build_boid_neighbor_cache()` and `_update_flock_assignments()` dominated the
+  live boids profile;
+- the fixed-step loop amplified the problem by forcing 4 to 5 boids sim steps
+  into single rendered frames during startup;
+- boids render cost was secondary and came mostly from trails and creature
+  drawing on the pygame path;
+- predator_prey was already stable on its protected GPU-backed `30 Hz` path and
+  was treated as regression-sensitive.
+
+Changed:
+
+- Replaced the old boids directed-neighbor pass plus separate flock BFS with a
+  single spatial-bucket pair pass in `primordial/simulation/simulation.py`.
+- Set boids mode defaults to `target_fps = 30` and `simulation_tick_hz = 30`
+  in `primordial/config/defaults.toml`, matching the intended smooth visual
+  cadence instead of chasing a `60 Hz` path that produced ugly startup stalls.
+- Reused per-frame creature render state across boids trail/body passes and
+  expanded OceanTheme glow/age-overlay cache capacity to reduce repeated pygame
+  work without removing trails, glyphs, glow, flock lines, or phase-sync.
+- Updated boids benchmark scenario defaults and added/updated tests covering the
+  boids fixed-step override, benchmark expectations, and renderer cache helper.
+
+Real graphical benchmark results:
+
+- `boids` default fullscreen live run, seed `130363`, `90s`
+  - before: FPS mean `58.22`, startup `17.28`, steady `59.52`, 1% low `8.50`
+  - after: FPS mean `30.19`, startup `30.04`, steady `30.21`, 1% low `24.19`
+  - frame pacing changed from a misleading high-average / terrible-tail `60 FPS`
+    chase into a stable, correctly capped `30 FPS` presentation path
+- `boids` stress fullscreen live run, seed `130363`, `60s`,
+  `initial_population=220`, `max_population=320`
+  - before: FPS mean `52.17`, startup `9.69`, steady `53.99`, 1% low `6.05`
+  - after: FPS mean `29.70`, startup `29.65`, steady `29.71`, 1% low `19.22`
+- `predator_prey` default fullscreen live regression run, seed `104729`, `90s`
+  - before: FPS mean `30.34`, sim/render mean `6.82 / 8.23 ms`
+  - after: FPS mean `30.33`, sim/render mean `6.88 / 8.43 ms`
+- `predator_prey` debug+HUD fullscreen live regression run, seed `104729`, `60s`
+  - before: FPS mean `30.26`, sim/render mean `6.66 / 11.29 ms`
+  - after: FPS mean `30.22`, sim/render mean `6.50 / 11.29 ms`
+
+GPU offload was considered and not implemented for boids in this pass. The
+measured root cause was boids simulation neighbor/connectivity work plus
+fixed-step catch-up amplification, not a flock-line or generic GPU-sized draw
+problem. Extending the predator_prey GPU renderer to boids would have been a
+larger rewrite than warranted for the measured issue.
+
+Artifacts:
+
+- `docs/performance/boids_graphical_perf_2026-05-21.md`
+- `docs/performance/boids_graphical_perf_2026-05-21.json`
+- `docs/performance/prechange_graphical_2026-05-21/`
+- `docs/performance/postchange_graphical_2026-05-21/`
+
+Remaining risk:
+
+- the boids stress case is now close to the target and no longer collapses at
+  startup, but the next measured optimization target would still be the pygame
+  boids trail/body render path if visual density rises further.
+
 ## [2026-05-21] — feat: add command-line help output
 
 Added a standard `-h` / `--help` path that prints conventional CLI help for

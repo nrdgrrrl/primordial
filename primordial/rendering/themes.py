@@ -140,6 +140,8 @@ class OceanTheme(Theme):
         (0, 255, 150),  # Green-cyan
         (150, 0, 255),  # Purple
     ]
+    _GLOW_CACHE_LIMIT = 1024
+    _AGE_OVERLAY_CACHE_LIMIT = 256
 
     def __init__(self) -> None:
         """Initialize the ocean theme."""
@@ -195,7 +197,7 @@ class OceanTheme(Theme):
             return cached
         surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
         pygame.draw.circle(surf, (80, 90, 110, alpha), (radius, radius), radius)
-        if len(self._age_overlay_cache) < 160:
+        if len(self._age_overlay_cache) < self._AGE_OVERLAY_CACHE_LIMIT:
             self._age_overlay_cache[key] = surf
         return surf
 
@@ -295,7 +297,7 @@ class OceanTheme(Theme):
                 surface, layer_color, (glow_radius, glow_radius), layer_radius
             )
 
-        if len(self._glow_cache) < 100:
+        if len(self._glow_cache) < self._GLOW_CACHE_LIMIT:
             self._glow_cache[cache_key] = surface
 
         return surface
@@ -355,7 +357,28 @@ class OceanTheme(Theme):
         pulse = 1.0 + 0.1 * math.sin(time * 3.14 + creature._glyph_phase)
         base_radius = creature.get_radius()
         radius = max(4, int(base_radius * pulse * scale * depth_scale))
+        self.render_creature_from_state(
+            surface,
+            creature,
+            color=color,
+            radius=radius,
+            base_radius=base_radius,
+            scale=scale,
+            depth_scale=depth_scale,
+        )
 
+    def render_creature_from_state(
+        self,
+        surface: pygame.Surface,
+        creature: Creature,
+        *,
+        color: tuple[int, int, int],
+        radius: int,
+        base_radius: float,
+        scale: float,
+        depth_scale: float,
+    ) -> None:
+        """Render one creature using caller-supplied per-frame values."""
         # Draw bloom glow halo (behind the glyph)
         glow = self._create_glow_surface(radius, color, 140)
         glow_size = glow.get_width()

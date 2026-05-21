@@ -266,9 +266,10 @@ class RendererCacheTests(unittest.TestCase):
 
         tiled_surface = pygame.Surface((320, 180), pygame.SRCALPHA)
         renderer._target_surface = tiled_surface
+        trail_state = renderer._build_creature_render_state(creature, anim_time)
         renderer._draw_creature_trails(
             SimpleNamespace(creatures=[creature]),
-            anim_time,
+            {id(creature): trail_state},
         )
 
         self.assertEqual(

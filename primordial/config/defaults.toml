@@ -92,6 +92,8 @@ adaptive_near_extinction_prey_floor = 5
 [modes.boids]
 initial_population = 150
 max_population = 300
+target_fps = 30
+simulation_tick_hz = 30
 mutation_rate = 0.0700
 energy_to_reproduce = 0.7200
 food_cycle_enabled = false

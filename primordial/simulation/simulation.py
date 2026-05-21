@@ -1004,8 +1004,7 @@ class Simulation:
 
         if self.settings.sim_mode == "boids":
             creature_bucket = self._build_creature_bucket()
-            boid_neighbors = self._build_boid_neighbor_cache(creature_bucket)
-            self._update_flock_assignments(boid_neighbors)
+            self._build_boid_neighbor_cache_and_assignments(creature_bucket)
         else:
             self._flock_sizes = {}
             self._flock_count = 0
@@ -2081,8 +2080,9 @@ class Simulation:
         creature_bucket = self._build_creature_bucket()
 
         # Shared boids neighbor cache for this frame.
-        boid_neighbors = self._build_boid_neighbor_cache(creature_bucket)
-        self._update_flock_assignments(boid_neighbors)
+        boid_neighbors = self._build_boid_neighbor_cache_and_assignments(
+            creature_bucket
+        )
 
         energy_to_reproduce = self._get_mode_param("energy_to_reproduce")
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
@@ -2157,30 +2157,143 @@ class Simulation:
         # Phase-sync glyph pulses within flocks
         self._update_boids_glyph_phases()
 
-    def _build_boid_neighbor_cache(
+    def _build_boid_neighbor_cache_and_assignments(
         self, bucket: dict[tuple[int, int], list[Creature]]
     ) -> dict[int, list[tuple[Creature, float, float, float]]]:
         """
-        Build directed neighbor lists for boids.
+        Build directed neighbor lists and flock assignments for boids in one pass.
 
-        Returns mapping:
-        creature_id -> list[(other_creature, dx, dy, dist_sq)]
-        where (dx, dy) is shortest toroidal vector from creature to neighbor.
+        Each qualifying nearby pair is evaluated once from the shared creature
+        bucket, then contributes directed neighbor entries according to each
+        creature's sense radius. Flock connected components are derived from
+        the same pair pass so boids mode does not pay for a second graph walk
+        over duplicate adjacency data every frame.
         """
-        neighbor_cache: dict[int, list[tuple[Creature, float, float, float]]] = {}
-        for creature in self.creatures:
-            sense = creature.get_effective_sense_radius() * 1.5
-            sense_sq = sense * sense
-            neighbors: list[tuple[Creature, float, float, float]] = []
-            for other in self._nearby_creatures(creature.x, creature.y, sense, bucket):
-                if other is creature:
+        creatures = self.creatures
+        creature_count = len(creatures)
+        neighbor_cache: dict[int, list[tuple[Creature, float, float, float]]] = {
+            id(creature): [] for creature in creatures
+        }
+        if creature_count == 0:
+            self._flock_sizes = {}
+            self._flock_count = 0
+            return neighbor_cache
+
+        creature_index = {
+            id(creature): index for index, creature in enumerate(creatures)
+        }
+        sense_sq_by_id = {
+            id(creature): (creature.get_effective_sense_radius() * 1.5) ** 2
+            for creature in creatures
+        }
+
+        parent = list(range(creature_count))
+        component_size = [1] * creature_count
+
+        def find(index: int) -> int:
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = parent[index]
+            return index
+
+        def union(left_index: int, right_index: int) -> None:
+            left_root = find(left_index)
+            right_root = find(right_index)
+            if left_root == right_root:
+                return
+            if component_size[left_root] < component_size[right_root]:
+                left_root, right_root = right_root, left_root
+            parent[right_root] = left_root
+            component_size[left_root] += component_size[right_root]
+
+        bs = self._CREATURE_BUCKET_SIZE
+        gw = max(1, self.width // bs + 1)
+        gh = max(1, self.height // bs + 1)
+
+        for key, bucket_members in bucket.items():
+            self._collect_boid_neighbor_pairs(
+                bucket_members,
+                bucket_members,
+                same_bucket=True,
+                sense_sq_by_id=sense_sq_by_id,
+                creature_index=creature_index,
+                neighbor_cache=neighbor_cache,
+                union=union,
+            )
+            for off_x, off_y in ((1, -1), (1, 0), (1, 1), (0, 1)):
+                neighbor_key = ((key[0] + off_x) % gw, (key[1] + off_y) % gh)
+                if neighbor_key == key:
                     continue
-                dx, dy = self._wrapped_delta(creature.x, creature.y, other.x, other.y)
-                dist_sq = dx * dx + dy * dy
-                if dist_sq < sense_sq:
-                    neighbors.append((other, dx, dy, dist_sq))
-            neighbor_cache[id(creature)] = neighbors
+                neighbor_members = bucket.get(neighbor_key)
+                if not neighbor_members:
+                    continue
+                self._collect_boid_neighbor_pairs(
+                    bucket_members,
+                    neighbor_members,
+                    same_bucket=False,
+                    sense_sq_by_id=sense_sq_by_id,
+                    creature_index=creature_index,
+                    neighbor_cache=neighbor_cache,
+                    union=union,
+                )
+
+        flock_sizes_by_root: dict[int, int] = {}
+        for index in range(creature_count):
+            root = find(index)
+            flock_sizes_by_root[root] = flock_sizes_by_root.get(root, 0) + 1
+
+        flock_sizes: dict[int, int] = {}
+        flock_id_by_root: dict[int, int] = {}
+        next_flock_id = 0
+        for index, creature in enumerate(creatures):
+            root = find(index)
+            size = flock_sizes_by_root[root]
+            if size <= 1:
+                creature.flock_id = -1
+                continue
+            flock_id = flock_id_by_root.get(root)
+            if flock_id is None:
+                flock_id = next_flock_id
+                flock_id_by_root[root] = flock_id
+                flock_sizes[flock_id] = size
+                next_flock_id += 1
+            creature.flock_id = flock_id
+
+        self._flock_sizes = flock_sizes
+        self._flock_count = len(flock_sizes)
         return neighbor_cache
+
+    def _collect_boid_neighbor_pairs(
+        self,
+        left_members: list[Creature],
+        right_members: list[Creature],
+        *,
+        same_bucket: bool,
+        sense_sq_by_id: dict[int, float],
+        creature_index: dict[int, int],
+        neighbor_cache: dict[int, list[tuple[Creature, float, float, float]]],
+        union: Any,
+    ) -> None:
+        """Populate boid directed neighbor lists for one or two bucket groups."""
+        for left_offset, left in enumerate(left_members):
+            start_index = left_offset + 1 if same_bucket else 0
+            left_id = id(left)
+            left_neighbors = neighbor_cache[left_id]
+            left_sense_sq = sense_sq_by_id[left_id]
+            left_index = creature_index[left_id]
+            for right in right_members[start_index:]:
+                right_id = id(right)
+                dx, dy = self._wrapped_delta(left.x, left.y, right.x, right.y)
+                dist_sq = dx * dx + dy * dy
+                left_can_sense = dist_sq < left_sense_sq
+                right_can_sense = dist_sq < sense_sq_by_id[right_id]
+                if not left_can_sense and not right_can_sense:
+                    continue
+                if left_can_sense:
+                    left_neighbors.append((right, dx, dy, dist_sq))
+                if right_can_sense:
+                    neighbor_cache[right_id].append((left, -dx, -dy, dist_sq))
+                union(left_index, creature_index[right_id])
 
     def _compute_boid_forces(
         self, creature: Creature, neighbors: list[tuple[Creature, float, float, float]]
@@ -2247,53 +2360,6 @@ class Simulation:
             coh_fx = coh_fy = 0.0
 
         return sep_fx, sep_fy, align_fx, align_fy, coh_fx, coh_fy, n, alignment_dot
-
-    def _update_flock_assignments(
-        self, neighbor_cache: dict[int, list[tuple[Creature, float, float, float]]]
-    ) -> None:
-        """
-        BFS connected-components flock detection.
-
-        Connectivity is undirected: two creatures are connected if either one
-        can sense the other this frame.
-        """
-        creature_by_id = {id(c): c for c in self.creatures}
-        adjacency: dict[int, set[int]] = {cid: set() for cid in creature_by_id}
-        for cid, neighbors in neighbor_cache.items():
-            for other, _dx, _dy, _dist_sq in neighbors:
-                oid = id(other)
-                if oid not in adjacency:
-                    continue
-                adjacency[cid].add(oid)
-                adjacency[oid].add(cid)
-
-        assignment: dict[int, int] = {}
-        next_flock = 0
-        for cid in adjacency:
-            if cid in assignment:
-                continue
-            queue = [cid]
-            assignment[cid] = next_flock
-            head = 0
-            while head < len(queue):
-                current = queue[head]
-                head += 1
-                for neighbor_id in adjacency[current]:
-                    if neighbor_id not in assignment:
-                        assignment[neighbor_id] = next_flock
-                        queue.append(neighbor_id)
-            next_flock += 1
-
-        flock_sizes: dict[int, int] = {}
-        for fid in assignment.values():
-            flock_sizes[fid] = flock_sizes.get(fid, 0) + 1
-
-        for cid, creature in creature_by_id.items():
-            fid = assignment.get(cid, -1)
-            creature.flock_id = fid if flock_sizes.get(fid, 0) > 1 else -1
-
-        self._flock_sizes = {k: v for k, v in flock_sizes.items() if v > 1}
-        self._flock_count = len(self._flock_sizes)
 
     def _update_boids_glyph_phases(self) -> None:
         """Lerp each creature's glyph pulse phase toward its flock average."""
