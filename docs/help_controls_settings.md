@@ -109,4 +109,4 @@ Many visual systems, such as glyphs, trails, zones, aging, cosmic rays, and the 
 
 **Predator-prey dials**: Configured ecological parameters that affect hunting, fleeing, scarcity pressure, kill distance, kill energy, and food-cycle amplitude.
 
-**Zone**: Soft environmental region that changes energy and sensing pressure.
+**Zone**: Soft environmental region that changes energy and sensing pressure. With the HUD visible, environmental zones are also labeled on screen.

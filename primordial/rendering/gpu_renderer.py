@@ -90,7 +90,7 @@ from .glyphs import build_glyph_surface
 from .help_overlay import HelpOverlay
 from .hud import HUD
 from .inspect_mode import InspectMode
-from .renderer import _ZONE_BG_COLORS
+from .renderer import _ZONE_BG_COLORS, _blit_zone_labels
 from .settings_overlay import SettingsOverlay
 from .tutorial_overlay import TutorialOverlay
 from .snapshot import (
@@ -415,6 +415,7 @@ class PredatorPreyGpuRenderer:
         self._ui_texture: int | None = None
         self._overlay_font = pygame.font.Font(None, 72)
         self._overlay_small_font = pygame.font.Font(None, 24)
+        self._debug_font = pygame.font.Font(None, 18)
         self._debug_timing: dict[str, float] = {}
         self._snapshot_debug_metrics: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
@@ -422,6 +423,8 @@ class PredatorPreyGpuRenderer:
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
         self._zone_cache_key: tuple[object, ...] | None = None
         self._zone_cache: tuple[RadialSprite, ...] = ()
+        self._zone_label_cache_key: tuple[object, ...] | None = None
+        self._zone_label_surface: pygame.Surface | None = None
         self._initialize_gl()
         self._log_gpu_coordinate_diagnostics("startup")
 
@@ -589,6 +592,8 @@ class PredatorPreyGpuRenderer:
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
         self._zone_cache_key = None
         self._zone_cache = ()
+        self._zone_label_cache_key = None
+        self._zone_label_surface = None
         self._initialize_gl()
         self._log_gpu_coordinate_diagnostics("resize")
 
@@ -598,6 +603,8 @@ class PredatorPreyGpuRenderer:
         self._glyph_atlas = _GlyphAtlas()
         self._zone_cache_key = None
         self._zone_cache = ()
+        self._zone_label_cache_key = None
+        self._zone_label_surface = None
         self._debug_inspect_click_marker = None
 
     def toggle_hud(self) -> None:
@@ -1047,6 +1054,8 @@ class PredatorPreyGpuRenderer:
         if not should_draw:
             return
         self._ui_surface.fill((0, 0, 0, 0))
+        if self.hud.visible:
+            self._draw_zone_labels(simulation)
         debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
         self.hud.render(self._ui_surface, simulation, self.fps, debug_lines=debug_lines)
         if simulation.predator_prey_game_over_active:
@@ -1069,6 +1078,34 @@ class PredatorPreyGpuRenderer:
             self.tutorial_overlay.draw(self._ui_surface)
         self.action_bar.draw(self._ui_surface, action_bar_context)
         self._draw_surface_texture(self._ui_surface)
+
+    def _draw_zone_labels(self, simulation) -> None:
+        """Draw the recovered HUD-gated environmental zone labels on the UI layer."""
+        zone_label_key = (
+            self.width,
+            self.height,
+            tuple(
+                (
+                    zone.zone_type,
+                    round(float(zone.x), 2),
+                    round(float(zone.y), 2),
+                    round(float(zone.radius), 2),
+                )
+                for zone in simulation.zone_manager.zones
+            ),
+        )
+        if zone_label_key != self._zone_label_cache_key:
+            self._zone_label_cache_key = zone_label_key
+            self._zone_label_surface = pygame.Surface(
+                (self.width, self.height), pygame.SRCALPHA
+            )
+            _blit_zone_labels(
+                self._zone_label_surface,
+                simulation.zone_manager.zones,
+                self._debug_font,
+            )
+        if self._zone_label_surface is not None:
+            self._ui_surface.blit(self._zone_label_surface, (0, 0))
 
     def _draw_inspect_overlay(self, simulation) -> None:
         """Draw the creature card overlay on the UI surface."""

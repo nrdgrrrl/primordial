@@ -2,6 +2,24 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — fix: restore HUD-gated environmental zone labels
+
+Restored the original environmental zone labels so `Warm Vent`, `Open Water`,
+`Kelp Forest`, `Hunting Ground`, and `Deep Trench` appear again when the HUD
+is visible.
+
+What changed:
+- Reused the original `b65edf2` zone-label styling and placement code instead
+  of inventing a new label system.
+- Restored the missing label layer on the GPU predator/prey renderer, which
+  had preserved zone backgrounds but omitted the HUD-gated zone names.
+- Kept the existing pygame renderer behavior intact while sharing the recovered
+  label blit logic between both renderers.
+
+Tests:
+- Added GPU renderer regression coverage for HUD-visible and HUD-hidden zone
+  label drawing behavior.
+
 ## [2026-05-22] — feat: add eco-morphological epistasis
 
 Added the first real phenotype layer to Primordial so existing genome traits

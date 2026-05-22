@@ -144,6 +144,30 @@ class TrailLayer:
             target.blit(self._tiles[index], (col * self.tile_size, row * self.tile_size))
 
 
+def _blit_zone_labels(
+    target: pygame.Surface,
+    zones: list[object],
+    font: pygame.font.Font,
+) -> None:
+    """Blit the original subtle environmental zone labels onto a surface."""
+    for zone in zones:
+        label = _ZONE_LABELS.get(zone.zone_type)
+        if not label:
+            continue
+        text_surface = font.render(label, True, (220, 235, 245))
+        panel = pygame.Surface(
+            (text_surface.get_width() + 10, text_surface.get_height() + 6),
+            pygame.SRCALPHA,
+        )
+        panel.fill((8, 16, 26, 120))
+        panel.blit(text_surface, (5, 3))
+        pos = (
+            int(zone.x - panel.get_width() / 2),
+            int(zone.y - panel.get_height() / 2),
+        )
+        target.blit(panel, pos)
+
+
 # ---------------------------------------------------------------------------
 # Renderer
 # ---------------------------------------------------------------------------
@@ -1025,22 +1049,11 @@ class Renderer:
             self._zone_label_surf_cached = pygame.Surface(
                 (self.width, self.height), pygame.SRCALPHA
             )
-            for zone in simulation.zone_manager.zones:
-                label = _ZONE_LABELS.get(zone.zone_type)
-                if not label:
-                    continue
-                text_surface = self._debug_font.render(label, True, (220, 235, 245))
-                panel = pygame.Surface(
-                    (text_surface.get_width() + 10, text_surface.get_height() + 6),
-                    pygame.SRCALPHA,
-                )
-                panel.fill((8, 16, 26, 120))
-                panel.blit(text_surface, (5, 3))
-                pos = (
-                    int(zone.x - panel.get_width() / 2),
-                    int(zone.y - panel.get_height() / 2),
-                )
-                self._zone_label_surf_cached.blit(panel, pos)
+            _blit_zone_labels(
+                self._zone_label_surf_cached,
+                simulation.zone_manager.zones,
+                self._debug_font,
+            )
         return self._zone_label_surf_cached
 
     # ------------------------------------------------------------------

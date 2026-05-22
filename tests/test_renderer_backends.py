@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -100,6 +101,85 @@ class RendererBackendTests(unittest.TestCase):
 
         self.assertEqual(renderer._active_gl_viewport_policy(), "drawable_fullscreen")
         self.assertEqual(renderer._active_gl_viewport_size(), (1920, 1080))
+
+    def test_gpu_zone_labels_draw_when_hud_visible(self) -> None:
+        renderer = PredatorPreyGpuRenderer.__new__(PredatorPreyGpuRenderer)
+        renderer.width = 320
+        renderer.height = 180
+        renderer.hud = SimpleNamespace(visible=True)
+        renderer._debug_font = pygame.font.Font(None, 18)
+        renderer._ui_surface = pygame.Surface((320, 180), pygame.SRCALPHA)
+        renderer._zone_label_cache_key = None
+        renderer._zone_label_surface = None
+        simulation = SimpleNamespace(
+            zone_manager=SimpleNamespace(
+                zones=[
+                    SimpleNamespace(
+                        zone_type="open_water",
+                        x=160.0,
+                        y=90.0,
+                        radius=60.0,
+                    )
+                ]
+            )
+        )
+
+        renderer._draw_zone_labels(simulation)
+
+        self.assertIsNotNone(renderer._zone_label_surface)
+        self.assertGreater(renderer._ui_surface.get_bounding_rect(min_alpha=1).width, 0)
+
+    def test_gpu_zone_labels_not_drawn_when_hud_hidden(self) -> None:
+        renderer = PredatorPreyGpuRenderer.__new__(PredatorPreyGpuRenderer)
+        renderer.width = 320
+        renderer.height = 180
+        renderer.hud = SimpleNamespace(
+            visible=False,
+            render=lambda surface, simulation, fps, debug_lines=None: None,
+        )
+        renderer._debug_font = pygame.font.Font(None, 18)
+        renderer._ui_surface = pygame.Surface((320, 180), pygame.SRCALPHA)
+        renderer._zone_label_cache_key = None
+        renderer._zone_label_surface = None
+        renderer.fps = 0.0
+        renderer.settings_overlay = SimpleNamespace(
+            visible=True,
+            fade=0.0,
+            update=lambda: None,
+            draw=lambda surface: None,
+        )
+        renderer.help_overlay = SimpleNamespace(
+            visible=False,
+            fade=0.0,
+            update=lambda: None,
+            draw=lambda surface: None,
+        )
+        renderer.tutorial_overlay = SimpleNamespace(
+            visible=False,
+            fade=0.0,
+            update=lambda: None,
+            draw=lambda surface: None,
+            set_runtime_context=lambda **kwargs: None,
+        )
+        renderer.inspect_mode = SimpleNamespace(enabled=False)
+        renderer.action_bar = SimpleNamespace(
+            build_context=lambda *args, **kwargs: None,
+            opacity=lambda context: 0.0,
+            draw=lambda surface, context: None,
+        )
+        renderer.debug_enabled = False
+        renderer._debug_timing = {}
+        renderer._draw_game_over_overlay = lambda simulation: None
+        renderer._draw_inspect_overlay = lambda simulation: None
+        drawn = {"called": False}
+        renderer._draw_surface_texture = lambda surface: drawn.__setitem__("called", True)
+        simulation = SimpleNamespace(predator_prey_game_over_active=False)
+
+        renderer._draw_ui(simulation)
+
+        self.assertIsNone(renderer._zone_label_surface)
+        self.assertEqual(renderer._ui_surface.get_bounding_rect(min_alpha=1).size, (0, 0))
+        self.assertTrue(drawn["called"])
 
 
 if __name__ == "__main__":

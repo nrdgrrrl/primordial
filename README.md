@@ -212,7 +212,7 @@ Glyphs are built from a **stroke vocabulary**: arcs, straight lines, loops (smal
 - **Aging**: creatures past 70% of their max lifespan gradually grey out. Ancient creatures become visibly desaturated and slower — a soft visual indicator of senescence.
 - **Cosmic rays**: a faint white ring briefly expands around a creature struck by a spontaneous single-trait mutation. Watch for these in slow periods — they can seed sudden new lineage directions.
 - **Attack lines**: when a hunter drains a nearby creature, a thin colored thread briefly connects them.
-- **Zone backgrounds**: subtle radial tints mark the 5 environmental zones (warm vent, open water, kelp forest, hunting ground, deep trench). Creatures that evolve for their zone gain an energy advantage.
+- **Zone backgrounds**: subtle radial tints mark the 5 environmental zones (warm vent, open water, kelp forest, hunting ground, deep trench). When the HUD is visible, those zones are also labeled on-screen at their centers. Creatures that evolve for their zone gain an energy advantage.
 
 ### Biology of the Organisms
 
