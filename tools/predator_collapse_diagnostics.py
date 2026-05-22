@@ -660,6 +660,38 @@ def _section_g_scarcity(
     }
 
 
+def _section_rarity_advantage(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    all_completed: list[dict] = []
+    for run in runs:
+        all_completed.extend(run["diagnostics"]["completed_lives"])
+    if not all_completed:
+        return {"note": "No completed predator lives"}
+    rarity_active = [l for l in all_completed if int(l.get("rarity_frames", 0)) > 0]
+    rarity_inactive = [l for l in all_completed if int(l.get("rarity_frames", 0)) <= 0]
+    active_zero_kill = _pct(sum(1 for l in rarity_active if int(l.get("kills", 0)) == 0), len(rarity_active))
+    inactive_zero_kill = _pct(sum(1 for l in rarity_inactive if int(l.get("kills", 0)) == 0), len(rarity_inactive))
+    active_repro = _pct(sum(1 for l in rarity_active if int(l.get("births_produced", 0)) > 0), len(rarity_active))
+    inactive_repro = _pct(sum(1 for l in rarity_inactive if int(l.get("births_produced", 0)) > 0), len(rarity_inactive))
+    active_lifespans = [int(l["end_frame"]) - int(l["start_frame"]) for l in rarity_active if l.get("end_frame") is not None]
+    inactive_lifespans = [int(l["end_frame"]) - int(l["start_frame"]) for l in rarity_inactive if l.get("end_frame") is not None]
+    return {
+        "rarity_active_lives": len(rarity_active),
+        "pct_rarity_active_lives": _pct(len(rarity_active), len(all_completed)),
+        "median_avg_rarity_pressure": _safe_median([float(l.get("avg_rarity_pressure", 0.0)) for l in rarity_active]),
+        "kills_while_rarity_active": sum(int(l.get("kills_while_rarity_active", 0)) for l in all_completed),
+        "births_while_rarity_active": sum(int(l.get("births_while_rarity_active", 0)) for l in all_completed),
+        "deaths_while_rarity_active": sum(int(l.get("deaths_while_rarity_active", 0)) for l in all_completed),
+        "zero_kill_rate_rarity_active": active_zero_kill,
+        "zero_kill_rate_rarity_inactive": inactive_zero_kill,
+        "repro_rate_rarity_active": active_repro,
+        "repro_rate_rarity_inactive": inactive_repro,
+        "median_lifespan_rarity_active": _safe_median(active_lifespans),
+        "median_lifespan_rarity_inactive": _safe_median(inactive_lifespans),
+        "median_kills_rarity_active": _safe_median([int(l.get("kills", 0)) for l in rarity_active]),
+        "median_kills_rarity_inactive": _safe_median([int(l.get("kills", 0)) for l in rarity_inactive]),
+    }
+
+
 def _section_h_epistasis(
     runs: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -729,6 +761,7 @@ def _section_i_recommendations(
     section_g: dict[str, Any],
     section_e: dict[str, Any],
     section_d: list[dict[str, Any]],
+    section_rarity: dict[str, Any],
 ) -> list[str]:
     """I. Data-driven plain-language intervention recommendations."""
     recommendations: list[str] = []
@@ -810,6 +843,21 @@ def _section_i_recommendations(
                 f"but spend most time in scarcity. Predator sensing/refuge/foraging "
                 f"bridge may be weak."
             )
+    if "note" not in section_rarity:
+        active_pct = float(section_rarity.get("pct_rarity_active_lives", 0.0))
+        active_repro = float(section_rarity.get("repro_rate_rarity_active", 0.0))
+        inactive_repro = float(section_rarity.get("repro_rate_rarity_inactive", 0.0))
+        active_zero = float(section_rarity.get("zero_kill_rate_rarity_active", 0.0))
+        inactive_zero = float(section_rarity.get("zero_kill_rate_rarity_inactive", 0.0))
+        if active_pct < 5.0:
+            recommendations.append("Rarity advantage rarely activates; thresholds may be too strict or collapse too abrupt.")
+        elif active_repro > inactive_repro and active_zero < inactive_zero:
+            recommendations.append("Rarity advantage appears promising: rarity-active lives show better kill/reproduction outcomes.")
+        else:
+            recommendations.append("Rarity advantage activates but shows weak lift; it may be too weak or applied to suboptimal hunt surfaces.")
+        prey_finals = [int(run.get("final_prey_count", 0)) for run in runs]
+        if active_repro > inactive_repro and prey_finals and min(prey_finals) <= 0:
+            recommendations.append("Rarity-active predators improved, but prey collapses occurred; rarity bonus may be too strong.")
 
     if not recommendations:
         recommendations.append(
@@ -833,9 +881,10 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
     section_e = _section_e_reproduction_bottleneck(runs)
     section_f = _section_f_prey_access(runs)
     section_g = _section_g_scarcity(runs)
+    section_rarity = _section_rarity_advantage(runs)
     section_h = _section_h_epistasis(runs)
     section_i = _section_i_recommendations(
-        runs, section_c, section_f, section_g, section_e, section_d,
+        runs, section_c, section_f, section_g, section_e, section_d, section_rarity,
     )
 
     return {
@@ -849,6 +898,7 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "section_e_reproduction_bottleneck": section_e,
         "section_f_prey_access": section_f,
         "section_g_scarcity": section_g,
+        "section_rarity_advantage_analysis": section_rarity,
         "section_h_epistasis_body_plan": section_h,
         "section_i_recommendations": section_i,
     }
@@ -1006,6 +1056,26 @@ def render_markdown(report: dict[str, Any]) -> str:
 
     # G. Scarcity
     lines.append("## G. Scarcity Analysis")
+    lines.append("")
+
+    # Rarity Advantage Analysis
+    lines.append("## Rarity Advantage Analysis")
+    lines.append("")
+    ra = report["section_rarity_advantage_analysis"]
+    if "note" in ra:
+        lines.append(ra["note"])
+    else:
+        lines.append(f"- **Predator lives with rarity advantage:** {ra.get('rarity_active_lives', 0)} ({_pct_fmt(ra.get('pct_rarity_active_lives'))})")
+        lines.append(f"- **Median avg rarity pressure:** {_fmt(ra.get('median_avg_rarity_pressure'))}")
+        lines.append(f"- **Kills while rarity active:** {ra.get('kills_while_rarity_active', 0)}")
+        lines.append(f"- **Births while rarity active:** {ra.get('births_while_rarity_active', 0)}")
+        lines.append(f"- **Deaths while rarity active:** {ra.get('deaths_while_rarity_active', 0)}")
+        lines.append(f"- **Zero-kill rate (rarity-active):** {_pct_fmt(ra.get('zero_kill_rate_rarity_active'))}")
+        lines.append(f"- **Zero-kill rate (non-rarity):** {_pct_fmt(ra.get('zero_kill_rate_rarity_inactive'))}")
+        lines.append(f"- **Reproduction rate (rarity-active):** {_pct_fmt(ra.get('repro_rate_rarity_active'))}")
+        lines.append(f"- **Reproduction rate (non-rarity):** {_pct_fmt(ra.get('repro_rate_rarity_inactive'))}")
+        lines.append(f"- **Median lifespan rarity-active vs non-rarity:** {_fmt(ra.get('median_lifespan_rarity_active'))} vs {_fmt(ra.get('median_lifespan_rarity_inactive'))}")
+        lines.append(f"- **Median kills rarity-active vs non-rarity:** {_fmt(ra.get('median_kills_rarity_active'))} vs {_fmt(ra.get('median_kills_rarity_inactive'))}")
     lines.append("")
     g = report["section_g_scarcity"]
     if "note" in g:

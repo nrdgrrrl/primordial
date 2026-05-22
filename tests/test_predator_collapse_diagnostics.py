@@ -34,6 +34,7 @@ from predator_collapse_diagnostics import (
     _section_e_reproduction_bottleneck,
     _section_f_prey_access,
     _section_g_scarcity,
+    _section_rarity_advantage,
     _section_i_recommendations,
 )
 
@@ -89,6 +90,18 @@ def _make_life(
     born_during_low_predator_rarity=False,
     start_energy=0.7,
     end_energy=0.0,
+    rarity_pressure_at_start=0.0,
+    rarity_pressure_at_end=0.0,
+    rarity_frames=0,
+    rarity_pressure_sum=0.0,
+    avg_rarity_pressure=0.0,
+    kills_while_rarity_active=0,
+    births_while_rarity_active=0,
+    deaths_while_rarity_active=0,
+    rarity_hunt_sense_bonus_at_death=0.0,
+    rarity_contact_bonus_at_death=0.0,
+    rarity_depth_transition_bonus_at_death=0.0,
+    rarity_hunting_cost_reduction_at_death=0.0,
 ):
     """Create a synthetic predator life dict for testing."""
     return {
@@ -158,6 +171,18 @@ def _make_life(
             "flee_agility_mult": 1.0,
         },
         "born_during_low_predator_rarity": born_during_low_predator_rarity,
+        "rarity_pressure_at_start": rarity_pressure_at_start,
+        "rarity_pressure_at_end": rarity_pressure_at_end,
+        "rarity_frames": rarity_frames,
+        "rarity_pressure_sum": rarity_pressure_sum,
+        "avg_rarity_pressure": avg_rarity_pressure,
+        "kills_while_rarity_active": kills_while_rarity_active,
+        "births_while_rarity_active": births_while_rarity_active,
+        "deaths_while_rarity_active": deaths_while_rarity_active,
+        "rarity_hunt_sense_bonus_at_death": rarity_hunt_sense_bonus_at_death,
+        "rarity_contact_bonus_at_death": rarity_contact_bonus_at_death,
+        "rarity_depth_transition_bonus_at_death": rarity_depth_transition_bonus_at_death,
+        "rarity_hunting_cost_reduction_at_death": rarity_hunting_cost_reduction_at_death,
     }
 
 
@@ -385,9 +410,24 @@ class TestReportSections(unittest.TestCase):
                      "total_predator_lives": 10}
         section_d = []
         recommendations = _section_i_recommendations(
-            [_make_run()], section_c, section_f, section_g, section_e, section_d,
+            [_make_run()], section_c, section_f, section_g, section_e, section_d, {"note": "n/a"},
         )
         self.assertTrue(any("LONG SCARCITY" in r for r in recommendations))
+
+    def test_section_rarity_advantage_no_active_lives(self):
+        run = _make_run(completed_lives=[_make_life(rarity_frames=0), _make_life(rarity_frames=0)])
+        result = _section_rarity_advantage([run])
+        self.assertEqual(result["rarity_active_lives"], 0)
+        self.assertEqual(result["zero_kill_rate_rarity_active"], 0.0)
+
+    def test_section_rarity_advantage_all_active_lives(self):
+        run = _make_run(completed_lives=[
+            _make_life(rarity_frames=10, avg_rarity_pressure=0.8, kills=1, births_produced=1),
+            _make_life(rarity_frames=20, avg_rarity_pressure=0.4, kills=0, births_produced=0),
+        ])
+        result = _section_rarity_advantage([run])
+        self.assertEqual(result["rarity_active_lives"], 2)
+        self.assertIsNotNone(result["median_avg_rarity_pressure"])
 
 
 class TestBuildAndRenderReport(unittest.TestCase):
@@ -415,6 +455,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         self.assertIn("section_e_reproduction_bottleneck", report)
         self.assertIn("section_f_prey_access", report)
         self.assertIn("section_g_scarcity", report)
+        self.assertIn("section_rarity_advantage_analysis", report)
         self.assertIn("section_h_epistasis_body_plan", report)
         self.assertIn("section_i_recommendations", report)
 
@@ -422,6 +463,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         md = render_markdown(report)
         self.assertIn("# Predator Collapse Diagnostics Report", md)
         self.assertIn("## A. Run Summary", md)
+        self.assertIn("## Rarity Advantage Analysis", md)
         self.assertIn("## I. Recommendations", md)
         self.assertIn("Kills inside refuge", md)
 

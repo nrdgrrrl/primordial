@@ -1603,6 +1603,11 @@ class Simulation:
                         if hunt_result.engaged
                         else None
                     ),
+                    rarity_modifiers=(
+                        hunt_result.hunt_modifiers.rarity
+                        if hunt_result.engaged
+                        else None
+                    ),
                 )
                 if (
                     creature.energy >= repro_threshold
@@ -1842,6 +1847,7 @@ class Simulation:
                 post_kill_energy=predator.energy,
                 repro_threshold=repro_threshold,
                 refuge_modifiers=hunt_modifiers.refuge,
+                rarity_modifiers=hunt_modifiers.rarity,
             )
             self.active_attacks.append((
                 predator.x, predator.y,
@@ -2020,6 +2026,8 @@ class Simulation:
         if creature.species == "predator":
             life = self._ensure_predator_life(creature)
             life["births_produced"] += 1
+            if self._get_predator_rarity_modifiers(creature).active:
+                life["births_while_rarity_active"] += 1
             if offspring.species == "predator":
                 self._predator_diag_events["births"].append({
                     "frame": self._frame,
@@ -5042,6 +5050,18 @@ class Simulation:
             },
             "phenotype_modifiers_at_end": None,
             "born_during_low_predator_rarity": predator_count <= 5,
+            "rarity_pressure_at_start": 0.0,
+            "rarity_pressure_at_end": 0.0,
+            "rarity_frames": 0,
+            "rarity_pressure_sum": 0.0,
+            "avg_rarity_pressure": 0.0,
+            "kills_while_rarity_active": 0,
+            "births_while_rarity_active": 0,
+            "deaths_while_rarity_active": 0,
+            "rarity_hunt_sense_bonus_at_death": 0.0,
+            "rarity_contact_bonus_at_death": 0.0,
+            "rarity_depth_transition_bonus_at_death": 0.0,
+            "rarity_hunting_cost_reduction_at_death": 0.0,
         }
         self._predator_diag_next_life_id += 1
         self._predator_diag_active[id(creature)] = life
@@ -5079,6 +5099,7 @@ class Simulation:
         post_kill_energy: float,
         repro_threshold: float,
         refuge_modifiers: PredatorRefugeModifiers,
+        rarity_modifiers: PredatorRarityModifiers,
     ) -> None:
         life = self._ensure_predator_life(predator)
         life["kills"] += 1
@@ -5097,6 +5118,8 @@ class Simulation:
         )
         if post_kill_energy >= repro_threshold:
             life["peak_reached_threshold"] = True
+        if rarity_modifiers.active:
+            life["kills_while_rarity_active"] += 1
 
     def _record_predator_post_cost_state(
         self,
@@ -5106,6 +5129,7 @@ class Simulation:
         prey_scarce: bool,
         creature_bucket: dict[tuple[int, int], list[Creature]] | None = None,
         refuge_modifiers: PredatorRefugeModifiers | None = None,
+        rarity_modifiers: PredatorRarityModifiers | None = None,
     ) -> None:
         life = self._ensure_predator_life(predator)
         life["frames_observed"] += 1
@@ -5121,6 +5145,14 @@ class Simulation:
         if active_refuge.active:
             life["refuge_frames"] += 1
             life["refuge_bonus_factor_sum"] += active_refuge.refuge_factor
+        active_rarity = rarity_modifiers or self._get_predator_rarity_modifiers(predator)
+        life["rarity_pressure_at_end"] = active_rarity.pressure
+        if life["frames_observed"] == 1:
+            life["rarity_pressure_at_start"] = active_rarity.pressure
+        if active_rarity.pressure > 0.0:
+            life["rarity_pressure_sum"] += active_rarity.pressure
+        if active_rarity.active:
+            life["rarity_frames"] += 1
         life["highest_energy"] = max(life["highest_energy"], predator.energy)
         if life["threshold_min"] is None or repro_threshold < life["threshold_min"]:
             life["threshold_min"] = repro_threshold
@@ -5178,6 +5210,18 @@ class Simulation:
             refuge_modifiers.local_predator_count
         )
         end_phenotype = self._get_effective_phenotype(creature)
+        rarity_modifiers = self._get_predator_rarity_modifiers(creature)
+        life["rarity_pressure_at_end"] = rarity_modifiers.pressure
+        if life["frames_observed"] <= 0:
+            life["rarity_pressure_at_start"] = rarity_modifiers.pressure
+        if rarity_modifiers.active:
+            life["deaths_while_rarity_active"] = 1
+        life["rarity_hunt_sense_bonus_at_death"] = rarity_modifiers.hunt_sense_bonus
+        life["rarity_contact_bonus_at_death"] = rarity_modifiers.contact_bonus
+        life["rarity_depth_transition_bonus_at_death"] = rarity_modifiers.depth_transition_bonus
+        life["rarity_hunting_cost_reduction_at_death"] = rarity_modifiers.hunting_cost_reduction
+        if life["frames_observed"] > 0:
+            life["avg_rarity_pressure"] = life["rarity_pressure_sum"] / life["frames_observed"]
         life["strategy_bucket_at_end"] = end_phenotype.strategy_bucket
         life["phenotype_modifiers_at_end"] = {
             "speed_mult": end_phenotype.speed_mult,
