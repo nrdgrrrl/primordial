@@ -698,6 +698,18 @@ def _section_g_near_contact_dance(
         int(l.get("near_contact_no_kill_with_low_energy_prey_frames", 0))
         for l in all_completed
     )
+    post_move_contact_opportunities = sum(
+        int(l.get("post_move_contact_opportunities", 0)) for l in all_completed
+    )
+    post_move_contact_same_depth_opportunities = sum(
+        int(l.get("post_move_contact_same_depth_opportunities", 0)) for l in all_completed
+    )
+    post_move_contact_cross_depth_opportunities = sum(
+        int(l.get("post_move_contact_cross_depth_opportunities", 0)) for l in all_completed
+    )
+    post_move_contact_kills = sum(
+        int(l.get("post_move_contact_kills", 0)) for l in all_completed
+    )
     max_sustained_chase_frames = [
         int(l.get("max_sustained_chase_frames", 0)) for l in all_completed
     ]
@@ -790,6 +802,11 @@ def _section_g_near_contact_dance(
             near_contact_low_energy_no_kill_frames,
             total_near_contact_no_kill_frames,
         ),
+        "post_move_contact_opportunities": post_move_contact_opportunities,
+        "post_move_contact_same_depth_opportunities": post_move_contact_same_depth_opportunities,
+        "post_move_contact_cross_depth_opportunities": post_move_contact_cross_depth_opportunities,
+        "post_move_contact_kills": post_move_contact_kills,
+        "pct_kills_post_move_contact": _pct(post_move_contact_kills, total_kill_samples),
         "sustained_chase_min_frames": sustained_chase_min_frames,
     }
 
@@ -1292,6 +1309,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Near-contact no-kill frames:** {g.get('near_contact_no_kill_frames', 0)}")
         lines.append(f"- **Same-depth near-contact no-kill frames:** {g.get('same_depth_near_contact_no_kill_frames', 0)}")
         lines.append(f"- **Cross-depth near-contact no-kill frames:** {g.get('cross_depth_near_contact_no_kill_frames', 0)}")
+        lines.append(f"- **Post-move contact opportunities:** {g.get('post_move_contact_opportunities', 0)}")
+        lines.append(f"- **Post-move same-depth opportunities:** {g.get('post_move_contact_same_depth_opportunities', 0)}")
+        lines.append(f"- **Post-move cross-depth misses:** {g.get('post_move_contact_cross_depth_opportunities', 0)}")
+        lines.append(f"- **Post-move contact kills:** {g.get('post_move_contact_kills', 0)}")
+        lines.append(f"- **% total kills from post-move contact:** {_pct_fmt(g.get('pct_kills_post_move_contact'))}")
         lines.append(f"- **Near-contact frames / completed life:** {_fmt(g.get('near_contact_frames_per_completed_life'))}")
         lines.append(f"- **% lives with near-contact no-kill frames:** {_pct_fmt(g.get('pct_lives_with_near_contact_no_kill_frames'))}")
         lines.append(f"- **Median max sustained chase frames:** {_fmt(g.get('median_max_sustained_chase_frames'))}")

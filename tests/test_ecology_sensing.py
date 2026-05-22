@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from primordial.settings import Settings
 from primordial.simulation import Simulation
+from primordial.simulation.simulation import PredatorHuntResult
 from primordial.simulation.creature import Creature
 from primordial.simulation.genome import Genome
 from primordial.simulation.zones import Zone
@@ -480,6 +481,44 @@ class EcologySensingTests(unittest.TestCase):
         self.assertIn("near_contact_no_kill_frames", life)
         self.assertIn("max_sustained_chase_frames", life)
         self.assertIn("killed_prey_condition_buckets", life)
+        self.assertIn("post_move_contact_kills", life)
+        self.assertIn("post_move_contact_opportunities", life)
+
+    def test_post_move_contact_kill_resolves_after_predator_movement(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.epistasis_enabled = False
+        predator = Creature(x=100.0, y=100.0, genome=Genome(size=0.6, speed=1.0, aggression=0.9), energy=0.2, lineage_id=1, species="predator")
+        prey = Creature(x=114.0, y=100.0, genome=Genome(size=0.2, speed=0.1, aggression=0.1), energy=0.4, lineage_id=2, species="prey")
+        predator.depth_band = prey.depth_band = 1
+        simulation.creatures = [predator, prey]
+        contact_dist = (predator.get_radius() + prey.get_radius()) * simulation._get_predator_contact_kill_distance_scale()
+        result = PredatorHuntResult(
+            engaged=True,
+            killed=False,
+            target_prey=prey,
+            target_dist_sq=(contact_dist + 0.3) ** 2,
+            contact_dist=contact_dist,
+            same_depth=True,
+        )
+        predator.x = prey.x - (contact_dist - 0.1)
+        simulation._resolve_post_move_predator_contact(
+            predator, hunt_result=result, repro_threshold=simulation._get_reproduction_threshold(predator)
+        )
+        self.assertEqual(prey.energy, 0.0)
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["post_move_contact_kills"], 1)
+
+    def test_post_move_contact_does_not_kill_when_cross_depth(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.epistasis_enabled = False
+        predator = Creature(x=100.0, y=100.0, genome=Genome(size=0.6, speed=1.0, aggression=0.9), energy=0.2, lineage_id=1, species="predator")
+        prey = Creature(x=114.8, y=100.0, genome=Genome(size=0.2, speed=0.1, aggression=0.1), energy=0.4, lineage_id=2, species="prey")
+        predator.depth_band = 1
+        prey.depth_band = 2
+        simulation.creatures = [predator, prey]
+        with patch("random.gauss", return_value=0.0), patch.object(simulation, "_update_predator_prey_depth_band", return_value=None):
+            simulation._step_predator_prey()
+        self.assertGreater(prey.energy, 0.0)
 
     def test_same_depth_near_contact_no_kill_increments(self) -> None:
         simulation = self._build_simulation("predator_prey")

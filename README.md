@@ -277,7 +277,9 @@ In predator_prey mode, species is determined by the `aggression` trait using hys
 
 Several mechanisms prevent permanent predator dominance: the reproduction gate (recent kills required), the 60% dominance penalty (+20% reproduction threshold), prey scarcity costs, predator interference, and cross-band misses. These create negative feedback: predator success reduces prey density, which makes predation harder, which reduces predator reproduction, which allows prey to recover.
 
-Predator-collapse diagnostics also track near-contact "dance" behavior: same-depth close passes without kills, cross-depth near misses, sustained same-target chases, and whether successful kills skew toward old or low-energy prey. These diagnostics are observational only; they do not change kill distance or add a lunge/strike mechanic.
+Predator-collapse diagnostics also track near-contact "dance" behavior:
+Predators also resolve a conservative post-move closing-strike contact check against the same pursued prey target in the same tick. This does not spawn/rescue predators, does not change reproduction thresholds or kill energy caps, and still requires normal contact distance plus same-depth overlap. Diagnostics now include post-move contact opportunities and post-move kills.
+ same-depth close passes without kills, cross-depth near misses, sustained same-target chases, and whether successful kills skew toward old or low-energy prey. These diagnostics are observational only; they do not change kill distance or add a lunge/strike mechanic.
 
 For the full predator-prey ecology explanation, see [docs/organism_biology.md](docs/organism_biology.md) and [docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md).
 

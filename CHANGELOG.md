@@ -1,3 +1,7 @@
+- fix: resolve predator contact after closing movement
+  - Predator-prey now resolves an additional same-target contact check immediately after predator movement in the same tick (same-depth required), using shared kill logic and unchanged reproduction/kill-cap tuning.
+  - Added post-move contact diagnostics and report fields: opportunities, same-depth vs cross-depth, post-move kills, and percent of kills from post-move contact.
+
 # Changelog
 
 All notable changes to Primordial are documented in this file.

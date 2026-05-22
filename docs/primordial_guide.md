@@ -844,6 +844,8 @@ Predator-prey exposes additional ecology-only tuning for this pass:
 
 The prey flee settings change only prey escape speed under age/energy frailty.
 The near-contact settings are diagnostics-only and do not change kill distance
+Predators also resolve a conservative post-move closing-strike contact check against the same pursued prey target in the same tick. This does not spawn/rescue predators, does not change reproduction thresholds or kill energy caps, and still requires normal contact distance plus same-depth overlap. Diagnostics now include post-move contact opportunities and post-move kills.
+
 or add a lunge/strike mechanic. They exist to separate same-depth contact/flee
 oscillation, cross-depth misses, sustained chase without kill, and kills that
 skew toward old or low-energy prey.

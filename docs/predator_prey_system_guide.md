@@ -125,6 +125,8 @@ When a predator reaches contact range but the prey is in another band, that is a
 whether depth is protecting prey.
 
 Near-contact diagnostics now also record when predators repeatedly reach a
+Predators also resolve a conservative post-move closing-strike contact check against the same pursued prey target in the same tick. This does not spawn/rescue predators, does not change reproduction thresholds or kill energy caps, and still requires normal contact distance plus same-depth overlap. Diagnostics now include post-move contact opportunities and post-move kills.
+
 configurable band around contact range without converting the hunt. The
 diagnostics separate:
 
