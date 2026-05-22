@@ -463,8 +463,10 @@ class TestBuildAndRenderReport(unittest.TestCase):
         md = render_markdown(report)
         self.assertIn("# Predator Collapse Diagnostics Report", md)
         self.assertIn("## A. Run Summary", md)
-        self.assertIn("## Rarity Advantage Analysis", md)
-        self.assertIn("## I. Recommendations", md)
+        self.assertIn("## H. Rarity Advantage Analysis", md)
+        self.assertIn("## J. Recommendations", md)
+        self.assertLess(md.index("## G. Scarcity Analysis"), md.index("## H. Rarity Advantage Analysis"))
+        self.assertLess(md.index("## H. Rarity Advantage Analysis"), md.index("## I. Epistasis / Body-Plan Analysis"))
         self.assertIn("Kills inside refuge", md)
 
 

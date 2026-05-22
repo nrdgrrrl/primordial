@@ -1724,3 +1724,5 @@ Five major systems added in this pass: procedurally generated symbolic glyph cre
 - Added predator rarity advantage modifiers for predator-prey mode with conservative blending against refuge modifiers and capped effects.
 
 - Extended predator-collapse diagnostics with rarity-advantage life fields, rarity analysis section, and rarity-aware recommendations (diagnostics-only change).
+
+- Fixed diagnostics Markdown section ordering so scarcity content stays under G and rarity appears as a separate following section.

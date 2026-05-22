@@ -1057,9 +1057,21 @@ def render_markdown(report: dict[str, Any]) -> str:
     # G. Scarcity
     lines.append("## G. Scarcity Analysis")
     lines.append("")
+    g = report["section_g_scarcity"]
+    if "note" in g:
+        lines.append(g["note"])
+    else:
+        lines.append(f"- **Median prey-scarce share:** {_pct_fmt(g.get('median_prey_scarce_share'))}")
+        lines.append(f"- **% lives with >75% scarcity:** {_pct_fmt(g.get('pct_lives_high_scarcity_gt_75pct'))}")
+        lines.append(f"- **High-scarcity death count:** {g.get('high_scarcity_death_count', 0)}")
+        lines.append("")
+        lines.append("Median scarcity by death context:")
+        for ctx, med in g.get("median_scarcity_by_death_context", {}).items():
+            lines.append(f"  - {ctx}: {_pct_fmt(med)}")
+    lines.append("")
 
-    # Rarity Advantage Analysis
-    lines.append("## Rarity Advantage Analysis")
+    # H. Rarity Advantage Analysis
+    lines.append("## H. Rarity Advantage Analysis")
     lines.append("")
     ra = report["section_rarity_advantage_analysis"]
     if "note" in ra:
@@ -1077,21 +1089,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Median lifespan rarity-active vs non-rarity:** {_fmt(ra.get('median_lifespan_rarity_active'))} vs {_fmt(ra.get('median_lifespan_rarity_inactive'))}")
         lines.append(f"- **Median kills rarity-active vs non-rarity:** {_fmt(ra.get('median_kills_rarity_active'))} vs {_fmt(ra.get('median_kills_rarity_inactive'))}")
     lines.append("")
-    g = report["section_g_scarcity"]
-    if "note" in g:
-        lines.append(g["note"])
-    else:
-        lines.append(f"- **Median prey-scarce share:** {_pct_fmt(g.get('median_prey_scarce_share'))}")
-        lines.append(f"- **% lives with >75% scarcity:** {_pct_fmt(g.get('pct_lives_high_scarcity_gt_75pct'))}")
-        lines.append(f"- **High-scarcity death count:** {g.get('high_scarcity_death_count', 0)}")
-        lines.append("")
-        lines.append("Median scarcity by death context:")
-        for ctx, med in g.get("median_scarcity_by_death_context", {}).items():
-            lines.append(f"  - {ctx}: {_pct_fmt(med)}")
-    lines.append("")
 
-    # H. Epistasis / Body-Plan
-    lines.append("## H. Epistasis / Body-Plan Analysis")
+    # I. Epistasis / Body-Plan
+    lines.append("## I. Epistasis / Body-Plan Analysis")
     lines.append("")
     h = report["section_h_epistasis_body_plan"]
     if "note" in h:
@@ -1117,8 +1117,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(f"  - Top strategy: {epi.get('top_strategy')} ({_pct_fmt(epi.get('top_strategy_share'))})")
     lines.append("")
 
-    # I. Recommendations
-    lines.append("## I. Recommendations")
+    # J. Recommendations
+    lines.append("## J. Recommendations")
     lines.append("")
     for rec in report["section_i_recommendations"]:
         lines.append(f"1. {rec}")
