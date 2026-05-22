@@ -37,7 +37,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import pygame
 
-from primordial.display.mode import DEFAULT_WINDOWED_SIZE
+from primordial.display.mode import DEFAULT_WINDOWED_SIZE, _get_fullscreen_resolution
 from primordial.display.cursor import hide_runtime_cursor, restore_system_cursor
 from primordial.rendering import create_renderer, display_flags_for_settings
 from primordial.runtime import (
@@ -92,15 +92,16 @@ def run_simulation_graphical(
     settings.mode_params.setdefault(_PREDATOR_PREY_MODE, {})
     settings.mode_params[_PREDATOR_PREY_MODE]["adaptive_tuning_enabled"] = False
 
-    # Force windowed mode so each seed gets a predictable display
-    settings.fullscreen = False
+    # Fullscreen + HUD so the play area matches real gameplay and
+    # the operator can visually monitor each run.
+    settings.fullscreen = True
     settings.show_hud = True
 
     pygame.init()
-    width, height = DEFAULT_WINDOWED_SIZE
+    width, height = _get_fullscreen_resolution()
     screen = pygame.display.set_mode(
         (width, height),
-        display_flags_for_settings(settings),
+        display_flags_for_settings(settings, pygame.FULLSCREEN | pygame.SCALED),
     )
     pygame.display.set_caption(f"Primordial Diagnostics — seed {seed}")
     hide_runtime_cursor()
