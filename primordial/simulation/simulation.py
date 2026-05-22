@@ -69,6 +69,7 @@ _DEFAULT_PREDATOR_LOW_PREY_HUNT_FLOOR = 0.35
 _DEFAULT_PREY_TO_PREDATOR_AGGRESSION_THRESHOLD = 0.30
 _DEFAULT_PREDATOR_TO_PREY_AGGRESSION_THRESHOLD = 0.20
 _DEFAULT_EXTINCTION_GRACE_TICKS = 7200
+_PREY_FRAILTY_OLD_AGE_FRACTION = 0.70
 _PREDATOR_INTERFERENCE_RADIUS = 150.0
 _BOIDS_NEIGHBOR_SENSE_SCALE = 1.05
 _BOIDS_FLOCK_LINK_SCALE = 0.62
@@ -715,6 +716,50 @@ class Simulation:
         """Resolve prey flee sensing range multiplier."""
         return float(self._get_mode_param("prey_flee_sense_multiplier", 1.2))
 
+    def _prey_flee_age_slowdown_enabled(self) -> bool:
+        return bool(self._get_mode_param("prey_flee_age_slowdown_enabled", True))
+
+    def _prey_flee_low_energy_slowdown_enabled(self) -> bool:
+        return bool(
+            self._get_mode_param("prey_flee_low_energy_slowdown_enabled", True)
+        )
+
+    def _get_prey_flee_low_energy_threshold(self) -> float:
+        return max(
+            0.01,
+            min(
+                1.0,
+                float(self._get_mode_param("prey_flee_low_energy_threshold", 0.35)),
+            ),
+        )
+
+    def _get_prey_flee_low_energy_min_mult(self) -> float:
+        return max(
+            0.4,
+            min(
+                1.0,
+                float(self._get_mode_param("prey_flee_low_energy_min_mult", 0.75)),
+            ),
+        )
+
+    def _get_prey_flee_condition_multiplier(self, prey: Creature) -> float:
+        """Return direct flee-speed frailty from age and current energy."""
+        age_mult = 1.0
+        if self._prey_flee_age_slowdown_enabled():
+            age_mult = prey.get_age_speed_mult()
+
+        energy_mult = 1.0
+        threshold = self._get_prey_flee_low_energy_threshold()
+        if (
+            self._prey_flee_low_energy_slowdown_enabled()
+            and prey.energy < threshold
+        ):
+            t = max(0.0, min(1.0, prey.energy / threshold))
+            min_mult = self._get_prey_flee_low_energy_min_mult()
+            energy_mult = min_mult + ((1.0 - min_mult) * t)
+
+        return age_mult * energy_mult
+
     def _get_predator_prey_scarcity_penalty_multiplier(self) -> float:
         """Resolve predator prey-scarcity energy penalty multiplier."""
         return float(
@@ -724,6 +769,31 @@ class Simulation:
     def _get_food_cycle_amplitude(self) -> float:
         """Resolve food-cycle amplitude, allowing predator-prey-only tuning."""
         return float(self._get_mode_param("food_cycle_amplitude", 1.0))
+
+    def _get_predator_near_contact_diagnostic_scale(self) -> float:
+        return max(
+            1.0,
+            min(
+                5.0,
+                float(
+                    self._get_mode_param(
+                        "predator_near_contact_diagnostic_scale",
+                        1.25,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_sustained_chase_min_frames(self) -> int:
+        return max(
+            1,
+            int(
+                self._get_mode_param(
+                    "predator_sustained_chase_min_frames",
+                    20,
+                )
+            ),
+        )
 
     def _get_predator_food_efficiency_multiplier(self) -> float:
         return max(
@@ -1778,6 +1848,7 @@ class Simulation:
                 best_prey = other
 
         if best_prey is None:
+            self._clear_predator_chase_state(predator)
             predator.wander(
                 self.settings.creature_speed_base,
                 speed_scale=self._get_creature_speed_scale(predator),
@@ -1785,6 +1856,7 @@ class Simulation:
             return PredatorHuntResult(engaged=False, killed=False)
 
         self._record_predator_prey_sighting(predator)
+        self._record_predator_chase_target(predator, best_prey)
 
         self._update_predator_prey_depth_band(
             predator,
@@ -1822,6 +1894,23 @@ class Simulation:
         contact_dist = (
             predator.get_radius() + best_prey.get_radius()
         ) * contact_scale * self._get_creature_predation_contact_multiplier(predator)
+        near_contact_dist = (
+            contact_dist * self._get_predator_near_contact_diagnostic_scale()
+        )
+        is_near_contact = (
+            best_prey.energy > 0.0
+            and best_dist_sq <= (near_contact_dist * near_contact_dist)
+        )
+        if is_near_contact:
+            self._record_predator_near_contact(
+                predator,
+                best_prey,
+                same_depth=predator.depth_band == best_prey.depth_band,
+                no_kill=not (
+                    best_dist_sq < (contact_dist * contact_dist)
+                    and predator.depth_band == best_prey.depth_band
+                ),
+            )
         if (
             best_dist_sq < (contact_dist * contact_dist)
             and best_prey.energy > 0.0
@@ -1830,6 +1919,7 @@ class Simulation:
             # Transfer from prey to predator; prevents multiple predators
             # farming energy from an already-dead prey in the same frame.
             pre_kill_energy = predator.energy
+            prey_energy_before_kill = best_prey.energy
             energy_gain = min(self._get_predator_kill_energy_gain_cap(), best_prey.energy)
             predator.energy = min(1.0, predator.energy + energy_gain)
             predator.recent_animal_energy = min(
@@ -1846,6 +1936,8 @@ class Simulation:
                 pre_kill_energy=pre_kill_energy,
                 post_kill_energy=predator.energy,
                 repro_threshold=repro_threshold,
+                prey=best_prey,
+                prey_energy_at_kill=prey_energy_before_kill,
                 refuge_modifiers=hunt_modifiers.refuge,
                 rarity_modifiers=hunt_modifiers.rarity,
             )
@@ -1919,7 +2011,14 @@ class Simulation:
             dy /= dist
 
         flee_speed_scale = self._get_creature_flee_speed_scale(prey)
-        max_speed = prey.genome.speed * self.settings.creature_speed_base * 1.5 * flee_speed_scale
+        flee_condition_mult = self._get_prey_flee_condition_multiplier(prey)
+        max_speed = (
+            prey.genome.speed
+            * self.settings.creature_speed_base
+            * 1.5
+            * flee_speed_scale
+            * flee_condition_mult
+        )
         desired_vx = dx * max_speed
         desired_vy = dy * max_speed
         steer = 0.35 * min(1.15, max(0.92, self._get_effective_phenotype(prey).flee_agility_mult))
@@ -4606,6 +4705,22 @@ class Simulation:
             "predator_contact_kill_distance_scale": (
                 self._get_predator_contact_kill_distance_scale()
             ),
+            "prey_flee_age_slowdown_enabled": self._prey_flee_age_slowdown_enabled(),
+            "prey_flee_low_energy_slowdown_enabled": (
+                self._prey_flee_low_energy_slowdown_enabled()
+            ),
+            "prey_flee_low_energy_threshold": (
+                self._get_prey_flee_low_energy_threshold()
+            ),
+            "prey_flee_low_energy_min_mult": (
+                self._get_prey_flee_low_energy_min_mult()
+            ),
+            "predator_near_contact_diagnostic_scale": (
+                self._get_predator_near_contact_diagnostic_scale()
+            ),
+            "predator_sustained_chase_min_frames": (
+                self._get_predator_sustained_chase_min_frames()
+            ),
             "predator_refuge_enabled": self._predator_refuge_enabled(),
             "predator_refuge_zone_type": "hunting_ground",
             "predator_refuge_hunt_sense_bonus": (
@@ -5010,6 +5125,20 @@ class Simulation:
             "cross_band_contact_misses": 0,
             "cross_band_misses_inside_refuge": 0,
             "cross_band_misses_outside_refuge": 0,
+            "near_contact_frames": 0,
+            "near_contact_no_kill_frames": 0,
+            "near_contact_same_depth_no_kill_frames": 0,
+            "near_contact_cross_depth_no_kill_frames": 0,
+            "near_contact_with_old_prey_frames": 0,
+            "near_contact_with_low_energy_prey_frames": 0,
+            "near_contact_no_kill_with_old_prey_frames": 0,
+            "near_contact_no_kill_with_low_energy_prey_frames": 0,
+            "sustained_chase_frames": 0,
+            "max_sustained_chase_frames": 0,
+            "kills_after_sustained_chase": 0,
+            "killed_prey_age_fractions": [],
+            "killed_prey_energies": [],
+            "killed_prey_condition_buckets": [],
             "births_produced": 0,
             "threshold_min": None,
             "threshold_max": None,
@@ -5062,6 +5191,8 @@ class Simulation:
             "rarity_contact_bonus_at_death": 0.0,
             "rarity_depth_transition_bonus_at_death": 0.0,
             "rarity_hunting_cost_reduction_at_death": 0.0,
+            "_last_target_id": None,
+            "_current_chase_frames": 0,
         }
         self._predator_diag_next_life_id += 1
         self._predator_diag_active[id(creature)] = life
@@ -5077,6 +5208,80 @@ class Simulation:
         life = self._ensure_predator_life(predator)
         life["frames_with_prey_sighted"] += 1
         life["last_saw_prey_frame"] = self._frame
+
+    def _clear_predator_chase_state(self, predator: Creature) -> None:
+        life = self._predator_diag_active.get(id(predator))
+        if life is None:
+            return
+        life["_last_target_id"] = None
+        life["_current_chase_frames"] = 0
+
+    def _record_predator_chase_target(
+        self,
+        predator: Creature,
+        prey: Creature,
+    ) -> None:
+        life = self._ensure_predator_life(predator)
+        target_id = id(prey)
+        if life["_last_target_id"] == target_id:
+            life["_current_chase_frames"] += 1
+        else:
+            life["_last_target_id"] = target_id
+            life["_current_chase_frames"] = 1
+        current_frames = int(life["_current_chase_frames"])
+        life["max_sustained_chase_frames"] = max(
+            int(life["max_sustained_chase_frames"]),
+            current_frames,
+        )
+        if current_frames >= self._get_predator_sustained_chase_min_frames():
+            life["sustained_chase_frames"] += 1
+
+    def _classify_prey_condition_bucket(
+        self,
+        prey: Creature,
+        *,
+        prey_energy: float | None = None,
+    ) -> str:
+        age_fraction = prey.get_age_fraction()
+        energy = prey.energy if prey_energy is None else prey_energy
+        is_old = age_fraction >= _PREY_FRAILTY_OLD_AGE_FRACTION
+        is_low_energy = energy < self._get_prey_flee_low_energy_threshold()
+        if is_old and is_low_energy:
+            return "old_low_energy"
+        if is_old:
+            return "old"
+        if is_low_energy:
+            return "low_energy"
+        return "young_healthy"
+
+    def _record_predator_near_contact(
+        self,
+        predator: Creature,
+        prey: Creature,
+        *,
+        same_depth: bool,
+        no_kill: bool,
+    ) -> None:
+        life = self._ensure_predator_life(predator)
+        age_fraction = prey.get_age_fraction()
+        is_old = age_fraction >= _PREY_FRAILTY_OLD_AGE_FRACTION
+        is_low_energy = prey.energy < self._get_prey_flee_low_energy_threshold()
+        life["near_contact_frames"] += 1
+        if is_old:
+            life["near_contact_with_old_prey_frames"] += 1
+        if is_low_energy:
+            life["near_contact_with_low_energy_prey_frames"] += 1
+        if not no_kill:
+            return
+        life["near_contact_no_kill_frames"] += 1
+        if same_depth:
+            life["near_contact_same_depth_no_kill_frames"] += 1
+        else:
+            life["near_contact_cross_depth_no_kill_frames"] += 1
+        if is_old:
+            life["near_contact_no_kill_with_old_prey_frames"] += 1
+        if is_low_energy:
+            life["near_contact_no_kill_with_low_energy_prey_frames"] += 1
 
     def _record_predator_cross_band_miss(
         self,
@@ -5098,6 +5303,8 @@ class Simulation:
         pre_kill_energy: float,
         post_kill_energy: float,
         repro_threshold: float,
+        prey: Creature,
+        prey_energy_at_kill: float,
         refuge_modifiers: PredatorRefugeModifiers,
         rarity_modifiers: PredatorRarityModifiers,
     ) -> None:
@@ -5111,6 +5318,16 @@ class Simulation:
         life["highest_energy"] = max(life["highest_energy"], post_kill_energy)
         life["kill_pre_energies"].append(pre_kill_energy)
         life["kill_post_energies"].append(post_kill_energy)
+        life["killed_prey_age_fractions"].append(prey.get_age_fraction())
+        life["killed_prey_energies"].append(prey_energy_at_kill)
+        life["killed_prey_condition_buckets"].append(
+            self._classify_prey_condition_bucket(
+                prey,
+                prey_energy=prey_energy_at_kill,
+            )
+        )
+        if life["_current_chase_frames"] >= self._get_predator_sustained_chase_min_frames():
+            life["kills_after_sustained_chase"] += 1
         self._record_predator_gap(
             life,
             key="closest_peak_gap",
@@ -5256,8 +5473,15 @@ class Simulation:
         clone = dict(life)
         clone["kill_pre_energies"] = list(life["kill_pre_energies"])
         clone["kill_post_energies"] = list(life["kill_post_energies"])
+        clone["killed_prey_age_fractions"] = list(life["killed_prey_age_fractions"])
+        clone["killed_prey_energies"] = list(life["killed_prey_energies"])
+        clone["killed_prey_condition_buckets"] = list(
+            life["killed_prey_condition_buckets"]
+        )
         if life.get("phenotype_modifiers_at_start") is not None:
             clone["phenotype_modifiers_at_start"] = dict(life["phenotype_modifiers_at_start"])
         if life.get("phenotype_modifiers_at_end") is not None:
             clone["phenotype_modifiers_at_end"] = dict(life["phenotype_modifiers_at_end"])
+        clone.pop("_last_target_id", None)
+        clone.pop("_current_chase_frames", None)
         return clone

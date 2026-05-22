@@ -60,6 +60,7 @@ from primordial.simulation.depth import DEPTH_BAND_NAMES
 _DEFAULT_SEEDS = [161803, 314159, 271828, 57721, 99991]
 _DEFAULT_MAX_TICKS = 20000
 _PREDATOR_PREY_MODE = "predator_prey"
+_PREY_FRAILTY_OLD_AGE_FRACTION = 0.70
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +239,10 @@ def _depth_band_name(band: int | None) -> str:
     return DEPTH_BAND_NAMES.get(band, f"band_{band}")
 
 
+def _bucket_killed_prey_age(age_fraction: float) -> str:
+    return "old" if age_fraction >= _PREY_FRAILTY_OLD_AGE_FRACTION else "young"
+
+
 # ---------------------------------------------------------------------------
 # Report sections
 # ---------------------------------------------------------------------------
@@ -355,7 +360,7 @@ def _section_c_death_context_breakdown(
         "old_age": "predators died of natural lifespan — not the collapse problem",
         "active_hunting": "predators found prey but died during/near pursuit",
         "after_failed_pursuit": "predators saw prey recently but failed to convert",
-        "long_scarity": "predators mostly could not find prey or food bridge was insufficient",
+        "long_scarcity": "predators mostly could not find prey or food bridge was insufficient",
         "unknown": "death context could not be determined",
     }
 
@@ -660,6 +665,135 @@ def _section_g_scarcity(
     }
 
 
+def _section_g_near_contact_dance(
+    runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """G. Near-contact / dance analysis."""
+    all_completed: list[dict] = []
+    for run in runs:
+        all_completed.extend(run["diagnostics"]["completed_lives"])
+
+    if not all_completed:
+        return {"note": "No completed predator lives"}
+
+    total_near_contact_frames = sum(
+        int(l.get("near_contact_frames", 0)) for l in all_completed
+    )
+    total_near_contact_no_kill_frames = sum(
+        int(l.get("near_contact_no_kill_frames", 0)) for l in all_completed
+    )
+    total_same_depth_no_kill_frames = sum(
+        int(l.get("near_contact_same_depth_no_kill_frames", 0))
+        for l in all_completed
+    )
+    total_cross_depth_no_kill_frames = sum(
+        int(l.get("near_contact_cross_depth_no_kill_frames", 0))
+        for l in all_completed
+    )
+    near_contact_old_no_kill_frames = sum(
+        int(l.get("near_contact_no_kill_with_old_prey_frames", 0))
+        for l in all_completed
+    )
+    near_contact_low_energy_no_kill_frames = sum(
+        int(l.get("near_contact_no_kill_with_low_energy_prey_frames", 0))
+        for l in all_completed
+    )
+    max_sustained_chase_frames = [
+        int(l.get("max_sustained_chase_frames", 0)) for l in all_completed
+    ]
+    sustained_chase_min_frames = max(
+        int(run["diagnostics"].get("predator_sustained_chase_min_frames", 20))
+        for run in runs
+    )
+    sustained_chase_lives = sum(
+        1 for frames in max_sustained_chase_frames if frames >= sustained_chase_min_frames
+    )
+    kills_after_sustained_chase = sum(
+        int(l.get("kills_after_sustained_chase", 0)) for l in all_completed
+    )
+
+    killed_prey_age_fractions: list[float] = []
+    killed_prey_energies: list[float] = []
+    condition_counts: dict[str, int] = {}
+    age_bucket_counts = {"young": 0, "old": 0}
+    energy_bucket_counts = {"healthy": 0, "low_energy": 0}
+    old_or_low_kill_count = 0
+    old_kill_count = 0
+    low_energy_kill_count = 0
+
+    for life in all_completed:
+        age_fractions = [float(v) for v in life.get("killed_prey_age_fractions", [])]
+        energies = [float(v) for v in life.get("killed_prey_energies", [])]
+        condition_buckets = [
+            str(v) for v in life.get("killed_prey_condition_buckets", [])
+        ]
+        killed_prey_age_fractions.extend(age_fractions)
+        killed_prey_energies.extend(energies)
+        for bucket in condition_buckets:
+            condition_counts[bucket] = condition_counts.get(bucket, 0) + 1
+            if bucket in {"old", "old_low_energy"}:
+                old_kill_count += 1
+                age_bucket_counts["old"] += 1
+            else:
+                age_bucket_counts["young"] += 1
+            if bucket in {"low_energy", "old_low_energy"}:
+                low_energy_kill_count += 1
+                energy_bucket_counts["low_energy"] += 1
+            else:
+                energy_bucket_counts["healthy"] += 1
+            if bucket != "young_healthy":
+                old_or_low_kill_count += 1
+
+    total_kill_samples = sum(condition_counts.values())
+
+    return {
+        "total_near_contact_frames": total_near_contact_frames,
+        "near_contact_no_kill_frames": total_near_contact_no_kill_frames,
+        "same_depth_near_contact_no_kill_frames": total_same_depth_no_kill_frames,
+        "cross_depth_near_contact_no_kill_frames": total_cross_depth_no_kill_frames,
+        "near_contact_frames_per_completed_life": (
+            total_near_contact_frames / len(all_completed)
+            if all_completed else None
+        ),
+        "pct_lives_with_near_contact_no_kill_frames": _pct(
+            sum(
+                1
+                for l in all_completed
+                if int(l.get("near_contact_no_kill_frames", 0)) > 0
+            ),
+            len(all_completed),
+        ),
+        "median_max_sustained_chase_frames": _safe_median(
+            max_sustained_chase_frames
+        ),
+        "pct_lives_with_sustained_chase": _pct(
+            sustained_chase_lives,
+            len(all_completed),
+        ),
+        "kills_after_sustained_chase": kills_after_sustained_chase,
+        "killed_prey_age_bucket_counts": age_bucket_counts,
+        "killed_prey_energy_bucket_counts": energy_bucket_counts,
+        "killed_prey_condition_bucket_counts": condition_counts,
+        "average_killed_prey_age_fraction": _safe_mean(killed_prey_age_fractions),
+        "average_killed_prey_energy": _safe_mean(killed_prey_energies),
+        "pct_kills_old_prey": _pct(old_kill_count, total_kill_samples),
+        "pct_kills_low_energy_prey": _pct(low_energy_kill_count, total_kill_samples),
+        "pct_kills_old_or_low_energy_prey": _pct(
+            old_or_low_kill_count,
+            total_kill_samples,
+        ),
+        "pct_near_contact_no_kill_frames_with_old_prey": _pct(
+            near_contact_old_no_kill_frames,
+            total_near_contact_no_kill_frames,
+        ),
+        "pct_near_contact_no_kill_frames_with_low_energy_prey": _pct(
+            near_contact_low_energy_no_kill_frames,
+            total_near_contact_no_kill_frames,
+        ),
+        "sustained_chase_min_frames": sustained_chase_min_frames,
+    }
+
+
 def _section_rarity_advantage(runs: list[dict[str, Any]]) -> dict[str, Any]:
     all_completed: list[dict] = []
     for run in runs:
@@ -754,16 +888,18 @@ def _section_h_epistasis(
     }
 
 
-def _section_i_recommendations(
+def _section_k_recommendations(
     runs: list[dict[str, Any]],
     section_c: dict[str, Any],
-    section_f: dict[str, Any],
     section_g: dict[str, Any],
+    section_h: dict[str, Any],
+    section_i: dict[str, Any],
+    section_f: dict[str, Any],
     section_e: dict[str, Any],
     section_d: list[dict[str, Any]],
-    section_rarity: dict[str, Any],
+    section_j: dict[str, Any],
 ) -> list[str]:
-    """I. Data-driven plain-language intervention recommendations."""
+    """K. Data-driven plain-language intervention recommendations."""
     recommendations: list[str] = []
 
     contexts = section_c.get("contexts", {})
@@ -831,8 +967,83 @@ def _section_i_recommendations(
             "depth bands but cannot kill because they are on the wrong band."
         )
 
+    if "note" not in section_g:
+        near_contact_no_kill_frames = int(
+            section_g.get("near_contact_no_kill_frames", 0)
+        )
+        same_depth_no_kill_frames = int(
+            section_g.get("same_depth_near_contact_no_kill_frames", 0)
+        )
+        cross_depth_no_kill_frames = int(
+            section_g.get("cross_depth_near_contact_no_kill_frames", 0)
+        )
+        if (
+            near_contact_no_kill_frames >= 25
+            and same_depth_no_kill_frames >= cross_depth_no_kill_frames
+            and same_depth_no_kill_frames >= max(10, near_contact_no_kill_frames * 0.5)
+        ):
+            recommendations.append(
+                "Near-contact same-depth no-kill frames are high: contact/flee "
+                "oscillation is likely still trapping predators in close-range dances."
+            )
+        if (
+            cross_depth_no_kill_frames >= 25
+            and cross_depth_no_kill_frames > same_depth_no_kill_frames
+        ):
+            recommendations.append(
+                "Near-contact cross-depth misses dominate: depth mismatch appears "
+                "to be the main hunting bottleneck rather than flee-speed oscillation."
+            )
+
+        pct_lives_with_sustained_chase = float(
+            section_g.get("pct_lives_with_sustained_chase", 0.0)
+        )
+        kills_after_sustained_chase = int(
+            section_g.get("kills_after_sustained_chase", 0)
+        )
+        total_kills = sum(int(run.get("total_kills", 0)) for run in runs)
+        if pct_lives_with_sustained_chase >= 20.0 and (
+            total_kills <= 0
+            or (kills_after_sustained_chase / max(1, total_kills)) < 0.15
+        ):
+            recommendations.append(
+                "Sustained chases are common but rarely end in kills; if this "
+                "persists after prey frailty tuning, a later lunge/strike mechanic "
+                "would be worth evaluating."
+            )
+
+        old_or_low_kill_share = float(
+            section_g.get("pct_kills_old_or_low_energy_prey", 0.0)
+        )
+        if old_or_low_kill_share >= 50.0:
+            recommendations.append(
+                "Kills skew toward old or low-energy prey, which suggests prey "
+                "frailty is functioning as intended without directly changing reproduction."
+            )
+        young_healthy_kills = int(
+            section_g.get("killed_prey_condition_bucket_counts", {}).get(
+                "young_healthy",
+                0,
+            )
+        )
+        total_kill_samples = sum(
+            int(v)
+            for v in section_g.get("killed_prey_condition_bucket_counts", {}).values()
+        )
+        prey_finals = [int(run.get("final_prey_count", 0)) for run in runs]
+        if (
+            total_kill_samples > 0
+            and (young_healthy_kills / total_kill_samples) >= 0.65
+            and prey_finals
+            and min(prey_finals) <= 0
+        ):
+            recommendations.append(
+                "Healthy-young prey make up most kills and prey collapse occurred; "
+                "prey frailty may be too strong or too broadly applied."
+            )
+
     # Check prey abundance vs starvation
-    median_scarce_share = section_g.get("median_prey_scarce_share")
+    median_scarce_share = section_h.get("median_prey_scarce_share")
     median_prey_sighting = section_f.get("median_prey_sighting_share")
     if median_scarce_share is not None and median_prey_sighting is not None:
         if median_prey_sighting > 0.2 and median_scarce_share > 0.5:
@@ -843,12 +1054,12 @@ def _section_i_recommendations(
                 f"but spend most time in scarcity. Predator sensing/refuge/foraging "
                 f"bridge may be weak."
             )
-    if "note" not in section_rarity:
-        active_pct = float(section_rarity.get("pct_rarity_active_lives", 0.0))
-        active_repro = float(section_rarity.get("repro_rate_rarity_active", 0.0))
-        inactive_repro = float(section_rarity.get("repro_rate_rarity_inactive", 0.0))
-        active_zero = float(section_rarity.get("zero_kill_rate_rarity_active", 0.0))
-        inactive_zero = float(section_rarity.get("zero_kill_rate_rarity_inactive", 0.0))
+    if "note" not in section_i:
+        active_pct = float(section_i.get("pct_rarity_active_lives", 0.0))
+        active_repro = float(section_i.get("repro_rate_rarity_active", 0.0))
+        inactive_repro = float(section_i.get("repro_rate_rarity_inactive", 0.0))
+        active_zero = float(section_i.get("zero_kill_rate_rarity_active", 0.0))
+        inactive_zero = float(section_i.get("zero_kill_rate_rarity_inactive", 0.0))
         if active_pct < 5.0:
             recommendations.append("Rarity advantage rarely activates; thresholds may be too strict or collapse too abrupt.")
         elif active_repro > inactive_repro and active_zero < inactive_zero:
@@ -880,11 +1091,20 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
     section_d = _section_d_origin_breakdown(runs)
     section_e = _section_e_reproduction_bottleneck(runs)
     section_f = _section_f_prey_access(runs)
-    section_g = _section_g_scarcity(runs)
-    section_rarity = _section_rarity_advantage(runs)
-    section_h = _section_h_epistasis(runs)
-    section_i = _section_i_recommendations(
-        runs, section_c, section_f, section_g, section_e, section_d, section_rarity,
+    section_g = _section_g_near_contact_dance(runs)
+    section_h = _section_g_scarcity(runs)
+    section_i = _section_rarity_advantage(runs)
+    section_j = _section_h_epistasis(runs)
+    section_k = _section_k_recommendations(
+        runs,
+        section_c,
+        section_g,
+        section_h,
+        section_i,
+        section_f,
+        section_e,
+        section_d,
+        section_j,
     )
 
     return {
@@ -897,10 +1117,11 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "section_d_origin_breakdown": section_d,
         "section_e_reproduction_bottleneck": section_e,
         "section_f_prey_access": section_f,
-        "section_g_scarcity": section_g,
-        "section_rarity_advantage_analysis": section_rarity,
-        "section_h_epistasis_body_plan": section_h,
-        "section_i_recommendations": section_i,
+        "section_g_near_contact_dance_analysis": section_g,
+        "section_h_scarcity": section_h,
+        "section_i_rarity_advantage_analysis": section_i,
+        "section_j_epistasis_body_plan": section_j,
+        "section_k_recommendations": section_k,
     }
 
 
@@ -920,6 +1141,12 @@ def _pct_fmt(value: float) -> str:
     if value is None:
         return "—"
     return f"{value:.1f}%"
+
+
+def _share_fmt(value: float | None) -> str:
+    if value is None:
+        return "—"
+    return f"{value * 100.0:.1f}%"
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -1034,7 +1261,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     if "note" in f:
         lines.append(f["note"])
     else:
-        lines.append(f"- **Median prey-sighting share:** {_pct_fmt(f.get('median_prey_sighting_share'))}")
+        lines.append(f"- **Median prey-sighting share:** {_share_fmt(f.get('median_prey_sighting_share'))}")
         lines.append(f"- **% lives with no prey sightings:** {_pct_fmt(f.get('pct_lives_with_no_prey_sightings'))}")
         lines.append(f"- **% lives with sightings but no kills:** {_pct_fmt(f.get('pct_lives_with_prey_sightings_but_no_kills'))}")
         lines.append(f"- **% lives with cross-band misses:** {_pct_fmt(f.get('pct_lives_with_cross_band_misses'))}")
@@ -1043,8 +1270,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Cross-band misses per kill:** {_fmt(f.get('cross_band_misses_per_kill'))}")
         lines.append(f"- **Mean refuge frames / life:** {_fmt(f.get('mean_refuge_frames_per_life'))}")
         lines.append(f"- **Mean hunting-ground frames / life:** {_fmt(f.get('mean_hunting_ground_frames_per_life'))}")
-        lines.append(f"- **Median refuge frame share:** {_pct_fmt(f.get('median_refuge_frame_share'))}")
-        lines.append(f"- **Median hunting-ground frame share:** {_pct_fmt(f.get('median_hunting_ground_frame_share'))}")
+        lines.append(f"- **Median refuge frame share:** {_share_fmt(f.get('median_refuge_frame_share'))}")
+        lines.append(f"- **Median hunting-ground frame share:** {_share_fmt(f.get('median_hunting_ground_frame_share'))}")
         lines.append(f"- **Kills inside refuge:** {f.get('kills_inside_refuge', 0)}")
         lines.append(f"- **Kills outside refuge:** {f.get('kills_outside_refuge', 0)}")
         lines.append(f"- **Deaths inside refuge:** {f.get('deaths_inside_refuge', 0)} ({_pct_fmt(f.get('pct_deaths_inside_refuge'))})")
@@ -1054,26 +1281,54 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Cross-band misses outside refuge:** {f.get('cross_band_misses_outside_refuge', 0)}")
     lines.append("")
 
-    # G. Scarcity
-    lines.append("## G. Scarcity Analysis")
+    # G. Near-Contact / Dance
+    lines.append("## G. Near-Contact / Dance Analysis")
     lines.append("")
-    g = report["section_g_scarcity"]
+    g = report["section_g_near_contact_dance_analysis"]
     if "note" in g:
         lines.append(g["note"])
     else:
-        lines.append(f"- **Median prey-scarce share:** {_pct_fmt(g.get('median_prey_scarce_share'))}")
-        lines.append(f"- **% lives with >75% scarcity:** {_pct_fmt(g.get('pct_lives_high_scarcity_gt_75pct'))}")
-        lines.append(f"- **High-scarcity death count:** {g.get('high_scarcity_death_count', 0)}")
-        lines.append("")
-        lines.append("Median scarcity by death context:")
-        for ctx, med in g.get("median_scarcity_by_death_context", {}).items():
-            lines.append(f"  - {ctx}: {_pct_fmt(med)}")
+        lines.append(f"- **Total near-contact frames:** {g.get('total_near_contact_frames', 0)}")
+        lines.append(f"- **Near-contact no-kill frames:** {g.get('near_contact_no_kill_frames', 0)}")
+        lines.append(f"- **Same-depth near-contact no-kill frames:** {g.get('same_depth_near_contact_no_kill_frames', 0)}")
+        lines.append(f"- **Cross-depth near-contact no-kill frames:** {g.get('cross_depth_near_contact_no_kill_frames', 0)}")
+        lines.append(f"- **Near-contact frames / completed life:** {_fmt(g.get('near_contact_frames_per_completed_life'))}")
+        lines.append(f"- **% lives with near-contact no-kill frames:** {_pct_fmt(g.get('pct_lives_with_near_contact_no_kill_frames'))}")
+        lines.append(f"- **Median max sustained chase frames:** {_fmt(g.get('median_max_sustained_chase_frames'))}")
+        lines.append(f"- **% lives with sustained chase:** {_pct_fmt(g.get('pct_lives_with_sustained_chase'))}")
+        lines.append(f"- **Kills after sustained chase:** {g.get('kills_after_sustained_chase', 0)}")
+        lines.append(f"- **Killed prey age buckets:** {g.get('killed_prey_age_bucket_counts', {})}")
+        lines.append(f"- **Killed prey energy buckets:** {g.get('killed_prey_energy_bucket_counts', {})}")
+        lines.append(f"- **Killed prey condition buckets:** {g.get('killed_prey_condition_bucket_counts', {})}")
+        lines.append(f"- **Average killed prey age fraction:** {_fmt(g.get('average_killed_prey_age_fraction'))}")
+        lines.append(f"- **Average killed prey energy:** {_fmt(g.get('average_killed_prey_energy'))}")
+        lines.append(f"- **% kills of old prey:** {_pct_fmt(g.get('pct_kills_old_prey'))}")
+        lines.append(f"- **% kills of low-energy prey:** {_pct_fmt(g.get('pct_kills_low_energy_prey'))}")
+        lines.append(f"- **% kills of old-or-low-energy prey:** {_pct_fmt(g.get('pct_kills_old_or_low_energy_prey'))}")
+        lines.append(f"- **% near-contact no-kill frames with old prey:** {_pct_fmt(g.get('pct_near_contact_no_kill_frames_with_old_prey'))}")
+        lines.append(f"- **% near-contact no-kill frames with low-energy prey:** {_pct_fmt(g.get('pct_near_contact_no_kill_frames_with_low_energy_prey'))}")
     lines.append("")
 
-    # H. Rarity Advantage Analysis
-    lines.append("## H. Rarity Advantage Analysis")
+    # H. Scarcity
+    lines.append("## H. Scarcity Analysis")
     lines.append("")
-    ra = report["section_rarity_advantage_analysis"]
+    h = report["section_h_scarcity"]
+    if "note" in h:
+        lines.append(h["note"])
+    else:
+        lines.append(f"- **Median prey-scarce share:** {_share_fmt(h.get('median_prey_scarce_share'))}")
+        lines.append(f"- **% lives with >75% scarcity:** {_pct_fmt(h.get('pct_lives_high_scarcity_gt_75pct'))}")
+        lines.append(f"- **High-scarcity death count:** {h.get('high_scarcity_death_count', 0)}")
+        lines.append("")
+        lines.append("Median scarcity by death context:")
+        for ctx, med in h.get("median_scarcity_by_death_context", {}).items():
+            lines.append(f"  - {ctx}: {_share_fmt(med)}")
+    lines.append("")
+
+    # I. Rarity Advantage Analysis
+    lines.append("## I. Rarity Advantage Analysis")
+    lines.append("")
+    ra = report["section_i_rarity_advantage_analysis"]
     if "note" in ra:
         lines.append(ra["note"])
     else:
@@ -1090,37 +1345,37 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Median kills rarity-active vs non-rarity:** {_fmt(ra.get('median_kills_rarity_active'))} vs {_fmt(ra.get('median_kills_rarity_inactive'))}")
     lines.append("")
 
-    # I. Epistasis / Body-Plan
-    lines.append("## I. Epistasis / Body-Plan Analysis")
+    # J. Epistasis / Body-Plan
+    lines.append("## J. Epistasis / Body-Plan Analysis")
     lines.append("")
-    h = report["section_h_epistasis_body_plan"]
-    if "note" in h:
-        lines.append(h["note"])
+    j = report["section_j_epistasis_body_plan"]
+    if "note" in j:
+        lines.append(j["note"])
     else:
         lines.append("Strategy buckets among deaths:")
-        for bucket, count in sorted(h.get("strategy_buckets_among_deaths", {}).items()):
+        for bucket, count in sorted(j.get("strategy_buckets_among_deaths", {}).items()):
             lines.append(f"  - {bucket}: {count}")
         lines.append("")
         lines.append("Strategy buckets among reproducers:")
-        for bucket, count in sorted(h.get("strategy_buckets_among_reproducers", {}).items()):
+        for bucket, count in sorted(j.get("strategy_buckets_among_reproducers", {}).items()):
             lines.append(f"  - {bucket}: {count}")
         lines.append("")
-        avg_mods = h.get("avg_phenotype_modifiers_for_dead_predators", {})
+        avg_mods = j.get("avg_phenotype_modifiers_for_dead_predators", {})
         if avg_mods:
             lines.append("Average phenotype modifiers for dead predators:")
             for key, val in sorted(avg_mods.items()):
                 lines.append(f"  - {key}: {val:.4f}")
-        epi = h.get("global_epistasis_summary", {})
+        epi = j.get("global_epistasis_summary", {})
         if epi:
             lines.append(f"  - Epistasis enabled: {epi.get('enabled')}")
             lines.append(f"  - Epistasis strength: {epi.get('strength')}")
-            lines.append(f"  - Top strategy: {epi.get('top_strategy')} ({_pct_fmt(epi.get('top_strategy_share'))})")
+            lines.append(f"  - Top strategy: {epi.get('top_strategy')} ({_share_fmt(epi.get('top_strategy_share'))})")
     lines.append("")
 
-    # J. Recommendations
-    lines.append("## J. Recommendations")
+    # K. Recommendations
+    lines.append("## K. Recommendations")
     lines.append("")
-    for rec in report["section_i_recommendations"]:
+    for rec in report["section_k_recommendations"]:
         lines.append(f"1. {rec}")
     lines.append("")
 

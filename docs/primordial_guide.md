@@ -340,8 +340,13 @@ age can all affect what a creature can detect. Kelp forests and deep trenches
 make sensing less clear. Open water and hunting grounds sharpen it.
 
 Prey flee when they sense a nearby predator. Fleeing uses stronger steering than
-normal food seeking and may trigger a depth-band escape attempt. Predators track
-prey by sensing, steering, and probabilistically shifting depth.
+normal food seeking and may trigger a depth-band escape attempt. Healthy young
+prey still flee at full strength, but prey flee max speed now also respects age
+frailty directly and can taper downward for low-energy prey when
+`prey_flee_low_energy_slowdown_enabled` is active. This is a prey-side
+ecological frailty rule, not predator spawning, trait preservation, or a direct
+reproduction change. Predators track prey by sensing, steering, and
+probabilistically shifting depth.
 
 ### How Predators Behave
 
@@ -827,6 +832,21 @@ Settings are grouped into categories:
 The selected setting has a description panel explaining what it does, its range
 or choices, and whether it applies on save or requires a reset. Reset-required
 settings are marked with a compact badge.
+
+Predator-prey exposes additional ecology-only tuning for this pass:
+
+- `prey_flee_age_slowdown_enabled`
+- `prey_flee_low_energy_slowdown_enabled`
+- `prey_flee_low_energy_threshold`
+- `prey_flee_low_energy_min_mult`
+- `predator_near_contact_diagnostic_scale`
+- `predator_sustained_chase_min_frames`
+
+The prey flee settings change only prey escape speed under age/energy frailty.
+The near-contact settings are diagnostics-only and do not change kill distance
+or add a lunge/strike mechanic. They exist to separate same-depth contact/flee
+oscillation, cross-depth misses, sustained chase without kill, and kills that
+skew toward old or low-energy prey.
 
 Actions in the footer and Actions category use the same behavior as their
 keyboard shortcuts. Destructive reset actions require confirmation.

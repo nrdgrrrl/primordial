@@ -273,9 +273,11 @@ In predator_prey mode, species is determined by the `aggression` trait using hys
 
 **Predators** hunt prey on contact (same depth band required), gain capped energy per kill, and can forage for food when not actively hunting — but reproduction requires recent animal energy from kills. Predators also suffer interference (reduced effectiveness near other predators), a metabolic premium on movement, and a scarcity penalty when prey are below 15% of the population. Hunting grounds now act as modest ambush habitat for predators already inside them: the bonus is small, fades near the edge, and is density-damped so refuges do not become predator hotels. Predators do not seek those zones and no predator spawning or trait preservation was added.
 
-**Prey** seek food and flee nearby predators. Fleeing takes priority over feeding. Prey can escape into a different depth band (cross-band miss) or flee beyond the predator's sensing range.
+**Prey** seek food and flee nearby predators. Fleeing takes priority over feeding. Prey can escape into a different depth band (cross-band miss) or flee beyond the predator's sensing range. Healthy young prey still flee at full strength, but prey flee max speed now also respects age frailty directly and can taper downward for low-energy prey when the low-energy slowdown is enabled.
 
 Several mechanisms prevent permanent predator dominance: the reproduction gate (recent kills required), the 60% dominance penalty (+20% reproduction threshold), prey scarcity costs, predator interference, and cross-band misses. These create negative feedback: predator success reduces prey density, which makes predation harder, which reduces predator reproduction, which allows prey to recover.
+
+Predator-collapse diagnostics also track near-contact "dance" behavior: same-depth close passes without kills, cross-depth near misses, sustained same-target chases, and whether successful kills skew toward old or low-energy prey. These diagnostics are observational only; they do not change kill distance or add a lunge/strike mechanic.
 
 For the full predator-prey ecology explanation, see [docs/organism_biology.md](docs/organism_biology.md) and [docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md).
 
@@ -337,6 +339,14 @@ A Lotka-Volterra-inspired ecosystem where creatures are born as either **predato
 - Cosmic ray hits can flip species identity when aggression crosses the hysteresis threshold (prey → predator at 0.30, predator → prey at 0.20).
 - When predators exceed 60% of the population, predator reproduction becomes harder: their reproduction threshold increases by 20%.
 - Hunting grounds provide a small density-damped ambush habitat bonus for predators already inside them, improving hunting conversion modestly without attracting predators or spawning new ones.
+- Prey flee speed now respects prey frailty directly: age slowdown can apply to
+  flee max speed, and low-energy prey can taper toward a configurable minimum
+  flee multiplier. This is a prey-side ecological change, not predator
+  spawning, extinct-trait preservation, or a direct reproduction-threshold
+  change.
+- Predator-collapse diagnostics now separate same-depth contact/flee
+  oscillation, cross-depth near misses, sustained same-target chases, and
+  kills of old or low-energy prey.
 - If predators or prey hit zero, predator_prey enters an extinction grace window. The simulation continues while zero ticks are counted. If the species recovers (through mutation-driven species switching) before the grace window expires, the run continues. If the zero state persists for `extinction_grace_ticks` (default 7200 at 30 Hz, ~4 minutes), the run enters a red `GAME OVER` overlay, holds for 10 seconds, then restarts with a new seed. Predator lineages are biologically gone when predators hit zero, but new predators can reappear from surviving prey via species flip.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
 - The `GAME OVER` overlay also shows the rolling median that the run had to beat, highlights the current survival ticks when they beat that rolling median, shows the current adaptive step modifier, lists the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and still notes when a run sets a new highest survival record.
@@ -462,8 +472,14 @@ Mode-specific tuning keys:
 | modes.predator_prey | predator_refuge_density_soft_cap | int >= 0 | Nearby-predator count that still allows the full refuge bonus |
 | modes.predator_prey | predator_refuge_density_hard_cap | int >= 1 | Nearby-predator count where the refuge bonus fully fades out |
 | modes.predator_prey | prey_flee_sense_multiplier | float 0.1..5 | Multiplier applied to prey threat sensing while fleeing |
+| modes.predator_prey | prey_flee_age_slowdown_enabled | bool | Apply age frailty directly to prey flee max speed |
+| modes.predator_prey | prey_flee_low_energy_slowdown_enabled | bool | Allow low-energy prey to lose flee speed below the configured threshold |
+| modes.predator_prey | prey_flee_low_energy_threshold | float 0.01..1 | Energy threshold where low-energy prey flee slowdown begins |
+| modes.predator_prey | prey_flee_low_energy_min_mult | float 0.4..1 | Minimum flee-speed multiplier for the most energy-depleted prey |
 | modes.predator_prey | predator_prey_scarcity_penalty_multiplier | float 0.1..5 | Extra predator energy-cost multiplier when prey fall below 15% of population |
 | modes.predator_prey | food_cycle_amplitude | float 0..1 | Blend between constant food rate (`0`) and the full feast/famine swing (`1`) |
+| modes.predator_prey | predator_near_contact_diagnostic_scale | float 1..5 | Diagnostic-only multiple of contact distance used to count predator near-contact frames |
+| modes.predator_prey | predator_sustained_chase_min_frames | int >= 1 | Diagnostic-only same-target chase length required before a chase counts as sustained |
 | modes.predator_prey | stability_history_size | int >= 1 | Rolling run-history window used for `MedN` / `BestN` survival stats and below-median comparisons |
 | modes.predator_prey | adaptive_step_escalation_runs | int >= 1 | Number of consecutive completed runs that fail to beat the rolling median before dial step sizes scale up |
 | modes.predator_prey | adaptive_step_escalation_percent | float >= 0 | Additional dial-step percentage applied for each full escalation streak block |

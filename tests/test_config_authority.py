@@ -67,10 +67,16 @@ target_fps = 30
 simulation_tick_hz = 30
 adaptive_tuning_enabled = true
 predator_energy_to_reproduce = 0.7100
+prey_flee_age_slowdown_enabled = false
+prey_flee_low_energy_slowdown_enabled = false
+prey_flee_low_energy_threshold = 0.4200
+prey_flee_low_energy_min_mult = 0.6500
 predator_kill_energy_gain_cap = 0.6500
 predator_hunt_sense_multiplier = 2.3000
 predator_hunt_speed_multiplier = 1.1500
 predator_contact_kill_distance_scale = 1.2000
+predator_near_contact_diagnostic_scale = 1.4000
+predator_sustained_chase_min_frames = 28
 predator_food_efficiency_multiplier = 0.2500
 predator_forage_cost_multiplier = 0.6000
 predator_recent_animal_energy_required = 0.3000
@@ -114,6 +120,22 @@ adaptive_near_extinction_prey_floor = 7
             settings.mode_params["predator_prey"]["predator_energy_to_reproduce"],
             0.71,
         )
+        self.assertFalse(
+            settings.mode_params["predator_prey"]["prey_flee_age_slowdown_enabled"]
+        )
+        self.assertFalse(
+            settings.mode_params["predator_prey"][
+                "prey_flee_low_energy_slowdown_enabled"
+            ]
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["prey_flee_low_energy_threshold"],
+            0.42,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["prey_flee_low_energy_min_mult"],
+            0.65,
+        )
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"],
             0.65,
@@ -129,6 +151,16 @@ adaptive_near_extinction_prey_floor = 7
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_contact_kill_distance_scale"],
             1.2,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"][
+                "predator_near_contact_diagnostic_scale"
+            ],
+            1.4,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["predator_sustained_chase_min_frames"],
+            28,
         )
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_food_efficiency_multiplier"],

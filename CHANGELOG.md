@@ -36,6 +36,43 @@ Tests:
 - Updated `tests/test_predator_collapse_diagnostics.py` for the new refuge
   fields and report output.
 
+## [2026-05-22] — feat: make prey flee speed respect frailty
+
+Add a prey-side frailty pass for `predator_prey` plus new near-contact hunt
+diagnostics. The goal is to reduce predator/prey close-range dance failures by
+making weak prey easier to catch and by measuring when predators still get
+stuck near contact without converting.
+
+What changed:
+- In `primordial/simulation/simulation.py`, prey flee max speed now optionally
+  multiplies by age frailty (`Creature.get_age_speed_mult()`) and by a bounded
+  low-energy taper controlled by predator-prey mode config. Healthy young prey
+  stay unchanged; old or low-energy prey become somewhat easier to catch
+  without freezing in place.
+- Added new predator-life diagnostics for near-contact frames, same-depth and
+  cross-depth near-contact no-kill frames, sustained same-target chase length,
+  kills after sustained chase, and killed-prey age/energy/condition samples.
+- Extended `tools/predator_collapse_diagnostics.py` with a new
+  `Near-Contact / Dance Analysis` section in JSON and Markdown, plus a fix for
+  fraction-to-percent rendering so prey-sighting share now prints correctly.
+- Added canonical mode defaults, config validation/serialization support, and
+  settings-overlay metadata for the new prey-frailty and diagnostics keys.
+- Updated `docs/predator_prey_system_guide.md`, `docs/primordial_guide.md`,
+  `README.md`, and `AGENTS.md` to describe prey flee frailty and the new
+  diagnostics accurately.
+
+Behavior guardrails:
+- No predator spawning was added.
+- No extinct predator trait preservation was added.
+- No direct predator/prey reproduction-threshold changes were added.
+- No lunge/strike mechanic was added in this pass.
+
+Tests:
+- Added focused flee-frailty and near-contact diagnostic coverage in
+  `tests/test_ecology_sensing.py`.
+- Updated config/settings serialization coverage and predator-collapse report
+  tests for the new mode keys and report section.
+
 ## [2026-05-22] — diagnostics: add predator collapse report
 
 Add a graphical predator-collapse diagnostics runner and report generator

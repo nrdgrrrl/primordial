@@ -194,6 +194,18 @@ mode-scoped keys are `predator_refuge_enabled`,
 `predator_refuge_movement_cost_reduction`,
 `predator_refuge_density_radius`, `predator_refuge_density_soft_cap`, and
 `predator_refuge_density_hard_cap`.
+Prey flee frailty is a prey-only movement condition layer in `_prey_flee()`.
+`prey_flee_age_slowdown_enabled` applies `Creature.get_age_speed_mult()`
+directly to flee max speed, and the optional low-energy taper uses
+`prey_flee_low_energy_slowdown_enabled`,
+`prey_flee_low_energy_threshold`, and `prey_flee_low_energy_min_mult`. This is
+not predator spawning, not predator rescue, not extinct-trait preservation,
+and not a direct reproduction-threshold change.
+Predator near-contact diagnostics are observational only. The current config
+keys are `predator_near_contact_diagnostic_scale` and
+`predator_sustained_chase_min_frames`. They exist to measure same-depth
+contact/flee oscillation, cross-depth near misses, sustained chase without
+kill, and whether kills are skewing toward old or low-energy prey.
 Snapshots must round-trip the adaptive tuning state, current seed, `sim_ticks`,
 and `survival_ticks`.
 The adaptive predator_prey tuning state is also persisted on app exit and

@@ -23,6 +23,7 @@ from predator_collapse_diagnostics import (
     _fmt,
     _pct,
     _pct_fmt,
+    _share_fmt,
     _safe_mean,
     _safe_median,
     build_report,
@@ -33,9 +34,10 @@ from predator_collapse_diagnostics import (
     _section_d_origin_breakdown,
     _section_e_reproduction_bottleneck,
     _section_f_prey_access,
+    _section_g_near_contact_dance,
     _section_g_scarcity,
     _section_rarity_advantage,
-    _section_i_recommendations,
+    _section_k_recommendations,
 )
 
 
@@ -56,6 +58,20 @@ def _make_life(
     cross_band_contact_misses=0,
     cross_band_misses_inside_refuge=0,
     cross_band_misses_outside_refuge=0,
+    near_contact_frames=0,
+    near_contact_no_kill_frames=0,
+    near_contact_same_depth_no_kill_frames=0,
+    near_contact_cross_depth_no_kill_frames=0,
+    near_contact_with_old_prey_frames=0,
+    near_contact_with_low_energy_prey_frames=0,
+    near_contact_no_kill_with_old_prey_frames=0,
+    near_contact_no_kill_with_low_energy_prey_frames=0,
+    sustained_chase_frames=0,
+    max_sustained_chase_frames=0,
+    kills_after_sustained_chase=0,
+    killed_prey_age_fractions=None,
+    killed_prey_energies=None,
+    killed_prey_condition_buckets=None,
     threshold_min=None,
     threshold_max=None,
     closest_peak_gap=None,
@@ -122,6 +138,30 @@ def _make_life(
         "cross_band_contact_misses": cross_band_contact_misses,
         "cross_band_misses_inside_refuge": cross_band_misses_inside_refuge,
         "cross_band_misses_outside_refuge": cross_band_misses_outside_refuge,
+        "near_contact_frames": near_contact_frames,
+        "near_contact_no_kill_frames": near_contact_no_kill_frames,
+        "near_contact_same_depth_no_kill_frames": (
+            near_contact_same_depth_no_kill_frames
+        ),
+        "near_contact_cross_depth_no_kill_frames": (
+            near_contact_cross_depth_no_kill_frames
+        ),
+        "near_contact_with_old_prey_frames": near_contact_with_old_prey_frames,
+        "near_contact_with_low_energy_prey_frames": (
+            near_contact_with_low_energy_prey_frames
+        ),
+        "near_contact_no_kill_with_old_prey_frames": (
+            near_contact_no_kill_with_old_prey_frames
+        ),
+        "near_contact_no_kill_with_low_energy_prey_frames": (
+            near_contact_no_kill_with_low_energy_prey_frames
+        ),
+        "sustained_chase_frames": sustained_chase_frames,
+        "max_sustained_chase_frames": max_sustained_chase_frames,
+        "kills_after_sustained_chase": kills_after_sustained_chase,
+        "killed_prey_age_fractions": killed_prey_age_fractions or [],
+        "killed_prey_energies": killed_prey_energies or [],
+        "killed_prey_condition_buckets": killed_prey_condition_buckets or [],
         "births_produced": births_produced,
         "threshold_min": threshold_min,
         "threshold_max": threshold_max,
@@ -226,6 +266,12 @@ def _make_run(
             "predator_hunt_sense_multiplier": 1.40,
             "predator_hunt_speed_multiplier": 0.70,
             "predator_contact_kill_distance_scale": 0.85,
+            "prey_flee_age_slowdown_enabled": True,
+            "prey_flee_low_energy_slowdown_enabled": True,
+            "prey_flee_low_energy_threshold": 0.35,
+            "prey_flee_low_energy_min_mult": 0.75,
+            "predator_near_contact_diagnostic_scale": 1.25,
+            "predator_sustained_chase_min_frames": 20,
             "completed_lives": completed_lives,
             "active_lives": active_lives,
             "events": {"births": [], "cosmic_flips_to_predator": [], "cosmic_flips_from_predator": []},
@@ -273,6 +319,9 @@ class TestAggregationHelpers(unittest.TestCase):
 
     def test_pct_fmt_none(self):
         self.assertEqual(_pct_fmt(None), "—")
+
+    def test_share_fmt_fraction(self):
+        self.assertEqual(_share_fmt(0.37), "37.0%")
 
     def test_classify_death_context_known(self):
         for ctx in ("old_age", "active_hunting", "after_failed_pursuit", "long_scarcity"):
@@ -401,16 +450,69 @@ class TestReportSections(unittest.TestCase):
         result = _section_g_scarcity([run])
         self.assertIsNotNone(result.get("median_prey_scarce_share"))
 
-    def test_section_i_recommendations_long_scarcity(self):
+    def test_section_g_near_contact_dance(self):
+        lives = [
+            _make_life(
+                near_contact_frames=12,
+                near_contact_no_kill_frames=9,
+                near_contact_same_depth_no_kill_frames=6,
+                near_contact_cross_depth_no_kill_frames=3,
+                near_contact_no_kill_with_old_prey_frames=4,
+                near_contact_no_kill_with_low_energy_prey_frames=5,
+                max_sustained_chase_frames=24,
+                kills_after_sustained_chase=1,
+                killed_prey_age_fractions=[0.2, 0.82],
+                killed_prey_energies=[0.6, 0.2],
+                killed_prey_condition_buckets=["young_healthy", "old_low_energy"],
+            ),
+            _make_life(
+                near_contact_frames=0,
+                near_contact_no_kill_frames=0,
+                max_sustained_chase_frames=8,
+            ),
+        ]
+        run = _make_run(completed_lives=lives)
+        result = _section_g_near_contact_dance([run])
+        self.assertEqual(result["total_near_contact_frames"], 12)
+        self.assertEqual(result["near_contact_no_kill_frames"], 9)
+        self.assertEqual(result["same_depth_near_contact_no_kill_frames"], 6)
+        self.assertEqual(result["cross_depth_near_contact_no_kill_frames"], 3)
+        self.assertAlmostEqual(result["near_contact_frames_per_completed_life"], 6.0)
+        self.assertEqual(result["killed_prey_age_bucket_counts"]["old"], 1)
+        self.assertEqual(result["killed_prey_energy_bucket_counts"]["low_energy"], 1)
+        self.assertAlmostEqual(result["average_killed_prey_energy"], 0.4)
+        self.assertAlmostEqual(
+            result["pct_near_contact_no_kill_frames_with_low_energy_prey"],
+            55.55555555555556,
+        )
+
+    def test_section_g_near_contact_dance_handles_empty_kills_and_frames(self):
+        run = _make_run(completed_lives=[_make_life()])
+        result = _section_g_near_contact_dance([run])
+        self.assertEqual(result["total_near_contact_frames"], 0)
+        self.assertEqual(result["kills_after_sustained_chase"], 0)
+        self.assertIsNone(result["average_killed_prey_age_fraction"])
+
+    def test_section_k_recommendations_long_scarcity(self):
         # More than 40% long_scarcity should trigger a recommendation
         section_c = {"contexts": {"long_scarcity": 8, "old_age": 2}, "total": 10}
+        section_g = {"note": "n/a"}
+        section_h = {"median_prey_scarce_share": 0.6}
+        section_i = {"note": "n/a"}
         section_f = {"median_prey_sighting_share": 0.15, "cross_band_misses_per_kill": None}
-        section_g = {"median_prey_scarce_share": 0.6}
         section_e = {"kills_but_no_births": 0, "threshold_reached_but_no_births": 0,
                      "total_predator_lives": 10}
         section_d = []
-        recommendations = _section_i_recommendations(
-            [_make_run()], section_c, section_f, section_g, section_e, section_d, {"note": "n/a"},
+        recommendations = _section_k_recommendations(
+            [_make_run()],
+            section_c,
+            section_g,
+            section_h,
+            section_i,
+            section_f,
+            section_e,
+            section_d,
+            {"note": "n/a"},
         )
         self.assertTrue(any("LONG SCARCITY" in r for r in recommendations))
 
@@ -454,20 +556,32 @@ class TestBuildAndRenderReport(unittest.TestCase):
         self.assertIn("section_d_origin_breakdown", report)
         self.assertIn("section_e_reproduction_bottleneck", report)
         self.assertIn("section_f_prey_access", report)
-        self.assertIn("section_g_scarcity", report)
-        self.assertIn("section_rarity_advantage_analysis", report)
-        self.assertIn("section_h_epistasis_body_plan", report)
-        self.assertIn("section_i_recommendations", report)
+        self.assertIn("section_g_near_contact_dance_analysis", report)
+        self.assertIn("section_h_scarcity", report)
+        self.assertIn("section_i_rarity_advantage_analysis", report)
+        self.assertIn("section_j_epistasis_body_plan", report)
+        self.assertIn("section_k_recommendations", report)
 
         # Verify markdown renders
         md = render_markdown(report)
         self.assertIn("# Predator Collapse Diagnostics Report", md)
         self.assertIn("## A. Run Summary", md)
-        self.assertIn("## H. Rarity Advantage Analysis", md)
-        self.assertIn("## J. Recommendations", md)
-        self.assertLess(md.index("## G. Scarcity Analysis"), md.index("## H. Rarity Advantage Analysis"))
-        self.assertLess(md.index("## H. Rarity Advantage Analysis"), md.index("## I. Epistasis / Body-Plan Analysis"))
+        self.assertIn("## G. Near-Contact / Dance Analysis", md)
+        self.assertIn("## I. Rarity Advantage Analysis", md)
+        self.assertIn("## K. Recommendations", md)
+        self.assertLess(md.index("## G. Near-Contact / Dance Analysis"), md.index("## H. Scarcity Analysis"))
+        self.assertLess(md.index("## I. Rarity Advantage Analysis"), md.index("## J. Epistasis / Body-Plan Analysis"))
         self.assertIn("Kills inside refuge", md)
+
+    def test_render_markdown_formats_fractional_prey_sighting_share_as_percent(self):
+        run = _make_run(
+            completed_lives=[
+                _make_life(frames_observed=100, frames_with_prey_sighted=37),
+            ]
+        )
+        report = build_report([run])
+        md = render_markdown(report)
+        self.assertIn("Median prey-sighting share:** 37.0%", md)
 
 
 if __name__ == "__main__":

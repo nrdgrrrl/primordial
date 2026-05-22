@@ -90,11 +90,16 @@ age can all affect what a creature can detect. Kelp forests and deep trenches
 make sensing less clear. Open water and hunting grounds sharpen it.
 
 Prey flee when they sense a nearby predator. Fleeing uses stronger steering than
-normal food seeking and may trigger a depth-band escape attempt. Predators track
-prey by sensing, steering, and probabilistically shifting depth. Inside a
-hunting ground, predators can get a small density-damped boost to hunt sensing,
-contact range, and depth tracking, plus a slight reduction in hunting energy
-costs.
+normal food seeking and may trigger a depth-band escape attempt. Flee speed now
+also respects prey condition directly: healthy young prey still flee at full
+strength, but old prey inherit the same age frailty that slows general
+movement, and low-energy prey can taper toward a configurable minimum flee-speed
+multiplier when `prey_flee_low_energy_slowdown_enabled` is on. This is meant to
+make tired or elderly prey easier to catch without changing predator spawning,
+trait preservation, or reproduction thresholds. Predators track prey by
+sensing, steering, and probabilistically shifting depth. Inside a hunting
+ground, predators can get a small density-damped boost to hunt sensing, contact
+range, and depth tracking, plus a slight reduction in hunting energy costs.
 
 ## Depth Bands and Cross-Band Misses
 
@@ -118,6 +123,17 @@ Depth affects the simulation in three main ways:
 When a predator reaches contact range but the prey is in another band, that is a
 **cross-band miss**. The HUD reports recent cross-band misses so you can tell
 whether depth is protecting prey.
+
+Near-contact diagnostics now also record when predators repeatedly reach a
+configurable band around contact range without converting the hunt. The
+diagnostics separate:
+
+- same-depth near-contact no-kill frames, which point to flee/contact
+  oscillation or "dance" behavior;
+- cross-depth near-contact no-kill frames, which point to depth mismatch;
+- sustained same-target chases that still fail to end in kills;
+- kills that land mainly on old or low-energy prey, which indicates prey
+  frailty is doing work on the prey side rather than through predator rescue.
 
 ## Zones and Environmental Pressure
 
@@ -247,6 +263,19 @@ Settings are grouped into categories:
 The selected setting has a description panel explaining what it does, its range
 or choices, and whether it applies on save or requires a reset. Reset-required
 settings are marked with a compact badge.
+
+Predator-prey exposes additional ecology-only tuning for this pass:
+
+- `prey_flee_age_slowdown_enabled`
+- `prey_flee_low_energy_slowdown_enabled`
+- `prey_flee_low_energy_threshold`
+- `prey_flee_low_energy_min_mult`
+- `predator_near_contact_diagnostic_scale`
+- `predator_sustained_chase_min_frames`
+
+The prey flee settings change only prey escape speed under age/energy frailty.
+The near-contact settings are diagnostics-only and do not change kill distance
+or add a lunge/strike mechanic.
 
 Actions in the footer and Actions category use the same behavior as their
 keyboard shortcuts. Destructive reset actions require confirmation.

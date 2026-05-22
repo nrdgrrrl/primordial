@@ -64,6 +64,12 @@ class SettingsOverlayTests(unittest.TestCase):
         self.assertIn("adaptive_survival_deadband = 50", serialized)
         self.assertIn("adaptive_near_extinction_predator_floor = 5", serialized)
         self.assertIn("adaptive_near_extinction_prey_floor = 5", serialized)
+        self.assertIn("prey_flee_age_slowdown_enabled = true", serialized)
+        self.assertIn("prey_flee_low_energy_slowdown_enabled = true", serialized)
+        self.assertIn("prey_flee_low_energy_threshold = 0.3500", serialized)
+        self.assertIn("prey_flee_low_energy_min_mult = 0.7500", serialized)
+        self.assertIn("predator_near_contact_diagnostic_scale = 1.2500", serialized)
+        self.assertIn("predator_sustained_chase_min_frames = 20", serialized)
 
     def test_settings_overlay_apply_saves_mode_change(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -257,6 +263,14 @@ class SettingsOverlayTests(unittest.TestCase):
         )
         self.assertEqual(scarcity.label, "Predator Scarcity Penalty")
         self.assertEqual(scarcity.section, CATEGORY_ECOLOGY)
+
+        near_contact_scale = next(
+            field
+            for field in fields
+            if field.mode_param_key == "predator_near_contact_diagnostic_scale"
+        )
+        self.assertEqual(near_contact_scale.label, "Near-Contact Scale")
+        self.assertIn("diagnostic", near_contact_scale.description.lower())
 
     def test_tab_cycles_categories_without_losing_selection_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

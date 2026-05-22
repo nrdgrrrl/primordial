@@ -37,6 +37,54 @@ class EcologySensingTests(unittest.TestCase):
         simulation.zone_manager.zones = []
         return simulation
 
+    def _measure_flee_speed(
+        self,
+        *,
+        age_fraction: float,
+        energy: float,
+        age_slowdown_enabled: bool = True,
+        low_energy_slowdown_enabled: bool = True,
+    ) -> float:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.epistasis_enabled = False
+        predator_prey = simulation.settings.mode_params["predator_prey"]
+        predator_prey["prey_flee_age_slowdown_enabled"] = age_slowdown_enabled
+        predator_prey["prey_flee_low_energy_slowdown_enabled"] = (
+            low_energy_slowdown_enabled
+        )
+        predator_prey["prey_flee_low_energy_threshold"] = 0.35
+        predator_prey["prey_flee_low_energy_min_mult"] = 0.75
+
+        prey = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=0.7, sense_radius=1.0, aggression=0.1),
+            vx=9.0,
+            vy=0.0,
+            energy=energy,
+            lineage_id=1,
+            species="prey",
+        )
+        prey.age = int(prey.get_max_lifespan() * age_fraction)
+        predator = Creature(
+            x=90.0,
+            y=100.0,
+            genome=Genome(speed=0.8, sense_radius=1.0, aggression=0.9),
+            lineage_id=2,
+            species="predator",
+        )
+        simulation.creatures = [prey, predator]
+        bucket = simulation._build_creature_bucket()
+
+        with patch("random.gauss", return_value=0.0), patch(
+            "random.random",
+            return_value=0.0,
+        ):
+            fled = simulation._prey_flee(prey, bucket)
+
+        self.assertTrue(fled)
+        return math.hypot(prey.vx, prey.vy)
+
     def test_zone_sensing_modifiers_create_clearer_and_obscured_habitats(self) -> None:
         simulation = self._build_simulation()
         simulation.zone_manager.zones = [
@@ -193,6 +241,48 @@ class EcologySensingTests(unittest.TestCase):
         )
         self.assertLessEqual(math.hypot(prey.vx, prey.vy), flee_max + 1e-6)
 
+    def test_young_healthy_prey_flee_speed_matches_previous_behavior(self) -> None:
+        flee_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.80)
+        baseline = 0.7 * 1.5 * 1.5
+        self.assertAlmostEqual(flee_speed, baseline, places=6)
+
+    def test_old_prey_flee_speed_is_lower_than_young_prey(self) -> None:
+        young_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.80)
+        old_speed = self._measure_flee_speed(age_fraction=0.85, energy=0.80)
+        self.assertLess(old_speed, young_speed)
+
+    def test_low_energy_prey_flee_speed_is_lower_than_healthy_prey(self) -> None:
+        healthy_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.80)
+        low_energy_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.10)
+        self.assertLess(low_energy_speed, healthy_speed)
+
+    def test_old_low_energy_prey_is_slower_but_not_frozen(self) -> None:
+        old_speed = self._measure_flee_speed(age_fraction=0.85, energy=0.80)
+        low_energy_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.10)
+        old_low_speed = self._measure_flee_speed(age_fraction=0.85, energy=0.10)
+        baseline = self._measure_flee_speed(age_fraction=0.10, energy=0.80)
+        self.assertLess(old_low_speed, old_speed)
+        self.assertLess(old_low_speed, low_energy_speed)
+        self.assertGreater(old_low_speed, baseline * 0.4)
+
+    def test_disabling_age_slowdown_restores_old_prey_previous_flee_speed(self) -> None:
+        young_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.80)
+        old_speed = self._measure_flee_speed(
+            age_fraction=0.85,
+            energy=0.80,
+            age_slowdown_enabled=False,
+        )
+        self.assertAlmostEqual(old_speed, young_speed, places=6)
+
+    def test_disabling_low_energy_slowdown_restores_low_energy_previous_flee_speed(self) -> None:
+        healthy_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.80)
+        low_energy_speed = self._measure_flee_speed(
+            age_fraction=0.10,
+            energy=0.10,
+            low_energy_slowdown_enabled=False,
+        )
+        self.assertAlmostEqual(low_energy_speed, healthy_speed, places=6)
+
     def test_predation_events_report_kills_and_actual_speed_telemetry(self) -> None:
         simulation = self._build_simulation("predator_prey")
         simulation.settings.cosmic_ray_rate = 0.0
@@ -337,6 +427,7 @@ class EcologySensingTests(unittest.TestCase):
 
     def test_predator_contact_kill_distance_scale_expands_contact_window(self) -> None:
         simulation = self._build_simulation("predator_prey")
+        simulation.settings.epistasis_enabled = False
         predator = Creature(
             x=100.0,
             y=100.0,
@@ -373,6 +464,124 @@ class EcologySensingTests(unittest.TestCase):
 
         self.assertEqual(prey.energy, 0.0)
         self.assertEqual(simulation.predation_kill_count, 1)
+
+    def test_predator_life_records_expose_near_contact_fields(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=0.8, sense_radius=1.0, aggression=0.9),
+            lineage_id=1,
+            species="predator",
+        )
+        life = simulation._ensure_predator_life(predator)
+
+        self.assertIn("near_contact_frames", life)
+        self.assertIn("near_contact_no_kill_frames", life)
+        self.assertIn("max_sustained_chase_frames", life)
+        self.assertIn("killed_prey_condition_buckets", life)
+
+    def test_same_depth_near_contact_no_kill_increments(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.epistasis_enabled = False
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=114.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=0.5, aggression=0.1),
+            energy=0.6,
+            lineage_id=2,
+            species="prey",
+        )
+        predator.depth_band = 1
+        prey.depth_band = 1
+        simulation.creatures = [predator, prey]
+
+        with patch.object(
+            simulation,
+            "_update_predator_prey_depth_band",
+            return_value=None,
+        ), patch("random.gauss", return_value=0.0):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["near_contact_frames"], 1)
+        self.assertEqual(life["near_contact_no_kill_frames"], 1)
+        self.assertEqual(life["near_contact_same_depth_no_kill_frames"], 1)
+        self.assertEqual(life["near_contact_cross_depth_no_kill_frames"], 0)
+
+    def test_cross_depth_near_contact_no_kill_increments(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.epistasis_enabled = False
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=112.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=0.5, aggression=0.1),
+            energy=0.6,
+            lineage_id=2,
+            species="prey",
+        )
+        predator.depth_band = 1
+        prey.depth_band = 2
+        simulation.creatures = [predator, prey]
+
+        with patch.object(
+            simulation,
+            "_update_predator_prey_depth_band",
+            return_value=None,
+        ), patch("random.gauss", return_value=0.0):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["near_contact_frames"], 1)
+        self.assertEqual(life["near_contact_no_kill_frames"], 1)
+        self.assertEqual(life["near_contact_same_depth_no_kill_frames"], 0)
+        self.assertEqual(life["near_contact_cross_depth_no_kill_frames"], 1)
+
+    def test_predator_kill_records_prey_age_energy_and_condition(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.epistasis_enabled = False
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.2,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=111.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=0.5, aggression=0.1),
+            energy=0.2,
+            lineage_id=2,
+            species="prey",
+        )
+        prey.age = int(prey.get_max_lifespan() * 0.80)
+        predator.depth_band = 1
+        prey.depth_band = 1
+        simulation.creatures = [predator, prey]
+
+        with patch("random.gauss", return_value=0.0):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(len(life["killed_prey_age_fractions"]), 1)
+        self.assertAlmostEqual(life["killed_prey_energies"][0], 0.2)
+        self.assertEqual(life["killed_prey_condition_buckets"], ["old_low_energy"])
 
     def test_energy_population_survives_seeded_window_with_legacy_default_food_rate(self) -> None:
         settings = self._build_settings("energy")
