@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -231,14 +232,15 @@ class HelpNavigationTreeTests(unittest.TestCase):
         nav.clamp_sidebar_scroll()
         self.assertEqual(nav.sidebar_scroll, 0)
 
-    def test_sidebar_wheel_scroll_not_undone_by_ensure_visible(self) -> None:
+    def test_selected_sidebar_row_is_scrolled_into_view(self) -> None:
         nav = HelpNavigation()
+        doc_id = HELP_DOCUMENTS[0].doc_id
+        nav.expanded_groups[doc_id] = True
         nav.set_sidebar_bounds(total_rows=20, visible_rows=5)
-        nav.sidebar_scroll = 0
-        nav.scroll_sidebar(10)
-        expected = nav.sidebar_scroll
+        nav.sidebar_scroll = 10
+        nav.select_section(doc_id, 0)
         nav.ensure_selected_sidebar_visible()
-        self.assertEqual(nav.sidebar_scroll, expected)
+        self.assertLess(nav.sidebar_scroll, 10)
 
     def test_move_selection_goes_through_sections(self) -> None:
         nav = HelpNavigation()
@@ -294,6 +296,27 @@ class HelpOverlayTests(unittest.TestCase):
         overlay.visible = True
         overlay.fade = 20
         return overlay
+
+    def _overflowing_sidebar_overlay(self) -> tuple[HelpOverlay, pygame.Surface]:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
+        for entry in HELP_DOCUMENTS:
+            overlay.navigation.expanded_groups[entry.doc_id] = True
+        overlay.draw(screen)
+        self.assertGreater(overlay.navigation.sidebar_total_rows, overlay.navigation.sidebar_visible_rows)
+        return overlay, screen
+
+    def _overflowing_content_overlay(self) -> tuple[HelpOverlay, pygame.Surface]:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
+        for entry in HELP_DOCUMENTS:
+            doc = overlay.navigation.documents[entry.doc_id]
+            for section_index, _section in enumerate(doc.sections):
+                overlay.navigation.select_section(entry.doc_id, section_index)
+                overlay.draw(screen)
+                if overlay.navigation.content_line_count > overlay.navigation.content_visible_lines:
+                    return overlay, screen
+        self.fail("No registered help section overflowed the content pane")
 
     def test_layout_has_positive_non_overlapping_regions(self) -> None:
         font = pygame.font.Font(None, 24)
@@ -408,16 +431,118 @@ class HelpOverlayTests(unittest.TestCase):
         overlay.open()
         self.assertTrue(overlay.visible)
 
+    def test_sidebar_wheel_scroll_persists_through_draw(self) -> None:
+        overlay, screen = self._overflowing_sidebar_overlay()
+        mouse_pos = (
+            overlay._last_panel_rect.x + overlay._last_sidebar_rect.centerx,
+            overlay._last_panel_rect.y + overlay._last_sidebar_rect.centery,
+        )
+
+        with patch("pygame.mouse.get_pos", return_value=mouse_pos):
+            overlay.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, y=-1))
+
+        scrolled = overlay.navigation.sidebar_scroll
+        self.assertGreater(scrolled, 0)
+        overlay.draw(screen)
+        self.assertEqual(overlay.navigation.sidebar_scroll, scrolled)
+
+    def test_content_wheel_scroll_does_not_affect_sidebar(self) -> None:
+        overlay, screen = self._overflowing_content_overlay()
+        sidebar_scroll = overlay.navigation.sidebar_scroll
+        mouse_pos = (
+            overlay._last_panel_rect.x + overlay._last_content_rect.centerx,
+            overlay._last_panel_rect.y + overlay._last_content_rect.centery,
+        )
+
+        with patch("pygame.mouse.get_pos", return_value=mouse_pos):
+            overlay.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, y=-1))
+
+        self.assertEqual(overlay.navigation.sidebar_scroll, sidebar_scroll)
+        scrolled = overlay.navigation.content_scroll
+        self.assertGreater(scrolled, 0)
+        overlay.draw(screen)
+        self.assertEqual(overlay.navigation.content_scroll, scrolled)
+
+    def test_sidebar_scrollbar_thumb_drag_updates_scroll(self) -> None:
+        overlay, screen = self._overflowing_sidebar_overlay()
+        thumb = next(region for region in overlay._hit_regions if region.kind == "sidebar_scrollbar_thumb")
+        start = overlay.navigation.sidebar_scroll
+
+        overlay.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=thumb.rect.center))
+        overlay.handle_event(
+            pygame.event.Event(
+                pygame.MOUSEMOTION,
+                pos=(thumb.rect.centerx, thumb.rect.centery + 120),
+                rel=(0, 120),
+                buttons=(1, 0, 0),
+            )
+        )
+        overlay.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=thumb.rect.center))
+
+        self.assertFalse(overlay.navigation._dragging_sidebar_scrollbar)
+        self.assertNotEqual(overlay.navigation.sidebar_scroll, start)
+        self.assertLessEqual(
+            overlay.navigation.sidebar_scroll,
+            overlay.navigation.sidebar_total_rows - overlay.navigation.sidebar_visible_rows,
+        )
+        scrolled = overlay.navigation.sidebar_scroll
+        overlay.draw(screen)
+        self.assertEqual(overlay.navigation.sidebar_scroll, scrolled)
+
+    def test_content_scrollbar_thumb_drag_updates_scroll(self) -> None:
+        overlay, screen = self._overflowing_content_overlay()
+        thumb = next(region for region in overlay._hit_regions if region.kind == "content_scrollbar_thumb")
+        start = overlay.navigation.content_scroll
+
+        overlay.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=thumb.rect.center))
+        overlay.handle_event(
+            pygame.event.Event(
+                pygame.MOUSEMOTION,
+                pos=(thumb.rect.centerx, thumb.rect.centery + 160),
+                rel=(0, 160),
+                buttons=(1, 0, 0),
+            )
+        )
+        overlay.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=thumb.rect.center))
+
+        self.assertFalse(overlay.navigation._dragging_content_scrollbar)
+        self.assertNotEqual(overlay.navigation.content_scroll, start)
+        self.assertLessEqual(
+            overlay.navigation.content_scroll,
+            overlay.navigation.content_line_count - overlay.navigation.content_visible_lines,
+        )
+        scrolled = overlay.navigation.content_scroll
+        overlay.draw(screen)
+        self.assertEqual(overlay.navigation.content_scroll, scrolled)
+
+    def test_sidebar_collapse_and_search_clamp_scroll(self) -> None:
+        overlay, screen = self._overflowing_sidebar_overlay()
+        overlay.navigation.sidebar_scroll = overlay.navigation.sidebar_total_rows
+        overlay.navigation.collapse_group(HELP_DOCUMENTS[0].doc_id)
+        overlay.draw(screen)
+        self.assertLessEqual(
+            overlay.navigation.sidebar_scroll,
+            max(0, overlay.navigation.sidebar_total_rows - overlay.navigation.sidebar_visible_rows),
+        )
+
+        overlay.navigation.set_search_query("predator")
+        overlay.draw(screen)
+        self.assertLessEqual(
+            overlay.navigation.sidebar_scroll,
+            max(0, overlay.navigation.sidebar_total_rows - overlay.navigation.sidebar_visible_rows),
+        )
+
 
 class HelpSidebarScrollTests(unittest.TestCase):
-    def test_sidebar_wheel_scroll_is_not_undone_by_ensure_visible(self) -> None:
+    def test_selected_sidebar_row_is_scrolled_into_view(self) -> None:
         nav = HelpNavigation()
+        doc_id = HELP_DOCUMENTS[0].doc_id
+        nav.expanded_groups[doc_id] = True
         nav.set_sidebar_bounds(total_rows=20, visible_rows=5)
-        nav.sidebar_scroll = 0
-        nav.scroll_sidebar(10)
-        expected = nav.sidebar_scroll
+        nav.sidebar_scroll = 10
+        nav.select_section(doc_id, 0)
         nav.ensure_selected_sidebar_visible()
-        self.assertEqual(nav.sidebar_scroll, expected)
+        self.assertLess(nav.sidebar_scroll, 10)
 
     def test_sidebar_scroll_clamp_math(self) -> None:
         nav = HelpNavigation()

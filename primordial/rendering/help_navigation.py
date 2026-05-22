@@ -42,7 +42,6 @@ class HelpNavigation:
         self.search_query: str = ""
         self.search_focused: bool = False
         self.search_results: dict[str, list[SearchResult]] = {}
-        self._sidebar_scroll_from_wheel: bool = False
         self._dragging_sidebar_scrollbar: bool = False
         self._dragging_content_scrollbar: bool = False
         self._drag_start_y: int = 0
@@ -104,8 +103,9 @@ class HelpNavigation:
         else:
             self.expanded_groups = dict(self._pre_search_expanded)
             self._pre_search_expanded = {}
-        self.sidebar_scroll = 0
-        self.content_scroll = 0
+        self.clamp_sidebar_scroll(total_rows=len(self.sidebar_items))
+        self.clamp_content_scroll()
+        self.clamp_focused_sidebar_index()
 
     def append_search_text(self, text: str) -> None:
         if text:
@@ -120,12 +120,18 @@ class HelpNavigation:
 
     def toggle_group(self, doc_id: str) -> None:
         self.expanded_groups[doc_id] = not self.expanded_groups.get(doc_id, False)
+        self.clamp_sidebar_scroll(total_rows=len(self.sidebar_items))
+        self.clamp_focused_sidebar_index()
 
     def expand_group(self, doc_id: str) -> None:
         self.expanded_groups[doc_id] = True
+        self.clamp_sidebar_scroll(total_rows=len(self.sidebar_items))
+        self.clamp_focused_sidebar_index()
 
     def collapse_group(self, doc_id: str) -> None:
         self.expanded_groups[doc_id] = False
+        self.clamp_sidebar_scroll(total_rows=len(self.sidebar_items))
+        self.clamp_focused_sidebar_index()
 
     def select_section(self, doc_id: str, section_index: int) -> None:
         self.selected_doc_id = doc_id
@@ -134,7 +140,7 @@ class HelpNavigation:
         if not self.expanded_groups.get(doc_id, False):
             self.expanded_groups[doc_id] = True
         self.focused_sidebar_index = self.selected_sidebar_position
-        self._sidebar_scroll_from_wheel = False
+        self.ensure_selected_sidebar_visible()
 
     def move_selection(self, delta: int) -> None:
         items = self.sidebar_items
@@ -145,6 +151,8 @@ class HelpNavigation:
         target = items[new_pos]
         if target.kind == "section" and target.section_index is not None:
             self.select_section(target.doc_id, target.section_index)
+        else:
+            self.ensure_sidebar_row_visible(new_pos)
 
     def handle_enter_on_selected(self) -> None:
         items = self.sidebar_items
@@ -167,6 +175,7 @@ class HelpNavigation:
             self.collapse_group(target.doc_id)
         elif target.kind == "section":
             pass
+        self.ensure_sidebar_row_visible(current)
 
     def handle_right(self) -> None:
         items = self.sidebar_items
@@ -176,25 +185,29 @@ class HelpNavigation:
         target = items[current]
         if target.kind == "group" and not self.expanded_groups.get(target.doc_id, False):
             self.expand_group(target.doc_id)
+        self.ensure_sidebar_row_visible(current)
 
     def scroll_sidebar(self, amount: int) -> None:
         self.sidebar_scroll += amount
         self.clamp_sidebar_scroll()
-        self._sidebar_scroll_from_wheel = True
 
-    def clamp_sidebar_scroll(self) -> None:
+    def clamp_sidebar_scroll(self, *, total_rows: int | None = None, visible_rows: int | None = None) -> None:
+        if total_rows is not None:
+            self.sidebar_total_rows = max(0, total_rows)
+        if visible_rows is not None:
+            self.sidebar_visible_rows = max(1, visible_rows)
         max_scroll = max(0, self.sidebar_total_rows - self.sidebar_visible_rows)
         self.sidebar_scroll = max(0, min(max_scroll, self.sidebar_scroll))
 
+    def ensure_sidebar_row_visible(self, row_index: int) -> None:
+        if row_index < self.sidebar_scroll:
+            self.sidebar_scroll = row_index
+        elif row_index >= self.sidebar_scroll + self.sidebar_visible_rows:
+            self.sidebar_scroll = row_index - self.sidebar_visible_rows + 1
+        self.clamp_sidebar_scroll()
+
     def ensure_selected_sidebar_visible(self) -> None:
-        if self._sidebar_scroll_from_wheel:
-            self._sidebar_scroll_from_wheel = False
-            return
-        pos = self.selected_sidebar_position
-        if pos < self.sidebar_scroll:
-            self.sidebar_scroll = pos
-        elif pos >= self.sidebar_scroll + self.sidebar_visible_rows:
-            self.sidebar_scroll = pos - self.sidebar_visible_rows + 1
+        self.ensure_sidebar_row_visible(self.selected_sidebar_position)
 
     def set_content_bounds(self, *, line_count: int, visible_lines: int) -> None:
         self.content_line_count = max(0, line_count)
@@ -205,7 +218,11 @@ class HelpNavigation:
         self.content_scroll += amount
         self.clamp_content_scroll()
 
-    def clamp_content_scroll(self) -> None:
+    def clamp_content_scroll(self, *, line_count: int | None = None, visible_lines: int | None = None) -> None:
+        if line_count is not None:
+            self.content_line_count = max(0, line_count)
+        if visible_lines is not None:
+            self.content_visible_lines = max(1, visible_lines)
         max_scroll = max(0, self.content_line_count - self.content_visible_lines)
         self.content_scroll = max(0, min(max_scroll, self.content_scroll))
 
@@ -213,3 +230,9 @@ class HelpNavigation:
         self.sidebar_total_rows = max(0, total_rows)
         self.sidebar_visible_rows = max(1, visible_rows)
         self.clamp_sidebar_scroll()
+
+    def clamp_focused_sidebar_index(self) -> None:
+        if not self.sidebar_items:
+            self.focused_sidebar_index = 0
+            return
+        self.focused_sidebar_index = max(0, min(len(self.sidebar_items) - 1, self.focused_sidebar_index))

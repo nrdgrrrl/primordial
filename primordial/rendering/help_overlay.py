@@ -5,22 +5,15 @@ from __future__ import annotations
 import pygame
 
 from primordial.help import (
-    DEFAULT_HELP_DOC_ID,
     HELP_DOC_BY_ID,
-    HELP_DOCUMENTS,
     HelpDocument,
-    HelpDocEntry,
     HelpSection,
-    load_help_document_by_id,
 )
 
 from .help_layout import (
     GROUP_ROW_HEIGHT,
-    SCROLLBAR_TRACK_PAD,
-    SCROLLBAR_WIDTH,
     SIDEBAR_ROW_HEIGHT,
     calculate_help_layout,
-    panel_rect_for_screen,
 )
 from .help_mouse import HelpHitRegion
 from .help_navigation import HelpNavigation
@@ -41,6 +34,10 @@ class HelpOverlay:
         self._last_panel_rect = pygame.Rect(0, 0, 0, 0)
         self._last_sidebar_rect = pygame.Rect(0, 0, 0, 0)
         self._last_content_rect = pygame.Rect(0, 0, 0, 0)
+        self._last_sidebar_scrollbar_rect = pygame.Rect(0, 0, 0, 0)
+        self._last_content_scrollbar_rect = pygame.Rect(0, 0, 0, 0)
+        self._last_sidebar_scrollbar_thumb_rect = pygame.Rect(0, 0, 0, 0)
+        self._last_content_scrollbar_thumb_rect = pygame.Rect(0, 0, 0, 0)
         self._sidebar_row_heights: list[int] = []
 
         self._title_font = pygame.font.Font(None, 34)
@@ -199,15 +196,21 @@ class HelpOverlay:
         if region is None:
             self.navigation.search_focused = False
             return None
-        if region.sidebar_scrollbar:
+        if region.sidebar_scrollbar and region.scrollbar_part == "thumb":
             self.navigation._dragging_sidebar_scrollbar = True
             self.navigation._drag_start_y = event.pos[1]
             self.navigation._drag_start_scroll = self.navigation.sidebar_scroll
             return None
-        if region.content_scrollbar:
+        if region.content_scrollbar and region.scrollbar_part == "thumb":
             self.navigation._dragging_content_scrollbar = True
             self.navigation._drag_start_y = event.pos[1]
             self.navigation._drag_start_scroll = self.navigation.content_scroll
+            return None
+        if region.sidebar_scrollbar:
+            self._page_scroll_sidebar(event.pos[1])
+            return None
+        if region.content_scrollbar:
+            self._page_scroll_content(event.pos[1])
             return None
         if region.kind == "group" and region.doc_id is not None:
             self.navigation.toggle_group(region.doc_id)
@@ -232,23 +235,35 @@ class HelpOverlay:
             visible = self.navigation.sidebar_visible_rows
             if total <= visible:
                 return
-            layout = self._layout_for_screen(pygame.display.get_surface())
-            track_h = layout.sidebar_scrollbar_rect.height
+            geometry = self._sidebar_scrollbar_geometry()
+            if geometry is None:
+                return
+            track_rect, thumb_rect = geometry
+            track_h = track_rect.height
+            thumb_h = thumb_rect.height
             scroll_range = total - visible
-            px_per_row = track_h / max(1, scroll_range)
-            if px_per_row > 0:
-                self.navigation.sidebar_scroll = max(0, min(scroll_range, int(self.navigation._drag_start_scroll + dy / px_per_row)))
+            travel = max(1, track_h - thumb_h)
+            self.navigation.sidebar_scroll = max(
+                0,
+                min(scroll_range, int(round(self.navigation._drag_start_scroll + dy * scroll_range / travel))),
+            )
         elif self.navigation._dragging_content_scrollbar:
             total = self.navigation.content_line_count
             visible = self.navigation.content_visible_lines
             if total <= visible:
                 return
-            layout = self._layout_for_screen(pygame.display.get_surface())
-            track_h = layout.content_scrollbar_rect.height
+            geometry = self._content_scrollbar_geometry()
+            if geometry is None:
+                return
+            track_rect, thumb_rect = geometry
+            track_h = track_rect.height
+            thumb_h = thumb_rect.height
             scroll_range = total - visible
-            px_per_row = track_h / max(1, scroll_range)
-            if px_per_row > 0:
-                self.navigation.content_scroll = max(0, min(scroll_range, int(self.navigation._drag_start_scroll + dy / px_per_row)))
+            travel = max(1, track_h - thumb_h)
+            self.navigation.content_scroll = max(
+                0,
+                min(scroll_range, int(round(self.navigation._drag_start_scroll + dy * scroll_range / travel))),
+            )
 
     def _handle_wheel(self, event: pygame.event.Event) -> None:
         y = int(getattr(event, "y", 0))
@@ -257,7 +272,7 @@ class HelpOverlay:
         pos = pygame.mouse.get_pos()
         amount = -y
         panel_pos = (pos[0] - self._last_panel_rect.x, pos[1] - self._last_panel_rect.y)
-        if self._last_sidebar_rect.collidepoint(panel_pos):
+        if panel_pos[0] < self._last_content_rect.x:
             self.navigation.scroll_sidebar(amount * 3)
         else:
             self.navigation.scroll_content(amount * 3)
@@ -300,6 +315,10 @@ class HelpOverlay:
         self._draw_box(panel, rect, (6, 23, 39), (40, 103, 132))
         items = self.navigation.sidebar_items
 
+        visible_height = rect.height - 20
+        visible_rows = max(1, visible_height // SIDEBAR_ROW_HEIGHT)
+        self.navigation.set_sidebar_bounds(total_rows=len(items), visible_rows=visible_rows)
+
         if not items:
             message = "No sections match your search."
             y = rect.y + 14
@@ -319,28 +338,22 @@ class HelpOverlay:
                 row_heights.append(h)
         self._sidebar_row_heights = row_heights
         total_rows = len(items)
-
-        visible_height = rect.height - 20
-        visible_rows = 0
         accum = 0
+        visible_rows = 0
         for h in row_heights:
             if accum + h > visible_height:
                 break
-            visible_rows += 1
             accum += h
-
+            visible_rows += 1
         self.navigation.set_sidebar_bounds(total_rows=total_rows, visible_rows=max(1, visible_rows))
-        self.navigation.ensure_selected_sidebar_visible()
 
         first = self.navigation.sidebar_scroll
         y = rect.y + 10
-        visible_count = 0
         for row_idx in range(first, total_rows):
             item = items[row_idx]
             rh = row_heights[row_idx]
             if y + rh > rect.bottom - 6:
                 break
-            visible_count += 1
 
             if item.kind == "group":
                 self._draw_group_row(panel, rect, item, y, rh)
@@ -402,15 +415,28 @@ class HelpOverlay:
         visible = self.navigation.sidebar_visible_rows
         if total <= visible:
             return
+        self._last_sidebar_scrollbar_rect = rect
+        geometry = self._sidebar_scrollbar_geometry()
+        if geometry is None:
+            return
+        _, thumb_rect = geometry
         pygame.draw.rect(panel, (14, 40, 56), rect, border_radius=4)
-        ratio = visible / max(1, total)
-        thumb_h = max(20, int(rect.height * ratio))
-        max_scroll = max(1, total - visible)
-        scroll = self.navigation.sidebar_scroll
-        thumb_y = rect.y + int((rect.height - thumb_h) * (scroll / max_scroll))
         thumb_color = (100, 210, 220) if self.navigation._dragging_sidebar_scrollbar else (70, 180, 200)
-        pygame.draw.rect(panel, thumb_color, pygame.Rect(rect.x, thumb_y, rect.width, thumb_h), border_radius=4)
-        self._register_hit_region("sidebar_scrollbar", rect, sidebar_scrollbar=True)
+        pygame.draw.rect(panel, thumb_color, thumb_rect, border_radius=4)
+        self._last_sidebar_scrollbar_rect = rect
+        self._last_sidebar_scrollbar_thumb_rect = thumb_rect
+        self._register_hit_region(
+            "sidebar_scrollbar_track",
+            rect,
+            sidebar_scrollbar=True,
+            scrollbar_part="track",
+        )
+        self._register_hit_region(
+            "sidebar_scrollbar_thumb",
+            thumb_rect,
+            sidebar_scrollbar=True,
+            scrollbar_part="thumb",
+        )
 
     def _draw_content(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (7, 24, 39), (42, 104, 132))
@@ -446,15 +472,28 @@ class HelpOverlay:
         visible = self.navigation.content_visible_lines
         if total <= visible:
             return
+        self._last_content_scrollbar_rect = rect
+        geometry = self._content_scrollbar_geometry()
+        if geometry is None:
+            return
+        _, thumb_rect = geometry
         pygame.draw.rect(panel, (14, 40, 56), rect, border_radius=4)
-        ratio = visible / max(1, total)
-        thumb_h = max(20, int(rect.height * ratio))
-        max_scroll = max(1, total - visible)
-        scroll = self.navigation.content_scroll
-        thumb_y = rect.y + int((rect.height - thumb_h) * (scroll / max_scroll))
         thumb_color = (100, 210, 220) if self.navigation._dragging_content_scrollbar else (70, 180, 200)
-        pygame.draw.rect(panel, thumb_color, pygame.Rect(rect.x, thumb_y, rect.width, thumb_h), border_radius=4)
-        self._register_hit_region("content_scrollbar", rect, content_scrollbar=True)
+        pygame.draw.rect(panel, thumb_color, thumb_rect, border_radius=4)
+        self._last_content_scrollbar_rect = rect
+        self._last_content_scrollbar_thumb_rect = thumb_rect
+        self._register_hit_region(
+            "content_scrollbar_track",
+            rect,
+            content_scrollbar=True,
+            scrollbar_part="track",
+        )
+        self._register_hit_region(
+            "content_scrollbar_thumb",
+            thumb_rect,
+            content_scrollbar=True,
+            scrollbar_part="thumb",
+        )
 
     def _draw_footer(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (5, 20, 32), (34, 88, 112))
@@ -508,6 +547,7 @@ class HelpOverlay:
         doc_id: str | None = None,
         sidebar_scrollbar: bool = False,
         content_scrollbar: bool = False,
+        scrollbar_part: str | None = None,
     ) -> None:
         self._hit_regions.append(
             HelpHitRegion(
@@ -518,8 +558,61 @@ class HelpOverlay:
                 doc_id=doc_id,
                 sidebar_scrollbar=sidebar_scrollbar,
                 content_scrollbar=content_scrollbar,
+                scrollbar_part=scrollbar_part,
             )
         )
+
+    def _sidebar_scrollbar_geometry(self) -> tuple[pygame.Rect, pygame.Rect] | None:
+        total = self.navigation.sidebar_total_rows
+        visible = self.navigation.sidebar_visible_rows
+        if total <= visible or self._last_sidebar_scrollbar_rect.width <= 0:
+            return None
+        track_rect = self._last_sidebar_scrollbar_rect.copy()
+        ratio = visible / max(1, total)
+        thumb_h = max(20, int(track_rect.height * ratio))
+        thumb_h = min(thumb_h, track_rect.height)
+        scroll_range = max(1, total - visible)
+        travel = max(0, track_rect.height - thumb_h)
+        thumb_y = track_rect.y + int(travel * (self.navigation.sidebar_scroll / scroll_range)) if travel else track_rect.y
+        thumb_rect = pygame.Rect(track_rect.x, thumb_y, track_rect.width, thumb_h)
+        return track_rect, thumb_rect
+
+    def _content_scrollbar_geometry(self) -> tuple[pygame.Rect, pygame.Rect] | None:
+        total = self.navigation.content_line_count
+        visible = self.navigation.content_visible_lines
+        if total <= visible or self._last_content_scrollbar_rect.width <= 0:
+            return None
+        track_rect = self._last_content_scrollbar_rect.copy()
+        ratio = visible / max(1, total)
+        thumb_h = max(20, int(track_rect.height * ratio))
+        thumb_h = min(thumb_h, track_rect.height)
+        scroll_range = max(1, total - visible)
+        travel = max(0, track_rect.height - thumb_h)
+        thumb_y = track_rect.y + int(travel * (self.navigation.content_scroll / scroll_range)) if travel else track_rect.y
+        thumb_rect = pygame.Rect(track_rect.x, thumb_y, track_rect.width, thumb_h)
+        return track_rect, thumb_rect
+
+    def _page_scroll_sidebar(self, click_y: int) -> None:
+        geometry = self._sidebar_scrollbar_geometry()
+        if geometry is None:
+            return
+        _, thumb_rect = geometry
+        click_y -= self._last_panel_rect.y
+        if click_y < thumb_rect.top:
+            self.navigation.scroll_sidebar(-(max(1, self.navigation.sidebar_visible_rows - 1)))
+        elif click_y > thumb_rect.bottom:
+            self.navigation.scroll_sidebar(max(1, self.navigation.sidebar_visible_rows - 1))
+
+    def _page_scroll_content(self, click_y: int) -> None:
+        geometry = self._content_scrollbar_geometry()
+        if geometry is None:
+            return
+        _, thumb_rect = geometry
+        click_y -= self._last_panel_rect.y
+        if click_y < thumb_rect.top:
+            self.navigation.scroll_content(-(max(1, self.navigation.content_visible_lines - 1)))
+        elif click_y > thumb_rect.bottom:
+            self.navigation.scroll_content(max(1, self.navigation.content_visible_lines - 1))
 
     def _hit_region_at(self, pos: tuple[int, int]) -> HelpHitRegion | None:
         for region in reversed(self._hit_regions):

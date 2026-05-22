@@ -16,3 +16,4 @@ class HelpHitRegion:
     action: str | None = None
     sidebar_scrollbar: bool = False
     content_scrollbar: bool = False
+    scrollbar_part: str | None = None

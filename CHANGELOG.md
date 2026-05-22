@@ -2,6 +2,34 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — fix: repair help browser scrolling
+
+Fixed the in-app Help browser so sidebar and content scrolling now behave
+as a real scrollable view instead of snapping back during draw.
+
+Root cause:
+- The sidebar was still being auto-scrolled toward the selected section from
+  inside `_draw_sidebar()`, so wheel scrolling and drag scrolling would move
+  briefly and then get pulled back on the next frame.
+- The scrollbar track and thumb were not represented as distinct hit regions,
+  so clicks could not reliably distinguish dragging the thumb from clicking
+  the track.
+
+Behavior now:
+- Mouse wheel over the left sidebar scrolls the sidebar tree only.
+- Mouse wheel over the right content pane scrolls the article body only.
+- Sidebar and content scrollbar thumbs are separately hittable and draggable.
+- Track clicks page-scroll instead of starting a drag.
+- Scroll offsets are clamped after wheel, drag, collapse/expand, and search
+  changes.
+- Keyboard selection still auto-scrolls the sidebar into view, but only when
+  selection changes.
+
+Tests:
+- Added coverage for sidebar wheel persistence, content wheel isolation,
+  sidebar/content thumb dragging, and scroll clamping after collapse/search.
+- Full `tests/` suite passes: 408 tests.
+
 ## [2026-05-21] — fix: replace help tabs with expandable sidebar
 
 Replaced the horizontal document tab strip in the Help browser with a
