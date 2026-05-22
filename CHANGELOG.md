@@ -2,6 +2,34 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — diagnostics: add predator collapse report
+
+Add a headless predator-collapse diagnostics runner and report generator
+that produces both JSON and Markdown reports from multi-seed predator_prey
+simulations, with no gameplay changes.
+
+New tool:
+- `tools/predator_collapse_diagnostics.py` — run predator_prey headlessly
+  for one or more seeds, collecting predator life diagnostics and producing
+  structured report sections A–I (run summary, predator life summary, death
+  context breakdown, origin breakdown, reproduction bottleneck, prey access /
+  hunting bottleneck, scarcity analysis, epistasis/body-plan analysis, and
+  data-driven recommendations).
+
+Diagnostic field additions (observational only, no gameplay changes):
+- `age_at_death` — predator age in ticks at death
+- `predator_count_at_death` / `prey_count_at_death` — species census at death
+- `depth_band_at_death` — depth band (0/1/2) at death
+- `strategy_bucket_at_start` / `strategy_bucket_at_end` — phenotype strategy
+- `phenotype_modifiers_at_start` / `phenotype_modifiers_at_end` — dict of
+  effective phenotype modifier values at birth and death
+- `born_during_low_predator_rarity` — whether the predator was born when
+  predator count was ≤ 5
+
+Tests:
+- 23 new tests in `test_predator_collapse_diagnostics.py` covering all
+  aggregation helpers, report sections, markdown rendering, and edge cases.
+
 ## [2026-05-22] — feat: expose effective phenotype in inspect mode
 
 Inspect Mode now shows each creature's effective phenotype, making

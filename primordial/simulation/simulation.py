@@ -4640,6 +4640,8 @@ class Simulation:
             events.clear()
 
     def _register_predator_life(self, creature: Creature, *, origin: str) -> dict[str, Any]:
+        phenotype = self._get_effective_phenotype(creature)
+        predator_count = sum(1 for c in self.creatures if c.species == "predator")
         life = {
             "life_id": self._predator_diag_next_life_id,
             "origin": origin,
@@ -4668,6 +4670,24 @@ class Simulation:
             "death_cause": None,
             "death_context": None,
             "end_reason": None,
+            "age_at_death": None,
+            "predator_count_at_death": None,
+            "prey_count_at_death": None,
+            "depth_band_at_death": None,
+            "strategy_bucket_at_start": phenotype.strategy_bucket,
+            "strategy_bucket_at_end": None,
+            "phenotype_modifiers_at_start": {
+                "speed_mult": phenotype.speed_mult,
+                "movement_cost_mult": phenotype.movement_cost_mult,
+                "metabolic_cost_mult": phenotype.metabolic_cost_mult,
+                "sense_radius_mult": phenotype.sense_radius_mult,
+                "food_efficiency_mult": phenotype.food_efficiency_mult,
+                "reproduction_threshold_mult": phenotype.reproduction_threshold_mult,
+                "predation_contact_mult": phenotype.predation_contact_mult,
+                "flee_agility_mult": phenotype.flee_agility_mult,
+            },
+            "phenotype_modifiers_at_end": None,
+            "born_during_low_predator_rarity": predator_count <= 5,
         }
         self._predator_diag_next_life_id += 1
         self._predator_diag_active[id(creature)] = life
@@ -4758,6 +4778,24 @@ class Simulation:
         life["death_cause"] = death_cause
         life["death_context"] = self._classify_predator_death_context(life, death_cause)
         life["end_reason"] = end_reason
+        life["age_at_death"] = creature.age
+        predator_count = sum(1 for c in self.creatures if c.species == "predator")
+        prey_count = sum(1 for c in self.creatures if c.species == "prey")
+        life["predator_count_at_death"] = predator_count
+        life["prey_count_at_death"] = prey_count
+        life["depth_band_at_death"] = creature.depth_band
+        end_phenotype = self._get_effective_phenotype(creature)
+        life["strategy_bucket_at_end"] = end_phenotype.strategy_bucket
+        life["phenotype_modifiers_at_end"] = {
+            "speed_mult": end_phenotype.speed_mult,
+            "movement_cost_mult": end_phenotype.movement_cost_mult,
+            "metabolic_cost_mult": end_phenotype.metabolic_cost_mult,
+            "sense_radius_mult": end_phenotype.sense_radius_mult,
+            "food_efficiency_mult": end_phenotype.food_efficiency_mult,
+            "reproduction_threshold_mult": end_phenotype.reproduction_threshold_mult,
+            "predation_contact_mult": end_phenotype.predation_contact_mult,
+            "flee_agility_mult": end_phenotype.flee_agility_mult,
+        }
         self._predator_diag_completed.append(life)
 
     def _classify_predator_death_context(
@@ -4781,4 +4819,8 @@ class Simulation:
         clone = dict(life)
         clone["kill_pre_energies"] = list(life["kill_pre_energies"])
         clone["kill_post_energies"] = list(life["kill_post_energies"])
+        if life.get("phenotype_modifiers_at_start") is not None:
+            clone["phenotype_modifiers_at_start"] = dict(life["phenotype_modifiers_at_start"])
+        if life.get("phenotype_modifiers_at_end") is not None:
+            clone["phenotype_modifiers_at_end"] = dict(life["phenotype_modifiers_at_end"])
         return clone
