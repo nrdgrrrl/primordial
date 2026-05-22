@@ -34,12 +34,18 @@ class BenchmarkObservabilityTests(unittest.TestCase):
         simulation = Simulation(640, 360, self._build_settings("energy"))
         snapshot = simulation.build_observability_snapshot()
 
-        self.assertEqual(set(OBSERVABILITY_CORE_SECTIONS), {"lineages", "strategies", "zone_occupancy"})
+        self.assertEqual(
+            set(OBSERVABILITY_CORE_SECTIONS),
+            {"lineages", "strategies", "epistasis", "zone_occupancy"},
+        )
         self.assertEqual(snapshot["population"], simulation.population)
         self.assertIn("lineages", snapshot)
         self.assertIn("strategies", snapshot)
+        self.assertIn("epistasis", snapshot)
         self.assertIn("zone_occupancy", snapshot)
         self.assertGreaterEqual(snapshot["lineages"]["active"], 1)
+        self.assertIn("top_strategy", snapshot["epistasis"])
+        self.assertIn("average_modifiers", snapshot["epistasis"])
         for zone_type in ZONE_DEFINITIONS:
             self.assertIn(zone_type, snapshot["zone_occupancy"])
         self.assertIn("unzoned", snapshot["zone_occupancy"])

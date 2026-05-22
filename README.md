@@ -147,7 +147,7 @@ At 1920×1080 this keeps typical runs within the 60fps target envelope in normal
 
 Primordial is a living artificial ecosystem. The glowing creatures on screen are **genome-driven organisms**, not decorative particles. Each one carries an inherited genome that determines how it behaves, how it moves, how long it lives, and — crucially — what it looks like.
 
-Their bodies are **procedurally generated glyphs**: symbolic shapes assembled from the genome's visual traits. Related organisms look related because their genomes are similar. When a mutation changes a visual trait, the offspring's glyph changes too, producing a visible but recognizable variant. Glyph morphology is not decoration — it is the phenotype of inherited visual traits.
+Their bodies are **procedurally generated glyphs**: symbolic shapes assembled from the genome's visual traits. Related organisms look related because their genomes are similar. When a mutation changes a visual trait, the offspring's glyph changes too, producing a visible but recognizable variant. Glyph morphology is not decoration — it is the phenotype of inherited visual traits, and several morphology traits now also feed back into ecology through simple epistasis.
 
 The simulation implements real selection pressure: organisms that find food efficiently, avoid predators, and manage energy well reproduce more often. Over generations, trait distributions in the population shift. This is Darwinian evolution in a compact, bounded trait space. It is not open-ended — the system cannot invent new behaviors or new body plans — but the selection, drift, and trait change you see are real.
 
@@ -218,11 +218,32 @@ Glyphs are built from a **stroke vocabulary**: arcs, straight lines, loops (smal
 
 Every organism has a genome that determines both behavior and appearance. Reproduction is asexual: a parent splits, passing a mutated genome copy to its offspring. Small mutations accumulate over generations, producing visible lineage divergence — not because visual traits are decorative, but because they are heritable traits that mutate like any other.
 
-**Selection pressure** is real: organisms that feed efficiently, avoid predation, and manage energy costs reproduce more often. Traits under selection (speed, efficiency, aggression, longevity, sense radius) shift in the population average over time. Visual traits (complexity, symmetry, appendages, stroke scale, rotation speed) are not under direct selection and drift neutrally, but they are still meaningful as markers of ancestry and mutation.
+**Selection pressure** is real: organisms that feed efficiently, avoid predation, and manage energy costs reproduce more often. Traits under selection (speed, efficiency, aggression, longevity, sense radius) shift in the population average over time. Visual traits remain heritable lineage markers, but some of them now also have simple ecological consequences through the phenotype layer: complexity can make high-sense organisms metabolically expensive, symmetry can reward efficient gliders, and appendages can trade handling or evasion for drag.
 
 **Lineage** is tracked by a numeric ID, branched when a hue mutation exceeds 0.15. Kin lines and territory shimmer use lineage data. A lineage is an ancestry marker, not a biological species — there is no reproductive isolation.
 
-Evolution here is **bounded**: the system selects within a fixed 16-trait space. It cannot invent new behaviors, new body plans, or new ecological niches. What changes is the distribution of existing trait values in the population, driven by real selection pressure and neutral drift.
+Evolution here is **bounded**: the system selects within a fixed 16-trait space. It cannot invent new behaviors, new body plans, or new ecological niches. What changes is the distribution of existing trait values in the population, driven by real selection pressure, neutral drift, and simple epistatic interactions between existing traits.
+
+### Simple Epistasis
+
+Primordial now includes a small **effective phenotype** layer between the raw genome and live ecology. The inherited genome stays unchanged; the phenotype layer translates trait combinations into effective modifiers for speed, movement cost, sensing, food extraction, reproduction burden, predation contact, flee agility, and depth behavior.
+
+Current interactions are intentionally modest:
+
+- **Speed x size**: large fast bodies are costly; small fast bodies flee well but make worse contact hunters.
+- **Sense radius x complexity**: high-sense ornate bodies detect a bit better, but cost more to maintain.
+- **Symmetry x motion style**: symmetric gliders/swimmers waste less movement energy; asymmetric darters evade a bit better.
+- **Appendages x role**: appendages help prey turn away and help predators handle contact, but they add drag.
+- **Longevity x reproduction**: long-lived bodies pay a higher effective reproduction threshold.
+- **Depth preference x sensing**: specialists sense best in-band and worse across bands; generalists switch bands more easily.
+- **Efficiency x speed**: high efficiency offsets some upkeep, but not the full cost of fast, expensive bodies.
+
+This is **simple epistasis**, not a gene regulatory network. There is no recombination, developmental program, or sexual selection yet.
+
+Tune it with `simulation.epistasis_strength`, or disable it entirely with
+`simulation.epistasis_enabled = false`. In `predator_prey`, watch for
+recognizable body plans such as swift-small prey, heavy-hunter predators,
+efficient gliders, sensory specialists, and depth specialists.
 
 For the full explanation, see [docs/organism_biology.md](docs/organism_biology.md).
 
@@ -415,6 +436,8 @@ Configuration is TOML-backed and persistent across app updates.
 | simulation | cosmic_ray_rate | float 0..1 | Per-frame spontaneous mutation chance |
 | simulation | energy_to_reproduce | float 0.05..1 | Reproduction energy threshold |
 | simulation | creature_speed_base | float > 0 | Global movement scale |
+| simulation | epistasis_enabled | bool | Enables simple eco-morphological phenotype interactions |
+| simulation | epistasis_strength | float 0..1.5 | Scales how strongly trait combinations bend effective ecology |
 | simulation | zone_count | int >= 0 | Number of generated environmental zones |
 | simulation | zone_strength | float 0..1 | Zone effect intensity |
 | display | visual_theme | enum: ocean/petri/geometric/chaotic | Rendering theme |

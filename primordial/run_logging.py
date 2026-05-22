@@ -81,6 +81,15 @@ _BASE_FIELDNAMES = [
     "recent_kills",
     "recent_cross_band_misses",
     "total_kills",
+    "epistasis_enabled",
+    "epistasis_strength",
+    "epistasis_top_strategy",
+    "epistasis_top_strategy_share",
+    "epistasis_avg_speed_mult",
+    "epistasis_avg_sense_mult",
+    "epistasis_avg_movement_cost_mult",
+    "epistasis_avg_metabolic_cost_mult",
+    "epistasis_avg_reproduction_threshold_mult",
 ]
 _FIELDNAMES = (
     _BASE_FIELDNAMES
@@ -474,6 +483,8 @@ class PredatorPreyCSVRunLogger:
         simulation: "Simulation",
         stats: dict[str, Any],
     ) -> dict[str, Any]:
+        epistasis = simulation.get_epistasis_summary()
+        avg_modifiers = epistasis.get("average_modifiers", {})
         return {
             "timestamp_utc": self._timestamp(),
             "session_started_at_utc": self.session_started_at_utc,
@@ -502,6 +513,27 @@ class PredatorPreyCSVRunLogger:
             "highest_survival_ticks": int(stats.get("highest_survival_ticks", 0)),
             "history_window_size": int(stats.get("history_window_size", 0)),
             "run_history": self._encode_run_history(simulation),
+            "epistasis_enabled": bool(epistasis.get("enabled", False)),
+            "epistasis_strength": self._float_or_none(epistasis.get("strength")),
+            "epistasis_top_strategy": epistasis.get("top_strategy"),
+            "epistasis_top_strategy_share": self._float_or_none(
+                epistasis.get("top_strategy_share")
+            ),
+            "epistasis_avg_speed_mult": self._float_or_none(
+                avg_modifiers.get("speed_mult")
+            ),
+            "epistasis_avg_sense_mult": self._float_or_none(
+                avg_modifiers.get("sense_radius_mult")
+            ),
+            "epistasis_avg_movement_cost_mult": self._float_or_none(
+                avg_modifiers.get("movement_cost_mult")
+            ),
+            "epistasis_avg_metabolic_cost_mult": self._float_or_none(
+                avg_modifiers.get("metabolic_cost_mult")
+            ),
+            "epistasis_avg_reproduction_threshold_mult": self._float_or_none(
+                avg_modifiers.get("reproduction_threshold_mult")
+            ),
         }
 
     def _add_dial_columns(

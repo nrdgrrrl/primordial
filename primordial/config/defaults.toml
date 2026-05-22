@@ -14,6 +14,8 @@ mutation_rate = 0.0600
 cosmic_ray_rate = 0.000300
 energy_to_reproduce = 0.8000
 creature_speed_base = 1.5000
+epistasis_enabled = true
+epistasis_strength = 1.0000
 zone_count = 5
 zone_strength = 0.8000
 

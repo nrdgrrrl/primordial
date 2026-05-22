@@ -33,6 +33,8 @@ _SECTION_FIELDS: dict[str, dict[str, tuple[str, str]]] = {
         "cosmic_ray_rate": ("cosmic_ray_rate", "float"),
         "energy_to_reproduce": ("energy_to_reproduce", "float"),
         "creature_speed_base": ("creature_speed_base", "float"),
+        "epistasis_enabled": ("epistasis_enabled", "bool"),
+        "epistasis_strength": ("epistasis_strength", "float"),
         "zone_count": ("zone_count", "int"),
         "zone_strength": ("zone_strength", "float"),
     },
@@ -396,6 +398,7 @@ class Config:
         self.cosmic_ray_rate = max(0.0, min(1.0, self.cosmic_ray_rate))
         self.energy_to_reproduce = max(0.05, min(1.0, self.energy_to_reproduce))
         self.creature_speed_base = max(0.1, self.creature_speed_base)
+        self.epistasis_strength = max(0.0, min(1.5, self.epistasis_strength))
         self.zone_count = max(0, self.zone_count)
         self.zone_strength = max(0.0, min(1.0, self.zone_strength))
         self.target_fps = max(1, self.target_fps)
@@ -477,6 +480,8 @@ mutation_rate = {self.mutation_rate:.4f}
 cosmic_ray_rate = {self.cosmic_ray_rate:.6f}
 energy_to_reproduce = {self.energy_to_reproduce:.4f}
 creature_speed_base = {self.creature_speed_base:.4f}
+epistasis_enabled = {str(self.epistasis_enabled).lower()}
+epistasis_strength = {self.epistasis_strength:.4f}
 zone_count = {self.zone_count}
 zone_strength = {self.zone_strength:.4f}
 

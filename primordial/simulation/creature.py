@@ -150,6 +150,8 @@ class Creature:
         speed_base: float,
         world_width: int,
         world_height: int,
+        *,
+        speed_scale: float = 1.0,
     ) -> None:
         """
         Steer velocity toward a target position.
@@ -190,14 +192,14 @@ class Creature:
             steer = self.STEER_STRENGTH
             speed_mult = 1.0
 
-        max_speed = self.genome.speed * speed_base * speed_mult
+        max_speed = self.genome.speed * speed_base * speed_mult * speed_scale
         desired_vx = dx * max_speed
         desired_vy = dy * max_speed
 
         self.vx += (desired_vx - self.vx) * steer
         self.vy += (desired_vy - self.vy) * steer
 
-    def wander(self, speed_base: float) -> None:
+    def wander(self, speed_base: float, *, speed_scale: float = 1.0) -> None:
         """
         Add wandering behavior when no food is nearby.
 
@@ -213,49 +215,49 @@ class Creature:
 
         if ms >= 0.67:
             # Dart: mostly stationary with periodic bursts
-            self._wander_dart(speed_base)
+            self._wander_dart(speed_base, speed_scale=speed_scale)
         elif ms < 0.34:
             # Glide: very gentle direction changes
-            self._wander_glide(speed_base)
+            self._wander_glide(speed_base, speed_scale=speed_scale)
         else:
             # Swim: moderate wandering (oscillation handled in update_position)
-            self._wander_swim(speed_base)
+            self._wander_swim(speed_base, speed_scale=speed_scale)
 
-    def _wander_glide(self, speed_base: float) -> None:
+    def _wander_glide(self, speed_base: float, *, speed_scale: float = 1.0) -> None:
         """Gentle gliding wander - smooth low-frequency curves."""
         angle_change = random.gauss(0, self.WANDER_STRENGTH * 0.25)
 
         current_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
         if current_speed < 0.01:
             angle = random.uniform(0, 2 * math.pi)
-            current_speed = self.genome.speed * speed_base * 0.4
+            current_speed = self.genome.speed * speed_base * speed_scale * 0.4
         else:
             angle = math.atan2(self.vy, self.vx)
 
         angle += angle_change
-        max_speed = self.genome.speed * speed_base * 0.7
+        max_speed = self.genome.speed * speed_base * speed_scale * 0.7
         target_speed = min(current_speed + 0.05, max_speed)
         self.vx = math.cos(angle) * target_speed
         self.vy = math.sin(angle) * target_speed
 
-    def _wander_swim(self, speed_base: float) -> None:
+    def _wander_swim(self, speed_base: float, *, speed_scale: float = 1.0) -> None:
         """Swim wander - moderate direction changes, oscillation in update_position."""
         angle_change = random.gauss(0, self.WANDER_STRENGTH * 0.45)
 
         current_speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
         if current_speed < 0.01:
             angle = random.uniform(0, 2 * math.pi)
-            current_speed = self.genome.speed * speed_base * 0.5
+            current_speed = self.genome.speed * speed_base * speed_scale * 0.5
         else:
             angle = math.atan2(self.vy, self.vx)
 
         angle += angle_change
-        max_speed = self.genome.speed * speed_base
+        max_speed = self.genome.speed * speed_base * speed_scale
         target_speed = min(current_speed + 0.08, max_speed)
         self.vx = math.cos(angle) * target_speed
         self.vy = math.sin(angle) * target_speed
 
-    def _wander_dart(self, speed_base: float) -> None:
+    def _wander_dart(self, speed_base: float, *, speed_scale: float = 1.0) -> None:
         """Dart wander - mostly stationary with periodic bursts."""
         if self._dart_burst_remaining > 0:
             # Currently bursting - maintain burst velocity
@@ -269,7 +271,7 @@ class Creature:
             # Check for random burst trigger (~every 3-5 seconds at 60fps)
             if random.random() < 0.005:
                 angle = random.uniform(0, 2 * math.pi)
-                burst_speed = self.genome.speed * speed_base * 1.8
+                burst_speed = self.genome.speed * speed_base * speed_scale * 1.8
                 self.vx = math.cos(angle) * burst_speed
                 self.vy = math.sin(angle) * burst_speed
                 self._dart_burst_remaining = random.randint(10, 25)
@@ -318,14 +320,14 @@ class Creature:
         """
         return 4.0 + self.genome.size * 8.0
 
-    def get_sense_radius(self) -> float:
+    def get_sense_radius(self, *, multiplier: float = 1.0) -> float:
         """
         Get the creature's sensing radius based on genome.
 
         Returns:
             Sensing radius in pixels (40-150 range).
         """
-        return 40.0 + self.genome.sense_radius * 110.0
+        return (40.0 + self.genome.sense_radius * 110.0) * multiplier
 
     def get_max_lifespan(self) -> float:
         """
@@ -357,20 +359,20 @@ class Creature:
             return 1.0
         return max(0.5, 1.0 - (frac - 0.7) / 0.3 * 0.5)
 
-    def get_effective_sense_radius(self) -> float:
+    def get_effective_sense_radius(self, *, multiplier: float = 1.0) -> float:
         """
         Sense radius accounting for aging (declines after 85% lifespan).
 
         Returns:
             Sensing radius in pixels, reduced for old creatures.
         """
-        base = self.get_sense_radius()
+        base = self.get_sense_radius(multiplier=multiplier)
         frac = self.get_age_fraction()
         if frac < 0.85:
             return base
         return base * max(0.6, 1.0 - (frac - 0.85) / 0.15 * 0.4)
 
-    def get_movement_cost(self) -> float:
+    def get_movement_cost(self, *, multiplier: float = 1.0) -> float:
         """
         Calculate energy cost of movement per frame.
 
@@ -381,7 +383,7 @@ class Creature:
         """
         speed = math.sqrt(self.vx * self.vx + self.vy * self.vy)
         size_factor = 0.5 + self.genome.size * 0.5
-        return speed * size_factor * 0.001
+        return speed * size_factor * 0.001 * multiplier
 
     def get_preferred_depth_band(self) -> int:
         """Return the bounded preferred depth band implied by the genome."""

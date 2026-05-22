@@ -2,6 +2,33 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — feat: add eco-morphological epistasis
+
+Added the first real phenotype layer to Primordial so existing genome traits
+now interact to produce effective ecological modifiers without mutating the raw
+genome.
+
+What changed:
+- Added `primordial/simulation/phenotype.py` with deterministic effective
+  modifiers for speed, movement cost, metabolic cost, sensing, food
+  efficiency, reproduction burden, predation contact, flee agility, and depth
+  behavior.
+- Wired phenotype translation into energy, predator-prey, boids, and drift
+  movement/sensing/reproduction seams while preserving near-legacy behavior
+  when epistasis is disabled.
+- Added `simulation.epistasis_enabled` and `simulation.epistasis_strength`
+  config controls, settings-overlay metadata, and snapshot persistence.
+- Added HUD, observability snapshot, and predator-prey CSV summaries for
+  emerging body-plan strategies and average phenotype modifiers.
+- Updated help/docs to describe simple epistasis honestly and removed the old
+  claim that Primordial could not model it.
+
+Tests:
+- Added focused phenotype unit tests plus enabled/disabled headless smoke
+  coverage across modes.
+- Extended persistence, benchmark observability, run logging, and settings
+  serialization coverage for the new phenotype/config paths.
+
 ## [2026-05-22] — fix: remove visual theme from settings UI
 
 Removed the `Visual Theme` row from the settings UI so the in-app settings

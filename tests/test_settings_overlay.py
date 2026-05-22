@@ -47,11 +47,15 @@ class SettingsOverlayTests(unittest.TestCase):
             settings.sim_mode = "predator_prey"
             settings.fullscreen = False
             settings.show_hud = False
+            settings.epistasis_enabled = False
+            settings.epistasis_strength = 0.40
             serialized = settings.to_toml()
 
         self.assertIn('mode = "predator_prey"', serialized)
         self.assertIn("fullscreen = false", serialized)
         self.assertIn("show_hud = false", serialized)
+        self.assertIn("epistasis_enabled = false", serialized)
+        self.assertIn("epistasis_strength = 0.4000", serialized)
         self.assertIn("stability_history_size = 20", serialized)
         self.assertIn("adaptive_step_escalation_runs = 5", serialized)
         self.assertIn("adaptive_step_escalation_percent = 25.0000", serialized)

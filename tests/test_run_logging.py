@@ -101,6 +101,9 @@ class RunLoggingTests(unittest.TestCase):
         self.assertEqual(completed["total_candidate_evals_expected"], "1")
         self.assertEqual(completed["total_baseline_evals_expected"], "1")
         self.assertEqual(completed["survival_deadband"], "50.0")
+        self.assertEqual(completed["epistasis_enabled"], "True")
+        self.assertNotEqual(completed["epistasis_top_strategy"], "")
+        self.assertNotEqual(completed["epistasis_avg_speed_mult"], "")
         self.assertEqual(
             completed["run_dial_predator_contact_kill_distance_scale"],
             "0.97",

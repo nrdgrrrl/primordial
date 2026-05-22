@@ -28,6 +28,8 @@ class SimulationPersistenceTests(unittest.TestCase):
         settings.fullscreen = False
         settings.initial_population = 0
         settings.max_population = 64
+        settings.epistasis_enabled = True
+        settings.epistasis_strength = 0.9
         settings.food_max_particles = 96
         settings.zone_count = 5
         settings.zone_strength = 0.8
@@ -40,6 +42,8 @@ class SimulationPersistenceTests(unittest.TestCase):
         settings.initial_population = 24
         settings.max_population = 48
         settings.food_max_particles = 120
+        settings.epistasis_enabled = False
+        settings.epistasis_strength = 0.35
 
         random.seed(12345)
         simulation = Simulation(320, 180, settings)
@@ -54,6 +58,8 @@ class SimulationPersistenceTests(unittest.TestCase):
             saved_payload = build_snapshot(simulation)
             loaded_payload = build_snapshot(loaded)
             self.assertEqual(saved_payload, loaded_payload)
+            self.assertFalse(loaded.settings.epistasis_enabled)
+            self.assertEqual(loaded.settings.epistasis_strength, 0.35)
 
             creature_payload = saved_payload["world"]["creatures"][0]
             self.assertNotIn("trail", creature_payload)

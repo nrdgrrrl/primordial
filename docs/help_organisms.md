@@ -66,6 +66,6 @@ It is not open-ended evolution. The system cannot invent new traits, new behavio
 
 ## What the App Can and Cannot Model
 
-**Can model**: directional selection, frequency-dependent selection, trait tradeoffs, neutral drift, population dynamics, spatial effects on evolution.
+**Can model**: directional selection, frequency-dependent selection, trait tradeoffs, neutral drift, population dynamics, spatial effects on evolution, and simple epistatic trait interactions where combinations of inherited traits alter effective speed, sensing, energy cost, reproduction, predation, and depth behavior.
 
-**Cannot model**: novel traits or behaviors, sexual selection or recombination, reproductive isolation or true speciation, coevolution with environment, cultural transmission, ecosystem engineering, epistasis.
+**Cannot model**: novel traits or behaviors, sexual selection or recombination, reproductive isolation or true speciation, coevolution with environment, cultural transmission, ecosystem engineering, or full genetic regulatory networks.

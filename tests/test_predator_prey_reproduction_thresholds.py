@@ -18,6 +18,7 @@ class PredatorPreyReproductionThresholdTests(unittest.TestCase):
         settings.initial_population = 0
         settings.max_population = 32
         settings.food_max_particles = 32
+        settings.epistasis_enabled = False
         settings.zone_count = 0
         if mode in settings.mode_params and "initial_population" in settings.mode_params[mode]:
             settings.mode_params[mode]["initial_population"] = 0

@@ -185,7 +185,12 @@ class EcologySensingTests(unittest.TestCase):
             fled = simulation._prey_flee(prey, bucket)
 
         self.assertTrue(fled)
-        flee_max = prey.genome.speed * simulation.settings.creature_speed_base * 1.5
+        flee_max = (
+            prey.genome.speed
+            * simulation.settings.creature_speed_base
+            * 1.5
+            * simulation._get_creature_flee_speed_scale(prey)
+        )
         self.assertLessEqual(math.hypot(prey.vx, prey.vy), flee_max + 1e-6)
 
     def test_predation_events_report_kills_and_actual_speed_telemetry(self) -> None:

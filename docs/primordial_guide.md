@@ -251,7 +251,8 @@ The following are **visual metaphors, not biological models**:
 
 - The glyph shape does not affect survival. A more complex glyph is not
   "more evolved" or "fitter." Glyph morphology is determined by neutral
-  visual traits.
+  visual traits, including simple eco-morphological epistasis where body-plan
+  traits change ecological performance.
 - The glow and bioluminescent pulse are cosmetic. They do not signal mating
   readiness, territory, or fitness.
 - Trail length reflects motion style, not intelligence or health.
@@ -267,6 +268,9 @@ The following are **visual metaphors, not biological models**:
 - Frequency-dependent selection (hunter vs. grazer, predator vs. prey)
 - Tradeoffs between competing trait values (speed vs. cost, longevity vs.
   fecundity)
+- Simple epistatic trait interactions where combinations of inherited traits
+  alter effective speed, sensing, energy cost, reproduction, predation, and
+  depth behavior
 - Neutral drift of unconstrained traits
 - Population dynamics driven by resource cycles and predation
 - Spatial effects on evolution (zone adaptation, local density)
@@ -279,7 +283,7 @@ The following are **visual metaphors, not biological models**:
 - Coevolution of organisms with their environment (the zones are static)
 - Cultural transmission, learning, or behavioral plasticity
 - Ecosystem engineering (organisms cannot change their environment)
-- Epistasis (trait interactions are additive, not synergistic or antagonistic)
+- Full genetic regulatory networks or developmental programs
 
 ## Predator-Prey Mode Overview
 
@@ -736,7 +740,8 @@ The most visible evolutionary changes tend to be:
 
 The least visible evolutionary changes tend to be:
 - Gradual shifts in average trait values within a stable lineage
-- Neutral drift of visual traits (complexity, symmetry, appendages)
+- Neutral drift still occurs in visual traits, but some morphology traits now
+  also matter ecologically through simple epistasis
 - Shifts in depth preference distributions
 
 ### Why the HUD helps interpret what the eye cannot see
@@ -779,7 +784,7 @@ Settings are grouped into categories:
 
 - **Simulation**: mode, population, food spawn, global speed.
 - **Display**: backend, fullscreen, target FPS, HUD.
-- **Evolution**: mutation, cosmic rays, food cycle, zones.
+- **Evolution**: mutation, cosmic rays, epistasis, food cycle, zones.
 - **Ecology / Predator-Prey**: predator-prey-specific starting mix and dials.
 - **Rendering**: kin-line visuals and related rendering options.
 - **Actions**: snapshots, guide, reset actions.
@@ -906,8 +911,9 @@ behaviors, new body plans, new food sources, or reproductive isolation.
 
 The simulation cannot model sexual selection, mate choice, recombination,
 coevolution of organisms with their environment (the zones are static), cultural
-transmission, learning, behavioral plasticity, ecosystem engineering, or
-epistasis.
+transmission, learning, behavioral plasticity, ecosystem engineering, or full
+genetic regulatory networks. It can now model simple epistatic trait
+interactions, but not developmental gene regulation.
 
 The simulation is built for a beautiful, readable screensaver experience. It is
 not a complete artificial-life research environment.

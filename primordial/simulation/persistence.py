@@ -31,6 +31,8 @@ _SIMULATION_SETTING_FIELDS = (
     "food_cycle_period",
     "energy_to_reproduce",
     "creature_speed_base",
+    "epistasis_enabled",
+    "epistasis_strength",
     "mutation_rate",
     "cosmic_ray_rate",
     "zone_count",

@@ -62,6 +62,22 @@ class HUD:
     # Mode-specific line builders
     # ------------------------------------------------------------------
 
+    def _epistasis_lines(self, simulation: "Simulation") -> list[str]:
+        summary = simulation.get_epistasis_summary()
+        if not summary["enabled"] or simulation.population <= 0:
+            return []
+        avg = summary["average_modifiers"]
+        strategy = str(summary["top_strategy"]).replace("-", " ")
+        share = summary["top_strategy_share"] * 100.0
+        return [
+            f"Body plan: {strategy} {share:.0f}%",
+            "Mods Sp:{speed:.2f} Se:{sense:.2f} Cost:{cost:.2f}".format(
+                speed=avg["speed_mult"],
+                sense=avg["sense_radius_mult"],
+                cost=avg["movement_cost_mult"],
+            ),
+        ]
+
     def _lines_energy(self, simulation: "Simulation") -> list[str]:
         oldest_str = "—"
         if simulation.creatures:
@@ -82,6 +98,7 @@ class HUD:
             f"Avg lifespan: {avg_ls_str}",
             f"Zone: {dom_zone}",
             f"Food: {simulation.food_count}",
+            *self._epistasis_lines(simulation),
             f"Mode: {simulation.settings.sim_mode}",
             f"Theme: {simulation.settings.visual_theme}",
         ]
@@ -132,6 +149,7 @@ class HUD:
             ),
             danger_line,
             trial_line,
+            *self._epistasis_lines(simulation),
             f"Zone: {dom_zone}",
             f"Mode: predator_prey",
             f"Theme: {simulation.settings.visual_theme}",
@@ -148,6 +166,7 @@ class HUD:
             f"Largest flock: {largest}  Loners: {loners}",
             f"Avg conformity: {avg_conformity:.2f}",
             f"Generation: {simulation.generation}",
+            *self._epistasis_lines(simulation),
             f"Mode: boids",
             f"Theme: {simulation.settings.visual_theme}",
         ]
@@ -161,6 +180,7 @@ class HUD:
             f"Generation: {simulation.generation}",
             f"Lineages: {lineage_count}",
             f"Most variable: {most_var}",
+            *self._epistasis_lines(simulation),
             f"Mode: drift",
             f"Theme: {simulation.settings.visual_theme}",
         ]

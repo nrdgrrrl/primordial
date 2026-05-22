@@ -23,6 +23,10 @@ from .depth import (
 )
 from .food import FoodManager
 from .genome import Genome
+from .phenotype import (
+    resolve_effective_phenotype,
+    strategy_bucket_template,
+)
 from .zones import ZoneManager
 
 if TYPE_CHECKING:
@@ -344,17 +348,60 @@ class Simulation:
                 self.settings.energy_to_reproduce,
             )
         )
-        if self.settings.sim_mode != "predator_prey":
-            return shared_threshold
-        if creature.species == "prey":
-            return float(
+        threshold = shared_threshold
+        if self.settings.sim_mode == "predator_prey" and creature.species == "prey":
+            threshold = float(
                 self._get_mode_param("prey_energy_to_reproduce", shared_threshold)
             )
-        if creature.species == "predator":
-            return float(
+        elif self.settings.sim_mode == "predator_prey" and creature.species == "predator":
+            threshold = float(
                 self._get_mode_param("predator_energy_to_reproduce", shared_threshold)
             )
-        return shared_threshold
+        phenotype = self._get_effective_phenotype(creature)
+        return threshold * phenotype.reproduction_threshold_mult
+
+    def _epistasis_enabled(self) -> bool:
+        return bool(getattr(self.settings, "epistasis_enabled", False))
+
+    def _get_epistasis_strength(self) -> float:
+        return max(0.0, min(1.5, float(getattr(self.settings, "epistasis_strength", 1.0))))
+
+    def _get_effective_phenotype(self, creature: Creature):
+        return resolve_effective_phenotype(
+            creature.genome,
+            species=creature.species,
+            epistasis_enabled=self._epistasis_enabled(),
+            epistasis_strength=self._get_epistasis_strength(),
+        )
+
+    def _get_creature_speed_scale(self, creature: Creature) -> float:
+        return self._get_effective_phenotype(creature).speed_mult
+
+    def _get_creature_flee_speed_scale(self, creature: Creature) -> float:
+        phenotype = self._get_effective_phenotype(creature)
+        return phenotype.speed_mult * phenotype.flee_agility_mult
+
+    def _get_creature_movement_cost(self, creature: Creature) -> float:
+        return creature.get_movement_cost(
+            multiplier=self._get_effective_phenotype(creature).movement_cost_mult
+        )
+
+    def _get_creature_metabolic_cost(
+        self,
+        creature: Creature,
+        *,
+        aggression_cost: float = 0.0,
+        longevity_cost: float = 0.0,
+    ) -> float:
+        phenotype = self._get_effective_phenotype(creature)
+        base_cost = aggression_cost + longevity_cost + self._get_sensing_upkeep_cost(creature)
+        return base_cost * phenotype.metabolic_cost_mult
+
+    def _get_creature_food_efficiency_multiplier(self, creature: Creature) -> float:
+        return self._get_effective_phenotype(creature).food_efficiency_mult
+
+    def _get_creature_predation_contact_multiplier(self, creature: Creature) -> float:
+        return self._get_effective_phenotype(creature).predation_contact_mult
 
     def _get_predator_kill_energy_gain_cap(self) -> float:
         """Resolve the per-kill predator energy gain cap."""
@@ -1086,11 +1133,13 @@ class Simulation:
 
             creature.update_position(1.0, self.width, self.height)
 
-            energy_cost = creature.get_movement_cost()
+            energy_cost = self._get_creature_movement_cost(creature)
             energy_cost *= 1.0 + overcrowding_penalty
-            energy_cost += aggression * 0.0012
-            energy_cost += creature.genome.longevity * 0.0004
-            energy_cost += self._get_sensing_upkeep_cost(creature)
+            energy_cost += self._get_creature_metabolic_cost(
+                creature,
+                aggression_cost=aggression * 0.0012,
+                longevity_cost=creature.genome.longevity * 0.0004,
+            )
             zone_mult = self.zone_manager.get_energy_modifier(creature)
             energy_cost *= zone_mult
 
@@ -1109,7 +1158,7 @@ class Simulation:
             if random.random() < self.settings.cosmic_ray_rate:
                 self._apply_cosmic_ray(creature)
 
-            if creature.energy >= self.settings.energy_to_reproduce:
+            if creature.energy >= self._get_reproduction_threshold(creature):
                 offspring = self._reproduce(
                     creature,
                     queued_births=len(new_creatures),
@@ -1214,7 +1263,7 @@ class Simulation:
                 predator_cost_multiplier = 1.0 + (
                     0.4 * (1.0 - self._get_predator_food_efficiency_multiplier())
                 )
-                energy_cost = creature.get_movement_cost() * predator_cost_multiplier
+                energy_cost = self._get_creature_movement_cost(creature) * predator_cost_multiplier
                 if prey_scarce:
                     scarcity_multiplier = self._get_predator_prey_scarcity_penalty_multiplier()
                     omnivore_buffer = max(
@@ -1228,8 +1277,10 @@ class Simulation:
                     energy_cost *= omnivore_buffer
                 if not engaged:
                     energy_cost *= self._get_predator_forage_cost_multiplier()
-                energy_cost += creature.genome.longevity * 0.0004
-                energy_cost += self._get_sensing_upkeep_cost(creature)
+                energy_cost += self._get_creature_metabolic_cost(
+                    creature,
+                    longevity_cost=creature.genome.longevity * 0.0004,
+                )
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
@@ -1265,9 +1316,11 @@ class Simulation:
                     self._creature_seek_food(creature)
                 creature.update_position(1.0, self.width, self.height)
 
-                energy_cost = creature.get_movement_cost()
-                energy_cost += creature.genome.longevity * 0.0004
-                energy_cost += self._get_sensing_upkeep_cost(creature)
+                energy_cost = self._get_creature_movement_cost(creature)
+                energy_cost += self._get_creature_metabolic_cost(
+                    creature,
+                    longevity_cost=creature.genome.longevity * 0.0004,
+                )
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
@@ -1393,7 +1446,10 @@ class Simulation:
         )
         sense = self._get_effective_sensing_range(predator, multiplier=sense_multiplier)
         if close_range_only:
-            close_range = max(24.0, predator.get_radius() * 3.0)
+            close_range = max(
+                24.0,
+                predator.get_radius() * 3.0 * self._get_creature_predation_contact_multiplier(predator),
+            )
             sense = min(sense, close_range)
         best_prey: Creature | None = None
         best_dist_sq = sense * sense
@@ -1407,7 +1463,10 @@ class Simulation:
                 best_prey = other
 
         if best_prey is None:
-            predator.wander(self.settings.creature_speed_base)
+            predator.wander(
+                self.settings.creature_speed_base,
+                speed_scale=self._get_creature_speed_scale(predator),
+            )
             return False, False
 
         self._record_predator_prey_sighting(predator)
@@ -1426,19 +1485,23 @@ class Simulation:
             target_depth_band=best_prey.depth_band,
         )
         if sensed_prey is None:
-            predator.wander(self.settings.creature_speed_base)
+            predator.wander(
+                self.settings.creature_speed_base,
+                speed_scale=self._get_creature_speed_scale(predator),
+            )
             return False, False
 
         predator.steer_toward(
             sensed_prey[0], sensed_prey[1],
             self.settings.creature_speed_base * speed_multiplier,
             self.width, self.height,
+            speed_scale=self._get_creature_speed_scale(predator),
         )
 
         # Contact kill: distance < sum of radii
         contact_dist = (
             predator.get_radius() + best_prey.get_radius()
-        ) * contact_scale
+        ) * contact_scale * self._get_creature_predation_contact_multiplier(predator)
         if (
             best_dist_sq < (contact_dist * contact_dist)
             and best_prey.energy > 0.0
@@ -1522,10 +1585,11 @@ class Simulation:
             dx /= dist
             dy /= dist
 
-        max_speed = prey.genome.speed * self.settings.creature_speed_base * 1.5
+        flee_speed_scale = self._get_creature_flee_speed_scale(prey)
+        max_speed = prey.genome.speed * self.settings.creature_speed_base * 1.5 * flee_speed_scale
         desired_vx = dx * max_speed
         desired_vy = dy * max_speed
-        steer = 0.35
+        steer = 0.35 * min(1.15, max(0.92, self._get_effective_phenotype(prey).flee_agility_mult))
         prey.vx += (desired_vx - prey.vx) * steer
         prey.vy += (desired_vy - prey.vy) * steer
         self._clamp_velocity(prey, max_speed)
@@ -2097,7 +2161,6 @@ class Simulation:
             creature_bucket
         )
 
-        energy_to_reproduce = self._get_mode_param("energy_to_reproduce")
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
         cosmic_rate = self.settings.cosmic_ray_rate
         speed_base = self.settings.creature_speed_base
@@ -2134,14 +2197,14 @@ class Simulation:
             creature.vy += sep_fy + align_fy + coh_fy + wander_fy
 
             # Clamp to max speed
-            max_speed = creature.genome.speed * speed_base
+            max_speed = creature.genome.speed * speed_base * self._get_creature_speed_scale(creature)
             speed = math.sqrt(creature.vx ** 2 + creature.vy ** 2)
             if speed > max_speed and speed > 0:
                 creature.vx = creature.vx / speed * max_speed
                 creature.vy = creature.vy / speed * max_speed
 
             if n_neighbors == 0:
-                creature.wander(speed_base)
+                creature.wander(speed_base, speed_scale=self._get_creature_speed_scale(creature))
 
             creature.update_position(1.0, self.width, self.height)
 
@@ -2155,7 +2218,10 @@ class Simulation:
             )
 
             # Overcrowding penalty
-            creature.energy = max(0.0, creature.energy - creature.get_movement_cost() * overcrowding_penalty)
+            creature.energy = max(
+                0.0,
+                creature.energy - self._get_creature_movement_cost(creature) * overcrowding_penalty,
+            )
             if overcrowding_penalty > 0.0:
                 creature.energy = max(
                     0.0,
@@ -2166,7 +2232,7 @@ class Simulation:
                 self._apply_cosmic_ray(creature)
 
             if (
-                creature.energy >= energy_to_reproduce
+                creature.energy >= self._get_reproduction_threshold(creature)
                 and alignment_score >= 0.35
                 and 2 <= n_neighbors <= 9
                 and crowding_score < 0.55
@@ -2226,13 +2292,23 @@ class Simulation:
         }
         sense_sq_by_id = {
             id(creature): (
-                creature.get_effective_sense_radius() * _BOIDS_NEIGHBOR_SENSE_SCALE
+                creature.get_effective_sense_radius(
+                    multiplier=(
+                        self._get_effective_phenotype(creature).sense_radius_mult
+                        * _BOIDS_NEIGHBOR_SENSE_SCALE
+                    )
+                )
             ) ** 2
             for creature in creatures
         }
         flock_link_sq_by_id = {
             id(creature): (
-                creature.get_effective_sense_radius() * _BOIDS_FLOCK_LINK_SCALE
+                creature.get_effective_sense_radius(
+                    multiplier=(
+                        self._get_effective_phenotype(creature).sense_radius_mult
+                        * _BOIDS_FLOCK_LINK_SCALE
+                    )
+                )
             ) ** 2
             for creature in creatures
         }
@@ -2683,7 +2759,6 @@ class Simulation:
 
         # Cosmic ray rate doubled in drift
         cosmic_rate = self._get_mode_param("cosmic_ray_rate", self.settings.cosmic_ray_rate * 2)
-        energy_to_reproduce = self._get_mode_param("energy_to_reproduce")
         mutation_rate = self._get_mode_param("mutation_rate", self.settings.mutation_rate)
 
         for creature in self.creatures:
@@ -2711,7 +2786,7 @@ class Simulation:
             if random.random() < cosmic_rate:
                 self._apply_cosmic_ray(creature)
 
-            if creature.energy >= energy_to_reproduce:
+            if creature.energy >= self._get_reproduction_threshold(creature):
                 offspring = self._reproduce_drift(
                     creature,
                     mutation_rate,
@@ -2738,7 +2813,12 @@ class Simulation:
 
         if current_speed < 0.01:
             angle = random.uniform(0, 2 * math.pi)
-            target_speed = creature.genome.speed * speed_base * 0.3
+            target_speed = (
+                creature.genome.speed
+                * speed_base
+                * self._get_creature_speed_scale(creature)
+                * 0.3
+            )
             creature.vx = math.cos(angle) * target_speed
             creature.vy = math.sin(angle) * target_speed
             # _swim_phase repurposed: stores rotation direction (+/-) for drift
@@ -2751,7 +2831,7 @@ class Simulation:
         rotation_rate = creature.genome.speed * 0.3 * 0.008
         angle += rotation_dir * rotation_rate
 
-        max_speed = creature.genome.speed * speed_base
+        max_speed = creature.genome.speed * speed_base * self._get_creature_speed_scale(creature)
         target_speed = min(current_speed + 0.01, max_speed)
         creature.vx = math.cos(angle) * target_speed
         creature.vy = math.sin(angle) * target_speed
@@ -2905,13 +2985,17 @@ class Simulation:
                 target_depth_band=nearest_food.depth_band,
             )
             if sensed_food is None:
-                creature.wander(self.settings.creature_speed_base)
+                creature.wander(
+                    self.settings.creature_speed_base,
+                    speed_scale=self._get_creature_speed_scale(creature),
+                )
                 return
 
             creature.steer_toward(
                 sensed_food[0], sensed_food[1],
                 self.settings.creature_speed_base,
                 self.width, self.height,
+                speed_scale=self._get_creature_speed_scale(creature),
             )
 
             eat_distance = creature.get_radius() + 3
@@ -2923,6 +3007,7 @@ class Simulation:
                     nearest_food.energy
                     * (0.5 + creature.genome.efficiency * 0.5)
                     * eff_bonus
+                    * self._get_creature_food_efficiency_multiplier(creature)
                 )
                 if (
                     self.settings.sim_mode == "predator_prey"
@@ -2932,7 +3017,10 @@ class Simulation:
                 creature.energy = min(1.0, creature.energy + energy_gain)
                 self.food_manager.remove(nearest_food)
         else:
-            creature.wander(self.settings.creature_speed_base)
+            creature.wander(
+                self.settings.creature_speed_base,
+                speed_scale=self._get_creature_speed_scale(creature),
+            )
 
     def _find_nearest_food_for_creature(
         self,
@@ -3011,6 +3099,7 @@ class Simulation:
         creature.clamp_depth_band()
         if creature.depth_band == target:
             return
+        urgency *= self._get_effective_phenotype(creature).depth_transition_mult
         if random.random() < max(0.0, min(1.0, urgency)):
             creature.depth_band = step_depth_band_toward(creature.depth_band, target)
 
@@ -3138,12 +3227,18 @@ class Simulation:
             sensed_prey[0], sensed_prey[1],
             self.settings.creature_speed_base,
             self.width, self.height,
+            speed_scale=self._get_creature_speed_scale(creature),
         )
 
-        attack_range = my_radius * 4
+        attack_range = my_radius * 4 * self._get_creature_predation_contact_multiplier(creature)
         if best_dist_sq < (attack_range * attack_range):
             size_ratio = min(2.0, max(0.5, my_radius / max(1.0, best_prey.get_radius())))
-            drain = creature.genome.aggression * 0.008 * size_ratio
+            drain = (
+                creature.genome.aggression
+                * 0.008
+                * size_ratio
+                * self._get_creature_predation_contact_multiplier(creature)
+            )
             transfer = min(drain, best_prey.energy)
             if transfer > 0:
                 best_prey.energy = max(0.0, best_prey.energy - transfer)
@@ -3163,7 +3258,7 @@ class Simulation:
     ) -> None:
         """Opportunist behaviour for energy mode."""
         my_radius = creature.get_radius()
-        attack_range = my_radius * 2.5
+        attack_range = my_radius * 2.5 * self._get_creature_predation_contact_multiplier(creature)
         prey_size_limit = my_radius * 0.6
 
         for other in self._nearby_creatures(creature.x, creature.y, attack_range, bucket):
@@ -3175,7 +3270,11 @@ class Simulation:
                 continue
             dist_sq = self._distance_sq(creature.x, creature.y, other.x, other.y)
             if dist_sq < (attack_range * attack_range):
-                drain = creature.genome.aggression * 0.008
+                drain = (
+                    creature.genome.aggression
+                    * 0.008
+                    * self._get_creature_predation_contact_multiplier(creature)
+                )
                 transfer = min(drain, other.energy)
                 if transfer > 0:
                     other.energy = max(0.0, other.energy - transfer)
@@ -3348,8 +3447,11 @@ class Simulation:
                 self._queue_creature_death(creature, dead_creatures, dead_causes, "age")
 
     def _get_sensing_upkeep_cost(self, creature: Creature) -> float:
-        """M3 corrective pass: keep sensing range-limited and noisy, but not taxing."""
-        return 0.0
+        """Return optional upkeep for expensive sensing when epistasis is active."""
+        if not self._epistasis_enabled():
+            return 0.0
+        sense_load = max(0.0, creature.genome.sense_radius - 0.45)
+        return sense_load * 0.0003
 
     def _get_effective_sensing_range(
         self,
@@ -3360,10 +3462,13 @@ class Simulation:
         target_depth_band: int | None = None,
     ) -> float:
         """Return the zone-adjusted sensing range for a creature."""
+        phenotype = self._get_effective_phenotype(creature)
         base_radius = (
-            absolute_radius
+            absolute_radius * phenotype.sense_radius_mult
             if absolute_radius is not None
-            else creature.get_effective_sense_radius() * multiplier
+            else creature.get_effective_sense_radius(
+                multiplier=phenotype.sense_radius_mult * multiplier
+            )
         )
         zone_modifier = self.zone_manager.get_sensing_modifier_at(creature.x, creature.y)
         depth_modifier = 1.0
@@ -3372,7 +3477,10 @@ class Simulation:
             and target_depth_band is not None
         ):
             separation = depth_band_separation(creature.depth_band, target_depth_band)
-            depth_modifier = _DEPTH_SENSING_FACTORS[separation]
+            depth_modifier = (
+                _DEPTH_SENSING_FACTORS[separation]
+                * phenotype.depth_sense_multiplier(separation)
+            )
         return max(1.0, base_radius * zone_modifier * depth_modifier)
 
     def _sense_target_position(
@@ -3555,6 +3663,66 @@ class Simulation:
             "recent_kills": len(self._recent_kill_frames),
             "recent_cross_band_misses": len(self._recent_cross_band_miss_frames),
             "total_kills": self.predation_kill_count,
+        }
+
+    def get_epistasis_summary(self) -> dict[str, Any]:
+        """Return lightweight phenotype/strategy observability for the live population."""
+        strategy_counts = strategy_bucket_template()
+        if not self.creatures:
+            return {
+                "enabled": self._epistasis_enabled(),
+                "strength": self._get_epistasis_strength(),
+                "top_strategy": "generalist",
+                "top_strategy_share": 0.0,
+                "strategy_counts": strategy_counts,
+                "average_modifiers": {
+                    "speed_mult": 1.0,
+                    "movement_cost_mult": 1.0,
+                    "metabolic_cost_mult": 1.0,
+                    "sense_radius_mult": 1.0,
+                    "food_efficiency_mult": 1.0,
+                    "reproduction_threshold_mult": 1.0,
+                    "predation_contact_mult": 1.0,
+                    "flee_agility_mult": 1.0,
+                    "depth_transition_mult": 1.0,
+                    "in_band_sense_mult": 1.0,
+                    "cross_band_sense_mult": 1.0,
+                },
+            }
+
+        modifier_sums = {
+            "speed_mult": 0.0,
+            "movement_cost_mult": 0.0,
+            "metabolic_cost_mult": 0.0,
+            "sense_radius_mult": 0.0,
+            "food_efficiency_mult": 0.0,
+            "reproduction_threshold_mult": 0.0,
+            "predation_contact_mult": 0.0,
+            "flee_agility_mult": 0.0,
+            "depth_transition_mult": 0.0,
+            "in_band_sense_mult": 0.0,
+            "cross_band_sense_mult": 0.0,
+        }
+        for creature in self.creatures:
+            phenotype = self._get_effective_phenotype(creature)
+            strategy_counts[phenotype.strategy_bucket] += 1
+            for key in modifier_sums:
+                modifier_sums[key] += getattr(phenotype, key)
+
+        population = len(self.creatures)
+        top_strategy, top_count = max(
+            strategy_counts.items(),
+            key=lambda item: (item[1], item[0] != "generalist", item[0]),
+        )
+        return {
+            "enabled": self._epistasis_enabled(),
+            "strength": self._get_epistasis_strength(),
+            "top_strategy": top_strategy,
+            "top_strategy_share": top_count / population,
+            "strategy_counts": strategy_counts,
+            "average_modifiers": {
+                key: value / population for key, value in modifier_sums.items()
+            },
         }
 
     def get_predator_prey_stability_stats(self) -> dict[str, Any]:
@@ -4399,6 +4567,7 @@ class Simulation:
     def build_observability_snapshot(self) -> dict[str, Any]:
         """Build a low-cost structured snapshot for benchmark summaries."""
         hunters, grazers, opportunists = self.get_hunter_grazer_counts()
+        epistasis = self.get_epistasis_summary()
         snapshot: dict[str, Any] = {
             "population": self.population,
             "lineages": {
@@ -4409,6 +4578,7 @@ class Simulation:
                 "grazers": grazers,
                 "opportunists": opportunists,
             },
+            "epistasis": epistasis,
             "zone_occupancy": self.get_zone_occupancy_counts(),
         }
 

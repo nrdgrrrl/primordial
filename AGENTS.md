@@ -120,6 +120,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 9. **Glyph determinism** — same genome must always produce same glyph (hash-seeded RNG)
 10. **Event queue ownership** — `death_events` and `birth_events` are populated by simulation, cleared by renderer after processing
 11. **Glyph morphology is semantically meaningful** — creature visual traits (complexity, symmetry, stroke_scale, appendages, rotation_speed) are heritable genome traits that mutate, drift, and mark ancestry. Glyph appearance is the organism's phenotype. Do not treat glyph rendering as purely decorative or decoupled from simulation meaning. Changes to glyph generation must preserve determinism and recognizability of lineage resemblance. Visual changes that would make related organisms look unrelated, or that would add cosmetic effects not traceable to genome traits, break the visual-evolution contract.
+12. **Raw genome vs effective phenotype stays separate** — inherited values remain the authoritative genome. Ecological consequences from trait interactions must flow through the phenotype translation layer (`primordial/simulation/phenotype.py`), not by mutating genome values or smearing ad hoc epistasis math across the simulation loop.
 
 ## Config file and settings overlay
 
@@ -142,6 +143,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 - Settings overlay geometry lives in `primordial/rendering/settings_layout.py`; keep future modal/sidebar/list/details/footer sizing there instead of adding one-off rectangle math in the renderer.
 - Runtime cursor behavior lives in `primordial/display/cursor.py`: normal simulation playback hides the OS cursor, interactive UI states such as tutorial/settings/help/inspect show it, and clean shutdown restores it.
 - Settings that require reset are marked in the overlay; simulation reset is only triggered by explicit `R`.
+- Eco-morphological epistasis is controlled by `simulation.epistasis_enabled` and `simulation.epistasis_strength`. Keep the raw genome separate from effective phenotype values so future mate choice, recombination, and reproductive compatibility work can reuse the same translation layer.
 
 When adding a new setting, update all of:
 1. Canonical defaults file (`primordial/config/defaults.toml`)

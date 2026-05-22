@@ -13,7 +13,7 @@ Predator-prey mode also adds an abstract vertical layer called **depth bands**. 
 
 ## How Predators Behave
 
-A predator scans for the nearest prey within its sensing range. When it detects prey, it steers toward it and tries to match its depth band.
+A predator scans for the nearest prey within its sensing range. When it detects prey, it steers toward it and tries to match its depth band. Simple epistasis can bend that sensing and contact quality: large fast predators tend to handle contact better but pay more to move, while depth specialists sense best in-band and worse across bands.
 
 **Kill on contact**: when the predator and prey are close enough and in the same depth band, the predator kills the prey. Kill energy gain is capped.
 
@@ -29,7 +29,7 @@ A predator scans for the nearest prey within its sensing range. When it detects 
 
 ## How Prey Behave
 
-Prey search for nearby food within their current depth band. If food is unavailable in their band, they may shift toward another band where food is present.
+Prey search for nearby food within their current depth band. If food is unavailable in their band, they may shift toward another band where food is present. Small fast prey, asymmetric darters, and appendage-rich bodies can gain modest fleeing advantages, while specialized depth morphs tend to read their home band better than other bands.
 
 **Fleeing**: when a prey senses a nearby predator, it steers directly away and may attempt to shift to a different depth band to escape. Fleeing takes priority over food seeking.
 
@@ -69,7 +69,14 @@ When a predator reaches contact range but the prey is in another band, that is a
 
 **Zones**: five environmental zone types provide energy cost modifiers based on trait profiles. A predator in a hunting ground pays less energy there. A prey organism in a warm vent pays less.
 
-**Movement costs**: energy cost scales with speed, size, and longevity. Movement cost is the main constraint that prevents any one trait from increasing without limit.
+**Movement costs**: energy cost scales with speed, size, longevity, and simple eco-morphological epistasis. Fast heavy bodies, ornate high-sense bodies, and draggy appendage-rich bodies all pay more than their raw traits alone would imply.
+
+## What to Watch For
+
+- **Swift-small prey** that react early and turn away quickly but are weak contact attackers.
+- **Heavy hunters** that win contact more reliably but burn energy fast if they stay large and quick.
+- **Sensory specialists** that read prey or food well but pay more upkeep.
+- **Depth specialists** that dominate one band while missing more across bands.
 
 ## What Makes an Organism Predator or Prey
 

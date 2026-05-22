@@ -29,7 +29,7 @@ Settings are grouped into categories:
 
 - **Simulation**: mode, population, food spawn, global speed.
 - **Display**: backend, fullscreen, target FPS, HUD.
-- **Evolution**: mutation, cosmic rays, food cycle, zones.
+- **Evolution**: mutation, cosmic rays, epistasis, food cycle, zones.
 - **Ecology / Predator-Prey**: predator-prey-specific starting mix and dials.
 - **Rendering**: kin-line visuals and related rendering options.
 - **Actions**: snapshots, help, reset actions.

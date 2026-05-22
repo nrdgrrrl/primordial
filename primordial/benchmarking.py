@@ -40,6 +40,7 @@ from .simulation.zones import ZONE_DEFINITIONS
 OBSERVABILITY_CORE_SECTIONS = (
     "lineages",
     "strategies",
+    "epistasis",
     "zone_occupancy",
 )
 
@@ -75,6 +76,7 @@ class ObservabilityCollector:
             },
             "lineages": dict(self._latest_snapshot["lineages"]),
             "strategies": dict(self._latest_snapshot["strategies"]),
+            "epistasis": dict(self._latest_snapshot["epistasis"]),
             "zone_occupancy": dict(self._latest_snapshot["zone_occupancy"]),
         }
         for section in OBSERVABILITY_OPTIONAL_SECTIONS_BY_MODE.get(self._mode, ()):
@@ -195,6 +197,34 @@ def _build_empty_observability_summary(mode: str) -> dict[str, Any]:
         "population": {"min": 0, "mean": 0.0, "max": 0},
         "lineages": {"active": 0},
         "strategies": {"hunters": 0, "grazers": 0, "opportunists": 0},
+        "epistasis": {
+            "enabled": False,
+            "strength": 0.0,
+            "top_strategy": "generalist",
+            "top_strategy_share": 0.0,
+            "strategy_counts": {
+                "swift-small": 0,
+                "heavy-hunter": 0,
+                "sensory-specialist": 0,
+                "efficient-glider": 0,
+                "evasive-darter": 0,
+                "depth-specialist": 0,
+                "generalist": 0,
+            },
+            "average_modifiers": {
+                "speed_mult": 1.0,
+                "movement_cost_mult": 1.0,
+                "metabolic_cost_mult": 1.0,
+                "sense_radius_mult": 1.0,
+                "food_efficiency_mult": 1.0,
+                "reproduction_threshold_mult": 1.0,
+                "predation_contact_mult": 1.0,
+                "flee_agility_mult": 1.0,
+                "depth_transition_mult": 1.0,
+                "in_band_sense_mult": 1.0,
+                "cross_band_sense_mult": 1.0,
+            },
+        },
         "zone_occupancy": empty_zones,
     }
     for section in OBSERVABILITY_OPTIONAL_SECTIONS_BY_MODE.get(mode, ()):
