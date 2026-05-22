@@ -8,13 +8,14 @@ import pygame
 
 
 PANEL_MARGIN = 24
-HEADER_HEIGHT = 82
+HEADER_HEIGHT = 72
 FOOTER_HEIGHT = 72
 GUTTER = 18
 SEARCH_HEIGHT = 38
-DOC_TAB_HEIGHT = 36
-DOC_TAB_ROW_GAP = 6
-NAV_ROW_HEIGHT = 50
+SCROLLBAR_WIDTH = 10
+SCROLLBAR_TRACK_PAD = 2
+SIDEBAR_ROW_HEIGHT = 42
+GROUP_ROW_HEIGHT = 36
 
 
 @dataclass(frozen=True)
@@ -22,11 +23,12 @@ class HelpOverlayLayout:
     panel_rect: pygame.Rect
     header_rect: pygame.Rect
     search_rect: pygame.Rect
-    doc_tabs_rect: pygame.Rect
-    nav_rect: pygame.Rect
+    sidebar_rect: pygame.Rect
     content_rect: pygame.Rect
     footer_rect: pygame.Rect
     close_rect: pygame.Rect
+    sidebar_scrollbar_rect: pygame.Rect
+    content_scrollbar_rect: pygame.Rect
 
 
 def panel_rect_for_screen(screen_size: tuple[int, int]) -> pygame.Rect:
@@ -46,54 +48,58 @@ def panel_rect_for_screen(screen_size: tuple[int, int]) -> pygame.Rect:
 def calculate_help_layout(
     screen_size: tuple[int, int],
     *,
-    section_titles: list[str],
-    title_font: pygame.font.Font,
+    title_font: pygame.font.Font | None = None,
 ) -> HelpOverlayLayout:
     panel_rect = panel_rect_for_screen(screen_size)
     panel_width = panel_rect.width
     panel_height = panel_rect.height
 
-    widest_title = max((title_font.size(title)[0] for title in section_titles), default=0)
     body_top = HEADER_HEIGHT
     footer_y = panel_height - FOOTER_HEIGHT
     available_width = panel_width - 36 - GUTTER
-    nav_width = min(310, max(232, widest_title + 42))
-    max_nav_width = max(220, int(available_width * 0.38))
-    nav_width = min(nav_width, max_nav_width)
-    content_width = available_width - nav_width
+    sidebar_width = min(280, max(220, int(available_width * 0.34)))
+    content_width = available_width - sidebar_width
     if content_width < 360:
         deficit = 360 - content_width
-        nav_width = max(206, nav_width - deficit)
-        content_width = available_width - nav_width
+        sidebar_width = max(206, sidebar_width - deficit)
+        content_width = available_width - sidebar_width
 
-    search_rect = pygame.Rect(18, body_top, nav_width, SEARCH_HEIGHT)
-    doc_tabs_rect = pygame.Rect(
+    search_rect = pygame.Rect(18, body_top, sidebar_width, SEARCH_HEIGHT)
+    sidebar_top = search_rect.bottom + 8
+    sidebar_rect = pygame.Rect(
         18,
-        search_rect.bottom + DOC_TAB_ROW_GAP,
-        nav_width,
-        DOC_TAB_HEIGHT,
+        sidebar_top,
+        sidebar_width - SCROLLBAR_WIDTH - SCROLLBAR_TRACK_PAD,
+        footer_y - sidebar_top - 12,
     )
-    nav_rect = pygame.Rect(
-        18,
-        doc_tabs_rect.bottom + DOC_TAB_ROW_GAP,
-        nav_width,
-        footer_y - doc_tabs_rect.bottom - 22,
+    sidebar_scrollbar_rect = pygame.Rect(
+        sidebar_rect.right + SCROLLBAR_TRACK_PAD,
+        sidebar_top,
+        SCROLLBAR_WIDTH,
+        footer_y - sidebar_top - 12,
     )
     content_rect = pygame.Rect(
-        nav_rect.right + GUTTER,
+        sidebar_rect.right + SCROLLBAR_WIDTH + SCROLLBAR_TRACK_PAD + GUTTER,
         body_top,
         content_width,
         footer_y - body_top - 12,
     )
+    content_scrollbar_rect = pygame.Rect(
+        content_rect.right + SCROLLBAR_TRACK_PAD,
+        content_rect.y,
+        SCROLLBAR_WIDTH,
+        content_rect.height,
+    )
     footer_rect = pygame.Rect(18, footer_y, panel_width - 36, FOOTER_HEIGHT - 14)
-    close_rect = pygame.Rect(panel_width - 92, 24, 66, 30)
+    close_rect = pygame.Rect(panel_width - 92, 16, 66, 30)
     return HelpOverlayLayout(
         panel_rect=panel_rect,
-        header_rect=pygame.Rect(18, 12, panel_width - 36, HEADER_HEIGHT - 18),
+        header_rect=pygame.Rect(18, 8, panel_width - 36, HEADER_HEIGHT - 14),
         search_rect=search_rect,
-        doc_tabs_rect=doc_tabs_rect,
-        nav_rect=nav_rect,
+        sidebar_rect=sidebar_rect,
         content_rect=content_rect,
         footer_rect=footer_rect,
         close_rect=close_rect,
+        sidebar_scrollbar_rect=sidebar_scrollbar_rect,
+        content_scrollbar_rect=content_scrollbar_rect,
     )

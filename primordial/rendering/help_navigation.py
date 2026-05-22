@@ -2,67 +2,114 @@
 
 from __future__ import annotations
 
-from primordial.help import HelpDocument, SearchResult, search_sections
+from dataclasses import dataclass, field
+
+from primordial.help import (
+    HELP_DOCUMENTS,
+    HelpDocument,
+    HelpDocEntry,
+    SearchResult,
+    load_help_document_by_id,
+    search_sections,
+)
+
+
+@dataclass(frozen=True)
+class HelpNavItem:
+    kind: str
+    doc_id: str
+    section_index: int | None
+    title: str
+    level: int
 
 
 class HelpNavigation:
     """Track selected help section, search text, focus, and scroll offsets."""
 
-    def __init__(self, document: HelpDocument) -> None:
-        self.document = document
-        self.selected_section_index = 0
-        self.nav_first_visible = 0
-        self.content_scroll = 0
-        self.content_line_count = 0
-        self.content_visible_lines = 1
-        self.search_query = ""
-        self.search_focused = False
-        self.results: list[SearchResult] = []
-        self._nav_scroll_from_wheel = False
+    def __init__(self) -> None:
+        self.expanded_groups: dict[str, bool] = {}
+        self._pre_search_expanded: dict[str, bool] = {}
+        self.documents: dict[str, HelpDocument] = {}
+        self.selected_doc_id: str = HELP_DOCUMENTS[0].doc_id
+        self.selected_section_index: int = 0
+        self.focused_sidebar_index: int = 0
+        self.sidebar_scroll: int = 0
+        self.content_scroll: int = 0
+        self.content_line_count: int = 0
+        self.content_visible_lines: int = 1
+        self.sidebar_total_rows: int = 0
+        self.sidebar_visible_rows: int = 1
+        self.search_query: str = ""
+        self.search_focused: bool = False
+        self.search_results: dict[str, list[SearchResult]] = {}
+        self._sidebar_scroll_from_wheel: bool = False
+        self._dragging_sidebar_scrollbar: bool = False
+        self._dragging_content_scrollbar: bool = False
+        self._drag_start_y: int = 0
+        self._drag_start_scroll: int = 0
+
+        for entry in HELP_DOCUMENTS:
+            self.documents[entry.doc_id] = load_help_document_by_id(entry.doc_id)
+        self.expanded_groups[self.selected_doc_id] = True
 
     @property
-    def visible_section_indices(self) -> list[int]:
+    def sidebar_items(self) -> list[HelpNavItem]:
         if self.search_query.strip():
-            return [result.section_index for result in self.results]
-        return list(range(len(self.document.sections)))
+            return self._search_sidebar_items()
+        items: list[HelpNavItem] = []
+        for entry in HELP_DOCUMENTS:
+            items.append(HelpNavItem(kind="group", doc_id=entry.doc_id, section_index=None, title=entry.title, level=0))
+            if self.expanded_groups.get(entry.doc_id, False):
+                doc = self.documents.get(entry.doc_id)
+                if doc is not None:
+                    for idx, section in enumerate(doc.sections):
+                        items.append(HelpNavItem(kind="section", doc_id=entry.doc_id, section_index=idx, title=section.title, level=1))
+        return items
+
+    def _search_sidebar_items(self) -> list[HelpNavItem]:
+        items: list[HelpNavItem] = []
+        for entry in HELP_DOCUMENTS:
+            results = self.search_results.get(entry.doc_id, [])
+            if not results:
+                continue
+            items.append(HelpNavItem(kind="group", doc_id=entry.doc_id, section_index=None, title=entry.title, level=0))
+            for result in results:
+                items.append(HelpNavItem(kind="section", doc_id=entry.doc_id, section_index=result.section_index, title=result.title, level=1))
+        return items
 
     @property
-    def selected_visible_position(self) -> int:
-        indices = self.visible_section_indices
-        if not indices:
-            return 0
-        try:
-            return indices.index(self.selected_section_index)
-        except ValueError:
-            return 0
+    def current_document(self) -> HelpDocument:
+        return self.documents.get(self.selected_doc_id, HelpDocument(title="Error", sections=(), source_path=__import__('pathlib').Path("<error>"), error="unknown doc"))
 
-    def set_document(self, document: HelpDocument) -> None:
-        self.document = document
-        self.selected_section_index = 0
-        self.nav_first_visible = 0
-        self.content_scroll = 0
-        self.content_line_count = 0
-        self.search_query = ""
-        self.search_focused = False
-        self.results = []
-        self._nav_scroll_from_wheel = False
+    @property
+    def selected_sidebar_position(self) -> int:
+        for i, item in enumerate(self.sidebar_items):
+            if item.kind == "section" and item.doc_id == self.selected_doc_id and item.section_index == self.selected_section_index:
+                return i
+        return 0
 
     def set_search_query(self, query: str) -> None:
+        if not self.search_query.strip() and query.strip():
+            self._pre_search_expanded = dict(self.expanded_groups)
         self.search_query = query
-        self.results = search_sections(self.document.sections, query)
-        indices = self.visible_section_indices
-        if not indices:
-            self.selected_section_index = 0
-        elif self.selected_section_index not in indices:
-            self.selected_section_index = indices[0]
-        self.nav_first_visible = min(self.nav_first_visible, max(0, len(indices) - 1))
+        self.search_results = {}
+        if query.strip():
+            for entry in HELP_DOCUMENTS:
+                doc = self.documents.get(entry.doc_id)
+                if doc is not None:
+                    results = search_sections(doc.sections, query)
+                    if results:
+                        self.search_results[entry.doc_id] = results
+                        self.expanded_groups[entry.doc_id] = True
+        else:
+            self.expanded_groups = dict(self._pre_search_expanded)
+            self._pre_search_expanded = {}
+        self.sidebar_scroll = 0
         self.content_scroll = 0
-        self._nav_scroll_from_wheel = False
 
     def append_search_text(self, text: str) -> None:
-        if not text:
-            return
-        self.set_search_query(self.search_query + text)
+        if text:
+            self.set_search_query(self.search_query + text)
 
     def backspace_search(self) -> None:
         if self.search_query:
@@ -71,42 +118,83 @@ class HelpNavigation:
     def clear_search(self) -> None:
         self.set_search_query("")
 
-    def move_selection(self, delta: int) -> None:
-        indices = self.visible_section_indices
-        if not indices:
-            self.selected_section_index = 0
-            self.content_scroll = 0
-            return
-        try:
-            position = indices.index(self.selected_section_index)
-        except ValueError:
-            position = 0
-        position = max(0, min(len(indices) - 1, position + delta))
-        self.selected_section_index = indices[position]
+    def toggle_group(self, doc_id: str) -> None:
+        self.expanded_groups[doc_id] = not self.expanded_groups.get(doc_id, False)
+
+    def expand_group(self, doc_id: str) -> None:
+        self.expanded_groups[doc_id] = True
+
+    def collapse_group(self, doc_id: str) -> None:
+        self.expanded_groups[doc_id] = False
+
+    def select_section(self, doc_id: str, section_index: int) -> None:
+        self.selected_doc_id = doc_id
+        self.selected_section_index = section_index
         self.content_scroll = 0
-        self._nav_scroll_from_wheel = False
+        if not self.expanded_groups.get(doc_id, False):
+            self.expanded_groups[doc_id] = True
+        self.focused_sidebar_index = self.selected_sidebar_position
+        self._sidebar_scroll_from_wheel = False
 
-    def select_section(self, section_index: int) -> None:
-        if 0 <= section_index < len(self.document.sections):
-            self.selected_section_index = section_index
-            self.content_scroll = 0
-            self._nav_scroll_from_wheel = False
-
-    def scroll_nav(self, amount: int, visible_rows: int) -> None:
-        indices = self.visible_section_indices
-        max_first = max(0, len(indices) - max(1, visible_rows))
-        self.nav_first_visible = max(0, min(max_first, self.nav_first_visible + amount))
-        self._nav_scroll_from_wheel = True
-
-    def ensure_selected_nav_visible(self, visible_rows: int) -> None:
-        if self._nav_scroll_from_wheel:
-            self._nav_scroll_from_wheel = False
+    def move_selection(self, delta: int) -> None:
+        items = self.sidebar_items
+        if not items:
             return
-        position = self.selected_visible_position
-        if position < self.nav_first_visible:
-            self.nav_first_visible = position
-        elif position >= self.nav_first_visible + visible_rows:
-            self.nav_first_visible = position - visible_rows + 1
+        new_pos = max(0, min(len(items) - 1, self.focused_sidebar_index + delta))
+        self.focused_sidebar_index = new_pos
+        target = items[new_pos]
+        if target.kind == "section" and target.section_index is not None:
+            self.select_section(target.doc_id, target.section_index)
+
+    def handle_enter_on_selected(self) -> None:
+        items = self.sidebar_items
+        if not items:
+            return
+        current = min(self.focused_sidebar_index, len(items) - 1)
+        target = items[current]
+        if target.kind == "group":
+            self.toggle_group(target.doc_id)
+        elif target.kind == "section" and target.section_index is not None:
+            self.select_section(target.doc_id, target.section_index)
+
+    def handle_left(self) -> None:
+        items = self.sidebar_items
+        if not items:
+            return
+        current = min(self.focused_sidebar_index, len(items) - 1)
+        target = items[current]
+        if target.kind == "group" and self.expanded_groups.get(target.doc_id, False):
+            self.collapse_group(target.doc_id)
+        elif target.kind == "section":
+            pass
+
+    def handle_right(self) -> None:
+        items = self.sidebar_items
+        if not items:
+            return
+        current = min(self.focused_sidebar_index, len(items) - 1)
+        target = items[current]
+        if target.kind == "group" and not self.expanded_groups.get(target.doc_id, False):
+            self.expand_group(target.doc_id)
+
+    def scroll_sidebar(self, amount: int) -> None:
+        self.sidebar_scroll += amount
+        self.clamp_sidebar_scroll()
+        self._sidebar_scroll_from_wheel = True
+
+    def clamp_sidebar_scroll(self) -> None:
+        max_scroll = max(0, self.sidebar_total_rows - self.sidebar_visible_rows)
+        self.sidebar_scroll = max(0, min(max_scroll, self.sidebar_scroll))
+
+    def ensure_selected_sidebar_visible(self) -> None:
+        if self._sidebar_scroll_from_wheel:
+            self._sidebar_scroll_from_wheel = False
+            return
+        pos = self.selected_sidebar_position
+        if pos < self.sidebar_scroll:
+            self.sidebar_scroll = pos
+        elif pos >= self.sidebar_scroll + self.sidebar_visible_rows:
+            self.sidebar_scroll = pos - self.sidebar_visible_rows + 1
 
     def set_content_bounds(self, *, line_count: int, visible_lines: int) -> None:
         self.content_line_count = max(0, line_count)
@@ -120,3 +208,8 @@ class HelpNavigation:
     def clamp_content_scroll(self) -> None:
         max_scroll = max(0, self.content_line_count - self.content_visible_lines)
         self.content_scroll = max(0, min(max_scroll, self.content_scroll))
+
+    def set_sidebar_bounds(self, *, total_rows: int, visible_rows: int) -> None:
+        self.sidebar_total_rows = max(0, total_rows)
+        self.sidebar_visible_rows = max(1, visible_rows)
+        self.clamp_sidebar_scroll()

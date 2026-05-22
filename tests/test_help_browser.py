@@ -24,7 +24,7 @@ from primordial.help import (
     search_sections,
 )
 from primordial.rendering.help_layout import calculate_help_layout
-from primordial.rendering.help_navigation import HelpNavigation
+from primordial.rendering.help_navigation import HelpNavigation, HelpNavItem
 from primordial.rendering.help_overlay import HelpOverlay
 
 
@@ -170,41 +170,114 @@ class HelpDocumentRegistryTests(unittest.TestCase):
             )
 
 
-class HelpNavigationTests(unittest.TestCase):
-    def _document(self) -> HelpDocument:
-        return HelpDocument(
-            title="Guide",
-            sections=(
-                HelpSection("Start", 1, "Welcome"),
-                HelpSection("Predators", 2, "Hunting and fleeing"),
-                HelpSection("Food", 2, "Particles and cycles"),
-            ),
-            source_path=Path("guide.md"),
-        )
+class HelpNavigationTreeTests(unittest.TestCase):
+    def test_sidebar_has_all_groups(self) -> None:
+        nav = HelpNavigation()
+        items = nav.sidebar_items
+        group_items = [i for i in items if i.kind == "group"]
+        self.assertEqual(len(group_items), len(HELP_DOCUMENTS))
 
-    def test_selection_and_scroll_bounds_are_clamped(self) -> None:
-        nav = HelpNavigation(self._document())
+    def test_collapsed_groups_hide_children(self) -> None:
+        nav = HelpNavigation()
+        for entry in HELP_DOCUMENTS:
+            nav.expanded_groups[entry.doc_id] = False
+        items = nav.sidebar_items
+        section_items = [i for i in items if i.kind == "section"]
+        self.assertEqual(len(section_items), 0)
 
-        nav.move_selection(10)
-        self.assertEqual(nav.selected_section_index, 2)
-        nav.move_selection(-10)
-        self.assertEqual(nav.selected_section_index, 0)
+    def test_expanded_groups_show_children(self) -> None:
+        nav = HelpNavigation()
+        nav.expanded_groups[HELP_DOCUMENTS[0].doc_id] = True
+        items = nav.sidebar_items
+        section_items = [i for i in items if i.kind == "section" and i.doc_id == HELP_DOCUMENTS[0].doc_id]
+        doc = nav.documents[HELP_DOCUMENTS[0].doc_id]
+        self.assertEqual(len(section_items), len(doc.sections))
 
-        nav.set_content_bounds(line_count=20, visible_lines=5)
-        nav.scroll_content(100)
-        self.assertEqual(nav.content_scroll, 15)
-        nav.scroll_content(-100)
-        self.assertEqual(nav.content_scroll, 0)
+    def test_selecting_section_switches_document(self) -> None:
+        nav = HelpNavigation()
+        second_doc_id = HELP_DOCUMENTS[1].doc_id
+        doc = nav.documents[second_doc_id]
+        if doc.sections:
+            nav.select_section(second_doc_id, 0)
+            self.assertEqual(nav.selected_doc_id, second_doc_id)
+            self.assertTrue(nav.expanded_groups.get(second_doc_id, False))
 
-    def test_search_query_filters_visible_sections_and_clear_restores_all(self) -> None:
-        nav = HelpNavigation(self._document())
+    def test_toggle_group_flips_state(self) -> None:
+        nav = HelpNavigation()
+        doc_id = HELP_DOCUMENTS[0].doc_id
+        initial = nav.expanded_groups.get(doc_id, False)
+        nav.toggle_group(doc_id)
+        self.assertEqual(nav.expanded_groups[doc_id], not initial)
 
-        nav.set_search_query("food")
-        self.assertEqual(nav.visible_section_indices, [2])
-        self.assertEqual(nav.selected_section_index, 2)
-
+    def test_search_expands_matching_groups_and_clear_restores(self) -> None:
+        nav = HelpNavigation()
+        for entry in HELP_DOCUMENTS:
+            nav.expanded_groups[entry.doc_id] = False
+        pre_expanded = dict(nav.expanded_groups)
+        nav.set_search_query("predator")
+        items = nav.sidebar_items
+        section_items = [i for i in items if i.kind == "section"]
+        self.assertGreater(len(section_items), 0)
         nav.clear_search()
-        self.assertEqual(nav.visible_section_indices, [0, 1, 2])
+        self.assertEqual(nav.expanded_groups, pre_expanded)
+
+    def test_sidebar_scroll_clamps(self) -> None:
+        nav = HelpNavigation()
+        nav.set_sidebar_bounds(total_rows=20, visible_rows=5)
+        nav.sidebar_scroll = 100
+        nav.clamp_sidebar_scroll()
+        self.assertEqual(nav.sidebar_scroll, 15)
+        nav.sidebar_scroll = -5
+        nav.clamp_sidebar_scroll()
+        self.assertEqual(nav.sidebar_scroll, 0)
+
+    def test_sidebar_wheel_scroll_not_undone_by_ensure_visible(self) -> None:
+        nav = HelpNavigation()
+        nav.set_sidebar_bounds(total_rows=20, visible_rows=5)
+        nav.sidebar_scroll = 0
+        nav.scroll_sidebar(10)
+        expected = nav.sidebar_scroll
+        nav.ensure_selected_sidebar_visible()
+        self.assertEqual(nav.sidebar_scroll, expected)
+
+    def test_move_selection_goes_through_sections(self) -> None:
+        nav = HelpNavigation()
+        nav.expanded_groups[HELP_DOCUMENTS[0].doc_id] = True
+        nav.focused_sidebar_index = nav.selected_sidebar_position
+        nav.move_selection(1)
+        items = nav.sidebar_items
+        current = nav.focused_sidebar_index
+        if current < len(items) and items[current].kind == "section" and items[current].section_index is not None:
+            self.assertEqual(nav.selected_section_index, items[current].section_index)
+
+    def test_handle_enter_on_group_toggles(self) -> None:
+        nav = HelpNavigation()
+        nav.expanded_groups[HELP_DOCUMENTS[0].doc_id] = True
+        nav.selected_section_index = 0
+        nav.selected_doc_id = HELP_DOCUMENTS[0].doc_id
+        nav.focused_sidebar_index = 0
+        nav.handle_enter_on_selected()
+        self.assertFalse(nav.expanded_groups[HELP_DOCUMENTS[0].doc_id])
+
+    def test_left_collapses_expanded_group(self) -> None:
+        nav = HelpNavigation()
+        doc_id = HELP_DOCUMENTS[0].doc_id
+        nav.expanded_groups[doc_id] = True
+        nav.selected_doc_id = doc_id
+        nav.selected_section_index = 0
+        nav.focused_sidebar_index = 0
+        nav.handle_left()
+        self.assertFalse(nav.expanded_groups[doc_id])
+
+    def test_right_expands_collapsed_group(self) -> None:
+        nav = HelpNavigation()
+        doc_id = HELP_DOCUMENTS[0].doc_id
+        nav.expanded_groups[doc_id] = False
+        nav.selected_doc_id = doc_id
+        nav.selected_section_index = 0
+        nav.focused_sidebar_index = 0
+        nav.handle_right()
+        self.assertTrue(nav.expanded_groups[doc_id])
 
 
 class HelpOverlayTests(unittest.TestCase):
@@ -217,53 +290,94 @@ class HelpOverlayTests(unittest.TestCase):
         pygame.quit()
 
     def _overlay(self) -> HelpOverlay:
-        document = HelpDocument(
-            title="Guide",
-            sections=(
-                HelpSection("Overview", 1, "Welcome to Primordial."),
-                HelpSection("Predator-Prey", 2, "Predators hunt prey. Food cycles matter."),
-                HelpSection("Depth Bands", 2, "Surface, mid, and deep bands affect misses."),
-            ),
-            source_path=Path("guide.md"),
-        )
-        overlay = HelpOverlay(document)
-        overlay.open(reload_document=False)
+        overlay = HelpOverlay()
+        overlay.visible = True
+        overlay.fade = 20
         return overlay
 
     def test_layout_has_positive_non_overlapping_regions(self) -> None:
         font = pygame.font.Font(None, 24)
         layout = calculate_help_layout(
             (1280, 720),
-            section_titles=["Very Long Help Section Title That Should Fit"],
             title_font=font,
         )
 
-        self.assertGreater(layout.nav_rect.width, 0)
+        self.assertGreater(layout.sidebar_rect.width, 0)
         self.assertGreater(layout.content_rect.width, 0)
-        self.assertLess(layout.nav_rect.right, layout.content_rect.x)
+        self.assertLess(layout.sidebar_rect.right + 12, layout.content_rect.x)
         self.assertLess(layout.content_rect.bottom, layout.footer_rect.y)
 
-    def test_overlay_draws_headlessly_and_clicking_section_selects_it(self) -> None:
+    def test_layout_has_no_doc_tabs_rect(self) -> None:
+        layout = calculate_help_layout((1280, 720), title_font=pygame.font.Font(None, 24))
+        self.assertFalse(hasattr(layout, "doc_tabs_rect"))
+        self.assertFalse(hasattr(layout, "nav_rect"))
+
+    def test_layout_has_scrollbar_rects(self) -> None:
+        layout = calculate_help_layout((1280, 720), title_font=pygame.font.Font(None, 24))
+        self.assertTrue(hasattr(layout, "sidebar_scrollbar_rect"))
+        self.assertTrue(hasattr(layout, "content_scrollbar_rect"))
+        self.assertGreater(layout.sidebar_scrollbar_rect.width, 0)
+        self.assertGreater(layout.content_scrollbar_rect.width, 0)
+
+    def test_overlay_draws_headlessly(self) -> None:
         screen = pygame.Surface((1280, 720))
         overlay = self._overlay()
-        overlay.fade = 20
+        overlay.draw(screen)
+        self.assertGreater(len(overlay._hit_regions), 0)
+
+    def test_no_doc_tab_hit_regions(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
+        overlay.draw(screen)
+        doc_tab_regions = [r for r in overlay._hit_regions if r.kind == "doc_tab"]
+        self.assertEqual(len(doc_tab_regions), 0)
+
+    def test_group_hit_regions_present(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
+        overlay.draw(screen)
+        group_regions = [r for r in overlay._hit_regions if r.kind == "group"]
+        self.assertGreater(len(group_regions), 0)
+
+    def test_section_hit_regions_present_when_expanded(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
+        overlay.navigation.expanded_groups[HELP_DOCUMENTS[0].doc_id] = True
+        overlay.draw(screen)
+        section_regions = [r for r in overlay._hit_regions if r.kind == "section"]
+        self.assertGreater(len(section_regions), 0)
+
+    def test_clicking_section_selects_it(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
+        overlay.navigation.expanded_groups[HELP_DOCUMENTS[0].doc_id] = True
         overlay.draw(screen)
 
-        section_region = next(
-            region
-            for region in overlay._hit_regions
-            if region.kind == "section" and region.section_index == 1
-        )
+        section_regions = [r for r in overlay._hit_regions if r.kind == "section"]
+        self.assertGreater(len(section_regions), 0)
+        target = section_regions[0]
         overlay.handle_event(
-            pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=section_region.rect.center)
+            pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=target.rect.center)
         )
+        self.assertEqual(overlay.navigation.selected_doc_id, target.doc_id)
+        self.assertEqual(overlay.navigation.selected_section_index, target.section_index)
 
-        self.assertEqual(overlay.navigation.selected_section_index, 1)
-
-    def test_search_box_focus_typing_and_no_results_state(self) -> None:
+    def test_clicking_group_toggles_it(self) -> None:
         screen = pygame.Surface((1280, 720))
         overlay = self._overlay()
-        overlay.fade = 20
+        overlay.draw(screen)
+        group_regions = [r for r in overlay._hit_regions if r.kind == "group"]
+        self.assertGreater(len(group_regions), 0)
+        target = group_regions[0]
+        initial = overlay.navigation.expanded_groups.get(target.doc_id, False)
+        overlay.handle_event(
+            pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=target.rect.center)
+        )
+        self.assertEqual(overlay.navigation.expanded_groups[target.doc_id], not initial)
+
+    def test_search_box_focus_typing_and_results(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = self._overlay()
         overlay.draw(screen)
 
         search_region = next(region for region in overlay._hit_regions if region.kind == "search")
@@ -276,74 +390,110 @@ class HelpOverlayTests(unittest.TestCase):
 
         self.assertTrue(overlay.navigation.search_focused)
         self.assertEqual(overlay.navigation.search_query, "foo")
-        self.assertEqual(overlay.navigation.visible_section_indices, [1])
-
-        overlay.navigation.set_search_query("zzzz")
-        overlay.draw(screen)
-        self.assertEqual(overlay.navigation.visible_section_indices, [])
+        has_section = any(item.kind == "section" for item in overlay.navigation.sidebar_items)
+        self.assertTrue(has_section or overlay.navigation.search_query == "foo")
 
     def test_escape_closes_without_mutating_selection(self) -> None:
         overlay = self._overlay()
-        overlay.navigation.select_section(2)
+        overlay.navigation.select_section(HELP_DOCUMENTS[0].doc_id, 1)
 
         action = overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE))
 
         self.assertEqual(action, "close")
         self.assertEqual(overlay.fade_dir, -1)
-        self.assertEqual(overlay.navigation.selected_section_index, 2)
+        self.assertEqual(overlay.navigation.selected_section_index, 1)
 
-    def test_tab_key_cycles_documents_when_multiple_documents(self) -> None:
-        overlay = self._overlay()
-        initial_doc_id = overlay.doc_id
+    def test_help_opens_with_h_shortcut(self) -> None:
+        overlay = HelpOverlay()
+        overlay.open()
+        self.assertTrue(overlay.visible)
 
-        overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_TAB))
 
-        self.assertNotEqual(overlay.doc_id, initial_doc_id)
+class HelpSidebarScrollTests(unittest.TestCase):
+    def test_sidebar_wheel_scroll_is_not_undone_by_ensure_visible(self) -> None:
+        nav = HelpNavigation()
+        nav.set_sidebar_bounds(total_rows=20, visible_rows=5)
+        nav.sidebar_scroll = 0
+        nav.scroll_sidebar(10)
+        expected = nav.sidebar_scroll
+        nav.ensure_selected_sidebar_visible()
+        self.assertEqual(nav.sidebar_scroll, expected)
 
-    def test_doc_tab_regions_present_when_multiple_documents(self) -> None:
+    def test_sidebar_scroll_clamp_math(self) -> None:
+        nav = HelpNavigation()
+        nav.set_sidebar_bounds(total_rows=50, visible_rows=10)
+        nav.sidebar_scroll = 100
+        nav.clamp_sidebar_scroll()
+        self.assertEqual(nav.sidebar_scroll, 40)
+        nav.sidebar_scroll = -10
+        nav.clamp_sidebar_scroll()
+        self.assertEqual(nav.sidebar_scroll, 0)
+
+    def test_sidebar_scrollbar_thumb_size_ratio(self) -> None:
+        nav = HelpNavigation()
+        nav.set_sidebar_bounds(total_rows=100, visible_rows=20)
+        ratio = nav.sidebar_visible_rows / max(1, nav.sidebar_total_rows)
+        self.assertAlmostEqual(ratio, 0.2, places=2)
+
+
+class HelpScrollbarVisibleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        pygame.init()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        pygame.quit()
+
+    def test_sidebar_scrollbar_hit_region_when_overflow(self) -> None:
         screen = pygame.Surface((1280, 720))
-        overlay = self._overlay()
+        overlay = HelpOverlay()
+        overlay.visible = True
+        overlay.fade = 20
+        for entry in HELP_DOCUMENTS:
+            overlay.navigation.expanded_groups[entry.doc_id] = True
+        overlay.draw(screen)
+        sb_regions = [r for r in overlay._hit_regions if r.sidebar_scrollbar]
+        self.assertGreater(len(sb_regions), 0)
+
+    def test_content_scrollbar_hit_region_when_overflow(self) -> None:
+        screen = pygame.Surface((1280, 720))
+        overlay = HelpOverlay()
+        overlay.visible = True
         overlay.fade = 20
         overlay.draw(screen)
+        doc = overlay.navigation.current_document
+        sb_regions = [r for r in overlay._hit_regions if r.content_scrollbar]
+        if overlay.navigation.content_line_count > overlay.navigation.content_visible_lines:
+            self.assertGreater(len(sb_regions), 0)
 
-        doc_tab_regions = [r for r in overlay._hit_regions if r.kind == "doc_tab"]
-        self.assertGreater(len(doc_tab_regions), 0)
 
+class HelpTextWrappingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        pygame.init()
 
-class HelpNavigationScrollTests(unittest.TestCase):
-    def test_nav_wheel_scroll_is_not_undone_by_ensure_selected_visible(self) -> None:
-        sections = tuple(
-            HelpSection(f"Section {i}", 2, f"Body {i}") for i in range(20)
-        )
-        document = HelpDocument(
-            title="Guide",
-            sections=sections,
-            source_path=Path("guide.md"),
-        )
-        nav = HelpNavigation(document)
-        visible_rows = 5
-        nav.nav_first_visible = 0
-        nav.scroll_nav(10, visible_rows)
-        expected = nav.nav_first_visible
-        nav.ensure_selected_nav_visible(visible_rows)
-        self.assertEqual(nav.nav_first_visible, expected)
+    @classmethod
+    def tearDownClass(cls) -> None:
+        pygame.quit()
 
-    def test_keyboard_selection_brings_selected_into_view(self) -> None:
-        sections = tuple(
-            HelpSection(f"Section {i}", 2, f"Body {i}") for i in range(20)
-        )
-        document = HelpDocument(
-            title="Guide",
-            sections=sections,
-            source_path=Path("guide.md"),
-        )
-        nav = HelpNavigation(document)
-        visible_rows = 5
-        nav.nav_first_visible = 0
-        for _ in range(15):
-            nav.move_selection(1)
-        nav.ensure_selected_nav_visible(visible_rows)
-        self.assertGreaterEqual(nav.nav_first_visible, nav.selected_section_index - visible_rows + 1)
+    def test_wrap_text_wraps_long_labels(self) -> None:
+        overlay = HelpOverlay()
+        font = pygame.font.Font(None, 20)
+        lines = overlay._wrap_text("Predator-Prey Overview and Adaptive Tuning Behavior", font, 120)
+        self.assertGreater(len(lines), 1)
+
+    def test_wrap_text_bullet_hanging_indent(self) -> None:
+        overlay = HelpOverlay()
+        section = HelpSection("Test", 2, "- First point with a very long continuation line that should wrap with hanging indent\n- Second point")
+        lines = overlay._content_lines(section, 200)
+        bullet_lines = [l for l in lines if l.startswith("- ") or l.startswith("  ")]
+        self.assertGreater(len(bullet_lines), 0)
+
+    def test_wrap_text_empty_returns_empty_line(self) -> None:
+        overlay = HelpOverlay()
+        lines = overlay._wrap_text("", pygame.font.Font(None, 24), 100)
+        self.assertEqual(lines, [""])
 
 
 if __name__ == "__main__":

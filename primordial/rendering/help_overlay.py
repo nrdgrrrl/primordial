@@ -15,7 +15,10 @@ from primordial.help import (
 )
 
 from .help_layout import (
-    NAV_ROW_HEIGHT,
+    GROUP_ROW_HEIGHT,
+    SCROLLBAR_TRACK_PAD,
+    SCROLLBAR_WIDTH,
+    SIDEBAR_ROW_HEIGHT,
     calculate_help_layout,
     panel_rect_for_screen,
 )
@@ -23,18 +26,11 @@ from .help_mouse import HelpHitRegion
 from .help_navigation import HelpNavigation
 
 
-_DOC_TAB_PAD_X = 10
-_DOC_TAB_PAD_Y = 4
-_DOC_TAB_GAP = 6
-
-
 class HelpOverlay:
     """Render and operate the in-app help/documentation browser."""
 
-    def __init__(self, document: HelpDocument | None = None, doc_id: str | None = None) -> None:
-        self.doc_id = doc_id or DEFAULT_HELP_DOC_ID
-        self.document = document or load_help_document_by_id(self.doc_id)
-        self.navigation = HelpNavigation(self.document)
+    def __init__(self) -> None:
+        self.navigation = HelpNavigation()
         self.visible = False
         self.fade = 0
         self.fade_dir = 0
@@ -43,8 +39,9 @@ class HelpOverlay:
         self._hit_regions: list[HelpHitRegion] = []
         self._hover_region: HelpHitRegion | None = None
         self._last_panel_rect = pygame.Rect(0, 0, 0, 0)
-        self._last_nav_rect = pygame.Rect(0, 0, 0, 0)
+        self._last_sidebar_rect = pygame.Rect(0, 0, 0, 0)
         self._last_content_rect = pygame.Rect(0, 0, 0, 0)
+        self._sidebar_row_heights: list[int] = []
 
         self._title_font = pygame.font.Font(None, 34)
         self._section_font = pygame.font.Font(None, 28)
@@ -52,11 +49,9 @@ class HelpOverlay:
         self._small = pygame.font.Font(None, 20)
         self._tiny = pygame.font.Font(None, 18)
 
-    def open(self, *, reload_document: bool = True, doc_id: str | None = None) -> None:
+    def open(self, *, doc_id: str | None = None) -> None:
         if doc_id is not None:
-            self.doc_id = doc_id
-        if reload_document:
-            self.set_document(load_help_document_by_id(self.doc_id))
+            self.navigation.select_section(doc_id, 0)
         self.visible = True
         self.fade_dir = 1
         self.navigation.search_focused = False
@@ -65,25 +60,26 @@ class HelpOverlay:
         self.fade_dir = -1
         self.navigation.search_focused = False
 
-    def set_document(self, document: HelpDocument, *, doc_id: str | None = None) -> None:
-        self.document = document
-        if doc_id is not None:
-            self.doc_id = doc_id
-        self.navigation.set_document(document)
-        self.status_message = document.error or ""
+    @property
+    def doc_id(self) -> str:
+        return self.navigation.selected_doc_id
 
-    def switch_document(self, doc_id: str) -> None:
-        if doc_id == self.doc_id:
-            return
-        self.doc_id = doc_id
-        self.set_document(load_help_document_by_id(doc_id), doc_id=doc_id)
+    @property
+    def document(self) -> HelpDocument:
+        return self.navigation.current_document
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
         if event.type == pygame.MOUSEMOTION:
+            if self.navigation._dragging_sidebar_scrollbar or self.navigation._dragging_content_scrollbar:
+                self._handle_scrollbar_drag(event.pos)
             self._hover_region = self._hit_region_at(event.pos)
             return None
         if event.type == pygame.MOUSEWHEEL:
             self._handle_wheel(event)
+            return None
+        if event.type == pygame.MOUSEBUTTONUP:
+            self.navigation._dragging_sidebar_scrollbar = False
+            self.navigation._dragging_content_scrollbar = False
             return None
         if event.type == pygame.MOUSEBUTTONDOWN:
             return self._handle_mouse_button(event)
@@ -97,9 +93,6 @@ class HelpOverlay:
             self.navigation.search_focused = True
             return None
         if event.key == pygame.K_TAB:
-            if not self.navigation.search_focused and len(HELP_DOCUMENTS) > 1:
-                self._cycle_document(reverse=bool(getattr(event, "mod", 0) & pygame.KMOD_SHIFT))
-                return None
             self.navigation.search_focused = not self.navigation.search_focused
             return None
         if event.key == pygame.K_BACKSPACE:
@@ -110,10 +103,25 @@ class HelpOverlay:
             self.navigation.clear_search()
             return None
         if event.key == pygame.K_UP:
-            self.navigation.move_selection(-1)
+            if self.navigation.search_focused:
+                self.navigation.scroll_sidebar(-3)
+            else:
+                self.navigation.move_selection(-1)
             return None
         if event.key == pygame.K_DOWN:
-            self.navigation.move_selection(1)
+            if self.navigation.search_focused:
+                self.navigation.scroll_sidebar(3)
+            else:
+                self.navigation.move_selection(1)
+            return None
+        if event.key == pygame.K_LEFT:
+            self.navigation.handle_left()
+            return None
+        if event.key == pygame.K_RIGHT:
+            self.navigation.handle_right()
+            return None
+        if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+            self.navigation.handle_enter_on_selected()
             return None
         if event.key == pygame.K_PAGEUP:
             self.navigation.scroll_content(-8)
@@ -160,15 +168,16 @@ class HelpOverlay:
         panel.fill((5, 18, 33, int(246 * fade_ratio)))
         self._hit_regions = []
         self._last_panel_rect = panel_rect
-        self._last_nav_rect = layout.nav_rect
+        self._last_sidebar_rect = layout.sidebar_rect
         self._last_content_rect = layout.content_rect
 
         self._draw_panel_glow(panel, fade_ratio)
         self._draw_header(panel, layout.header_rect, layout.close_rect)
         self._draw_search(panel, layout.search_rect)
-        self._draw_doc_tabs(panel, layout.doc_tabs_rect)
-        self._draw_nav(panel, layout.nav_rect)
+        self._draw_sidebar(panel, layout.sidebar_rect)
+        self._draw_sidebar_scrollbar(panel, layout.sidebar_scrollbar_rect)
         self._draw_content(panel, layout.content_rect)
+        self._draw_content_scrollbar(panel, layout.content_scrollbar_rect)
         self._draw_footer(panel, layout.footer_rect)
 
         screen.blit(panel, panel_rect.topleft)
@@ -176,7 +185,6 @@ class HelpOverlay:
     def _layout_for_screen(self, screen: pygame.Surface):
         return calculate_help_layout(
             screen.get_size(),
-            section_titles=[section.title for section in self.document.sections],
             title_font=self._font,
         )
 
@@ -191,11 +199,21 @@ class HelpOverlay:
         if region is None:
             self.navigation.search_focused = False
             return None
-        if region.kind == "section" and region.section_index is not None:
-            self.navigation.select_section(region.section_index)
+        if region.sidebar_scrollbar:
+            self.navigation._dragging_sidebar_scrollbar = True
+            self.navigation._drag_start_y = event.pos[1]
+            self.navigation._drag_start_scroll = self.navigation.sidebar_scroll
+            return None
+        if region.content_scrollbar:
+            self.navigation._dragging_content_scrollbar = True
+            self.navigation._drag_start_y = event.pos[1]
+            self.navigation._drag_start_scroll = self.navigation.content_scroll
+            return None
+        if region.kind == "group" and region.doc_id is not None:
+            self.navigation.toggle_group(region.doc_id)
             self.navigation.search_focused = False
-        elif region.kind == "doc_tab" and region.doc_id is not None:
-            self.switch_document(region.doc_id)
+        elif region.kind == "section" and region.doc_id is not None and region.section_index is not None:
+            self.navigation.select_section(region.doc_id, region.section_index)
             self.navigation.search_focused = False
         elif region.kind == "search":
             self.navigation.search_focused = True
@@ -207,14 +225,40 @@ class HelpOverlay:
             self.navigation.search_focused = True
         return None
 
+    def _handle_scrollbar_drag(self, pos: tuple[int, int]) -> None:
+        dy = pos[1] - self.navigation._drag_start_y
+        if self.navigation._dragging_sidebar_scrollbar:
+            total = self.navigation.sidebar_total_rows
+            visible = self.navigation.sidebar_visible_rows
+            if total <= visible:
+                return
+            layout = self._layout_for_screen(pygame.display.get_surface())
+            track_h = layout.sidebar_scrollbar_rect.height
+            scroll_range = total - visible
+            px_per_row = track_h / max(1, scroll_range)
+            if px_per_row > 0:
+                self.navigation.sidebar_scroll = max(0, min(scroll_range, int(self.navigation._drag_start_scroll + dy / px_per_row)))
+        elif self.navigation._dragging_content_scrollbar:
+            total = self.navigation.content_line_count
+            visible = self.navigation.content_visible_lines
+            if total <= visible:
+                return
+            layout = self._layout_for_screen(pygame.display.get_surface())
+            track_h = layout.content_scrollbar_rect.height
+            scroll_range = total - visible
+            px_per_row = track_h / max(1, scroll_range)
+            if px_per_row > 0:
+                self.navigation.content_scroll = max(0, min(scroll_range, int(self.navigation._drag_start_scroll + dy / px_per_row)))
+
     def _handle_wheel(self, event: pygame.event.Event) -> None:
         y = int(getattr(event, "y", 0))
         if y == 0 and getattr(event, "button", None) in (4, 5):
             y = 1 if event.button == 4 else -1
         pos = pygame.mouse.get_pos()
         amount = -y
-        if self._last_nav_rect.move(self._last_panel_rect.topleft).collidepoint(pos):
-            self.navigation.scroll_nav(amount * 3, self._visible_nav_rows())
+        panel_pos = (pos[0] - self._last_panel_rect.x, pos[1] - self._last_panel_rect.y)
+        if self._last_sidebar_rect.collidepoint(panel_pos):
+            self.navigation.scroll_sidebar(amount * 3)
         else:
             self.navigation.scroll_content(amount * 3)
 
@@ -225,13 +269,10 @@ class HelpOverlay:
         pygame.draw.rect(panel, (20, 77, 102, int(120 * fade_ratio)), rect.inflate(-8, -8), 1, border_radius=8)
 
     def _draw_header(self, panel: pygame.Surface, rect: pygame.Rect, close_rect: pygame.Rect) -> None:
-        entry = HELP_DOC_BY_ID.get(self.doc_id)
-        header_title = entry.title if entry else "PRIMORDIAL GUIDE"
-        title = self._title_font.render(header_title, True, (221, 249, 255))
-        panel.blit(title, (rect.x + 6, rect.y + 10))
-        subtitle_text = self._header_summary()
-        subtitle = self._small.render(subtitle_text, True, (139, 202, 225))
-        panel.blit(subtitle, (rect.x + 6, rect.y + 44))
+        title = self._title_font.render("PRIMORDIAL GUIDE", True, (221, 249, 255))
+        panel.blit(title, (rect.x + 6, rect.y + 4))
+        subtitle = self._small.render("Browse all help topics in the sidebar", True, (139, 202, 225))
+        panel.blit(subtitle, (rect.x + 6, rect.y + 34))
         hovered = self._region_hovered("button", action="close")
         self._draw_button(panel, close_rect, "Close", hovered=hovered)
         self._register_hit_region("button", close_rect, action="close")
@@ -248,109 +289,142 @@ class HelpOverlay:
         placeholder = "Search guide..."
         text = query if query else placeholder
         color = (230, 252, 255) if query else (104, 150, 172)
-        panel.blit(self._font.render(text, True, color), (rect.x + 12, rect.y + 9))
+        panel.blit(self._small.render(text, True, color), (rect.x + 10, rect.y + 10))
         if query:
-            clear_rect = pygame.Rect(rect.right - 31, rect.y + 7, 22, 24)
-            self._draw_button(panel, clear_rect, "x", hovered=self._region_hovered("button", action="clear_search"))
+            clear_rect = pygame.Rect(rect.right - 26, rect.y + 7, 18, 22)
+            self._draw_button(panel, clear_rect, "x", hovered=self._region_hovered("button", action="clear_search"), font=self._tiny)
             self._register_hit_region("button", clear_rect, action="clear_search")
         self._register_hit_region("search", rect)
 
-    def _draw_doc_tabs(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
-        if len(HELP_DOCUMENTS) <= 1:
-            return
-        x = rect.x
-        for entry in HELP_DOCUMENTS:
-            active = entry.doc_id == self.doc_id
-            hovered = self._region_hovered("doc_tab", doc_id=entry.doc_id)
-            label_surf = self._small.render(entry.title, True, (225, 250, 252))
-            tab_w = label_surf.get_width() + _DOC_TAB_PAD_X * 2
-            tab_rect = pygame.Rect(x, rect.y, tab_w, rect.height)
-            if active:
-                pygame.draw.rect(panel, (14, 55, 74), tab_rect, border_radius=8)
-                pygame.draw.rect(panel, (83, 210, 220), tab_rect, 1, border_radius=8)
-            elif hovered:
-                pygame.draw.rect(panel, (10, 38, 56), tab_rect, border_radius=8)
-                pygame.draw.rect(panel, (50, 130, 158), tab_rect, 1, border_radius=8)
-            else:
-                pygame.draw.rect(panel, (7, 25, 42), tab_rect, border_radius=8)
-                pygame.draw.rect(panel, (35, 88, 112), tab_rect, 1, border_radius=8)
-            text_color = (232, 252, 255) if active else (160, 195, 210)
-            panel.blit(
-                self._small.render(entry.title, True, text_color),
-                (tab_rect.x + _DOC_TAB_PAD_X, tab_rect.y + _DOC_TAB_PAD_Y + 2),
-            )
-            self._register_hit_region("doc_tab", tab_rect, doc_id=entry.doc_id)
-            x += tab_w + _DOC_TAB_GAP
-
-    def _cycle_document(self, *, reverse: bool = False) -> None:
-        doc_ids = [entry.doc_id for entry in HELP_DOCUMENTS]
-        if len(doc_ids) <= 1:
-            return
-        try:
-            current = doc_ids.index(self.doc_id)
-        except ValueError:
-            current = 0
-        delta = -1 if reverse else 1
-        next_index = (current + delta) % len(doc_ids)
-        self.switch_document(doc_ids[next_index])
-
-    def _draw_nav(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
+    def _draw_sidebar(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (6, 23, 39), (40, 103, 132))
-        indices = self.navigation.visible_section_indices
-        if not indices:
+        items = self.navigation.sidebar_items
+
+        if not items:
             message = "No sections match your search."
             y = rect.y + 14
-            for line in self._wrap_text(message, self._font, rect.width - 24):
-                panel.blit(self._font.render(line, True, (190, 224, 234)), (rect.x + 12, y))
+            for line in self._wrap_text(message, self._font, rect.width - 20):
+                panel.blit(self._font.render(line, True, (190, 224, 234)), (rect.x + 10, y))
                 y += 23
             return
 
-        visible_rows = self._visible_nav_rows(rect)
-        self.navigation.ensure_selected_nav_visible(visible_rows)
-        max_first = max(0, len(indices) - visible_rows)
-        self.navigation.nav_first_visible = min(self.navigation.nav_first_visible, max_first)
-        shown = indices[self.navigation.nav_first_visible:self.navigation.nav_first_visible + visible_rows]
-        y = rect.y + 10
-        for section_index in shown:
-            section = self.document.sections[section_index]
-            row_rect = pygame.Rect(rect.x + 10, y, rect.width - 20, NAV_ROW_HEIGHT - 6)
-            selected = section_index == self.navigation.selected_section_index
-            hovered = self._region_hovered("section", section_index=section_index)
-            if selected:
-                pygame.draw.rect(panel, (18, 75, 96), row_rect, border_radius=7)
-                pygame.draw.rect(panel, (102, 234, 235), row_rect, 1, border_radius=7)
-            elif hovered:
-                pygame.draw.rect(panel, (12, 47, 66), row_rect, border_radius=7)
-                pygame.draw.rect(panel, (55, 146, 174), row_rect, 1, border_radius=7)
-            color = (232, 252, 255) if selected else (166, 205, 221)
-            if section.level > 2:
-                color = (132, 178, 198) if not selected else color
-            label_rect = row_rect.inflate(-16, -6)
-            lines = self._wrap_text(section.title, self._font, label_rect.width)[:2]
-            line_y = label_rect.y + 1
-            for line in lines:
-                panel.blit(self._font.render(line, True, color), (label_rect.x, line_y))
-                line_y += 19
-            self._register_hit_region("section", row_rect, section_index=section_index)
-            y += NAV_ROW_HEIGHT
+        row_heights = []
+        for item in items:
+            if item.kind == "group":
+                row_heights.append(GROUP_ROW_HEIGHT)
+            else:
+                label_w = rect.width - 36
+                wrapped = self._wrap_text(item.title, self._small, label_w)
+                h = max(SIDEBAR_ROW_HEIGHT, len(wrapped) * 18 + 8)
+                row_heights.append(h)
+        self._sidebar_row_heights = row_heights
+        total_rows = len(items)
 
-        if self.navigation.nav_first_visible > 0:
-            panel.blit(self._tiny.render("more above", True, (108, 152, 174)), (rect.right - 82, rect.y + 5))
-        if self.navigation.nav_first_visible + visible_rows < len(indices):
-            panel.blit(self._tiny.render("more below", True, (108, 152, 174)), (rect.right - 82, rect.bottom - 20))
+        visible_height = rect.height - 20
+        visible_rows = 0
+        accum = 0
+        for h in row_heights:
+            if accum + h > visible_height:
+                break
+            visible_rows += 1
+            accum += h
+
+        self.navigation.set_sidebar_bounds(total_rows=total_rows, visible_rows=max(1, visible_rows))
+        self.navigation.ensure_selected_sidebar_visible()
+
+        first = self.navigation.sidebar_scroll
+        y = rect.y + 10
+        visible_count = 0
+        for row_idx in range(first, total_rows):
+            item = items[row_idx]
+            rh = row_heights[row_idx]
+            if y + rh > rect.bottom - 6:
+                break
+            visible_count += 1
+
+            if item.kind == "group":
+                self._draw_group_row(panel, rect, item, y, rh)
+            elif item.kind == "section":
+                self._draw_section_row(panel, rect, item, y, rh)
+
+            y += rh
+
+    def _draw_group_row(self, panel: pygame.Surface, sidebar_rect: pygame.Rect, item, y: int, height: int) -> None:
+        is_expanded = self.navigation.expanded_groups.get(item.doc_id, False)
+        is_selected_doc = item.doc_id == self.navigation.selected_doc_id
+        row_rect = pygame.Rect(sidebar_rect.x + 4, y, sidebar_rect.width - 8, height)
+        hovered = self._region_hovered("group", doc_id=item.doc_id)
+
+        if is_selected_doc:
+            pygame.draw.rect(panel, (14, 55, 74), row_rect, border_radius=6)
+        elif hovered:
+            pygame.draw.rect(panel, (10, 38, 56), row_rect, border_radius=6)
+        if is_selected_doc:
+            pygame.draw.rect(panel, (83, 210, 220), row_rect, 1, border_radius=6)
+        elif hovered:
+            pygame.draw.rect(panel, (50, 130, 158), row_rect, 1, border_radius=6)
+
+        arrow = "v " if is_expanded else "> "
+        color = (232, 252, 255) if is_selected_doc else (185, 218, 232)
+        label = arrow + item.title
+        label_w = row_rect.width - 12
+        wrapped = self._wrap_text(label, self._small, label_w)[:2]
+        line_y = row_rect.y + 4
+        for line in wrapped:
+            panel.blit(self._small.render(line, True, color), (row_rect.x + 6, line_y))
+            line_y += 18
+
+        self._register_hit_region("group", row_rect, doc_id=item.doc_id)
+
+    def _draw_section_row(self, panel: pygame.Surface, sidebar_rect: pygame.Rect, item, y: int, height: int) -> None:
+        is_selected = item.doc_id == self.navigation.selected_doc_id and item.section_index == self.navigation.selected_section_index
+        row_rect = pygame.Rect(sidebar_rect.x + 10, y, sidebar_rect.width - 14, height)
+        hovered = self._region_hovered("section", doc_id=item.doc_id, section_index=item.section_index)
+
+        if is_selected:
+            pygame.draw.rect(panel, (18, 75, 96), row_rect, border_radius=5)
+            pygame.draw.rect(panel, (102, 234, 235), row_rect, 1, border_radius=5)
+        elif hovered:
+            pygame.draw.rect(panel, (12, 47, 66), row_rect, border_radius=5)
+
+        color = (232, 252, 255) if is_selected else (166, 205, 221)
+        label_w = row_rect.width - 20
+        wrapped = self._wrap_text(item.title, self._small, label_w)[:3]
+        line_y = row_rect.y + 2
+        for line in wrapped:
+            panel.blit(self._small.render(line, True, color), (row_rect.x + 14, line_y))
+            line_y += 18
+
+        self._register_hit_region("section", row_rect, doc_id=item.doc_id, section_index=item.section_index)
+
+    def _draw_sidebar_scrollbar(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
+        total = self.navigation.sidebar_total_rows
+        visible = self.navigation.sidebar_visible_rows
+        if total <= visible:
+            return
+        pygame.draw.rect(panel, (14, 40, 56), rect, border_radius=4)
+        ratio = visible / max(1, total)
+        thumb_h = max(20, int(rect.height * ratio))
+        max_scroll = max(1, total - visible)
+        scroll = self.navigation.sidebar_scroll
+        thumb_y = rect.y + int((rect.height - thumb_h) * (scroll / max_scroll))
+        thumb_color = (100, 210, 220) if self.navigation._dragging_sidebar_scrollbar else (70, 180, 200)
+        pygame.draw.rect(panel, thumb_color, pygame.Rect(rect.x, thumb_y, rect.width, thumb_h), border_radius=4)
+        self._register_hit_region("sidebar_scrollbar", rect, sidebar_scrollbar=True)
 
     def _draw_content(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (7, 24, 39), (42, 104, 132))
         section = self._selected_section()
         title = section.title if section is not None else "No Matching Sections"
         y = rect.y + 16
-        for line in self._wrap_text(title, self._section_font, rect.width - 40)[:2]:
+        content_width = rect.width - 36
+        for line in self._wrap_text(title, self._section_font, content_width)[:2]:
             panel.blit(self._section_font.render(line, True, (234, 251, 255)), (rect.x + 18, y))
             y += 25
         pygame.draw.line(panel, (35, 88, 112), (rect.x + 16, y + 4), (rect.right - 16, y + 4), 1)
         y += 18
 
-        body_rect = pygame.Rect(rect.x + 18, y, rect.width - 36, rect.bottom - y - 14)
+        body_rect = pygame.Rect(rect.x + 18, y, content_width, rect.bottom - y - 14)
         content_lines = self._content_lines(section, body_rect.width)
         visible_lines = max(1, body_rect.height // 23)
         self.navigation.set_content_bounds(
@@ -366,28 +440,45 @@ class HelpOverlay:
                 color = (168, 213, 226)
             panel.blit(self._font.render(line, True, color), (body_rect.x, y))
             y += 23
-        if self.navigation.content_line_count > visible_lines:
-            self._draw_scrollbar(panel, rect, self.navigation.content_scroll, self.navigation.content_line_count, visible_lines)
+
+    def _draw_content_scrollbar(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
+        total = self.navigation.content_line_count
+        visible = self.navigation.content_visible_lines
+        if total <= visible:
+            return
+        pygame.draw.rect(panel, (14, 40, 56), rect, border_radius=4)
+        ratio = visible / max(1, total)
+        thumb_h = max(20, int(rect.height * ratio))
+        max_scroll = max(1, total - visible)
+        scroll = self.navigation.content_scroll
+        thumb_y = rect.y + int((rect.height - thumb_h) * (scroll / max_scroll))
+        thumb_color = (100, 210, 220) if self.navigation._dragging_content_scrollbar else (70, 180, 200)
+        pygame.draw.rect(panel, thumb_color, pygame.Rect(rect.x, thumb_y, rect.width, thumb_h), border_radius=4)
+        self._register_hit_region("content_scrollbar", rect, content_scrollbar=True)
 
     def _draw_footer(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (5, 20, 32), (34, 88, 112))
-        selected_pos = self.navigation.selected_visible_position + 1 if self.navigation.visible_section_indices else 0
-        total = len(self.navigation.visible_section_indices)
-        status = f"Section {selected_pos} / {total}"
+        entry = HELP_DOC_BY_ID.get(self.navigation.selected_doc_id)
+        doc_title = entry.title if entry else self.navigation.selected_doc_id
+        section_count = len(self.navigation.current_document.sections)
+        status = f"{doc_title} · Section {self.navigation.selected_section_index + 1} / {section_count}"
         if self.navigation.search_query:
             status += f" · Search: {self.navigation.search_query}"
         if self.status_message:
             status += " · " + self.status_message
-        panel.blit(self._small.render(status, True, (190, 230, 238)), (rect.x + 12, rect.y + 10))
-        hint = "Mouse: click sections, Tab doc. Keyboard: Up/Down section, PageUp/PageDown scroll, / search, Tab doc, Esc close."
-        for line in self._wrap_text(hint, self._small, rect.width - 24)[:1]:
-            panel.blit(self._small.render(line, True, (141, 190, 210)), (rect.x + 12, rect.y + 35))
+        panel.blit(self._small.render(status, True, (190, 230, 238)), (rect.x + 12, rect.y + 8))
+        hint = "Up/Down navigate, Left/Right collapse/expand, Enter select, / search, Esc close. Mouse: click sidebar, wheel to scroll, drag scrollbars."
+        hint_y = rect.y + 32
+        for line in self._wrap_text(hint, self._small, rect.width - 24)[:2]:
+            panel.blit(self._small.render(line, True, (141, 190, 210)), (rect.x + 12, hint_y))
+            hint_y += 18
 
     def _selected_section(self) -> HelpSection | None:
-        if not self.document.sections:
+        doc = self.navigation.current_document
+        if not doc.sections:
             return None
-        index = max(0, min(len(self.document.sections) - 1, self.navigation.selected_section_index))
-        return self.document.sections[index]
+        index = max(0, min(len(doc.sections) - 1, self.navigation.selected_section_index))
+        return doc.sections[index]
 
     def _content_lines(self, section: HelpSection | None, max_width: int) -> list[str]:
         if section is None:
@@ -407,18 +498,6 @@ class HelpOverlay:
                 lines.append((prefix if idx == 0 else "  ") + line)
         return lines or ["This section has no body text yet."]
 
-    def _header_summary(self) -> str:
-        source = self.document.source_path.name
-        if not self.document.ok:
-            return f"Documentation source: {source} · load issue"
-        return f"Documentation source: {source} · {len(self.document.sections)} sections"
-
-    def _visible_nav_rows(self, rect: pygame.Rect | None = None) -> int:
-        nav_rect = rect or self._last_nav_rect
-        if nav_rect.height <= 0:
-            return 1
-        return max(1, (nav_rect.height - 20) // NAV_ROW_HEIGHT)
-
     def _register_hit_region(
         self,
         kind: str,
@@ -427,6 +506,8 @@ class HelpOverlay:
         section_index: int | None = None,
         action: str | None = None,
         doc_id: str | None = None,
+        sidebar_scrollbar: bool = False,
+        content_scrollbar: bool = False,
     ) -> None:
         self._hit_regions.append(
             HelpHitRegion(
@@ -435,6 +516,8 @@ class HelpOverlay:
                 section_index=section_index,
                 action=action,
                 doc_id=doc_id,
+                sidebar_scrollbar=sidebar_scrollbar,
+                content_scrollbar=content_scrollbar,
             )
         )
 
@@ -496,26 +579,12 @@ class HelpOverlay:
         text: str,
         *,
         hovered: bool = False,
+        font: pygame.font.Font | None = None,
     ) -> None:
         fill = (18, 72, 92) if hovered else (10, 42, 60)
         border = (103, 232, 230) if hovered else (54, 135, 158)
         pygame.draw.rect(panel, fill, rect, border_radius=6)
         pygame.draw.rect(panel, border, rect, 1, border_radius=6)
-        surf = self._small.render(text, True, (225, 250, 252))
+        f = font or self._small
+        surf = f.render(text, True, (225, 250, 252))
         panel.blit(surf, (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2))
-
-    def _draw_scrollbar(
-        self,
-        panel: pygame.Surface,
-        rect: pygame.Rect,
-        scroll: int,
-        total_lines: int,
-        visible_lines: int,
-    ) -> None:
-        track = pygame.Rect(rect.right - 9, rect.y + 60, 4, rect.height - 78)
-        pygame.draw.rect(panel, (19, 54, 70), track, border_radius=2)
-        ratio = visible_lines / max(1, total_lines)
-        thumb_h = max(26, int(track.height * ratio))
-        max_scroll = max(1, total_lines - visible_lines)
-        thumb_y = track.y + int((track.height - thumb_h) * (scroll / max_scroll))
-        pygame.draw.rect(panel, (84, 202, 216), pygame.Rect(track.x, thumb_y, track.width, thumb_h), border_radius=2)

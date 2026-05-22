@@ -11,6 +11,8 @@ import pygame
 class HelpHitRegion:
     kind: str
     rect: pygame.Rect
+    doc_id: str | None = None
     section_index: int | None = None
     action: str | None = None
-    doc_id: str | None = None
+    sidebar_scrollbar: bool = False
+    content_scrollbar: bool = False

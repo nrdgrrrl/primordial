@@ -2,6 +2,73 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-21] — fix: replace help tabs with expandable sidebar
+
+Replaced the horizontal document tab strip in the Help browser with a
+vertical expandable/collapsible sidebar tree, added visible scrollbars
+for sidebar and content pane, and improved text wrapping throughout.
+
+Sidebar tree:
+- Each registered help document is a top-level group in the left sidebar.
+- Clicking a group heading expands/collapses its child sections.
+- The active group and active section are visually highlighted.
+- Left key collapses an expanded group; Right key expands a collapsed group.
+- Enter/Space toggles groups or selects sections.
+- Default: first document (Start) expanded, all others collapsed.
+- Selecting a section in a collapsed group auto-expands that group.
+
+Scrollbars:
+- Visible scrollbar in sidebar and content pane where content overflows.
+- Scrollbar thumb size reflects visible/total row ratio.
+- Scrollbar thumb is draggable with mouse.
+- Mouse wheel scrolls sidebar when cursor is over sidebar, content otherwise.
+
+Text wrapping:
+- Sidebar group and section labels wrap to available width (up to 3 lines).
+- Content pane paragraphs wrap to available width with hanging bullet indent.
+- Footer hint wraps to multiple lines.
+- Header title and subtitle no longer cut off.
+
+Layout:
+- Removed doc_tabs_rect and nav_rect from HelpOverlayLayout.
+- Added sidebar_rect, sidebar_scrollbar_rect, content_scrollbar_rect.
+- Sidebar width set to 34% of available width (moderate increase).
+- Gave vertical space formerly used by doc tab row back to sidebar/content.
+- HelpOverlay constructor no longer takes document/doc_id arguments.
+- Navigation loads all documents eagerly and tracks state internally.
+
+Search:
+- Search filters the sidebar tree to matching groups/sections.
+- Matching groups auto-expand while search is active.
+- Clearing search restores the user's pre-search expanded/collapsed state.
+
+Shortcuts preserved:
+- H opens Help, U toggles HUD (unchanged).
+- Settings overlay Help action shortcut remains H.
+- No ? or F1 Help shortcuts reintroduced.
+- Bottom action bar shows H Help and U HUD (unchanged).
+
+Code:
+- Rewrote `primordial/rendering/help_navigation.py` with HelpNavItem model
+  and expandable tree state tracking (selected_doc_id, selected_section_index,
+  expanded_groups, sidebar_scroll, focused_sidebar_index, search state).
+- Rewrote `primordial/rendering/help_overlay.py` to draw sidebar tree
+  with group/section rows, visible scrollbars, and improved text wrapping.
+- Rewrote `primordial/rendering/help_layout.py` with sidebar/content
+  scrollbar rects, removed doc_tabs/nav_rect fields.
+- Updated `primordial/rendering/help_mouse.py` with scrollbar hit region
+  flags and doc_id field.
+- Removed doc_tab hit regions, _draw_doc_tabs, _cycle_document.
+- Navigation now uses `sidebar_items` built from HelpNavItem tree instead
+  of flat `visible_section_indices`.
+
+Tests:
+- 53 tests covering sidebar tree model, group expand/collapse, section
+  selection, search behavior, scrollbar hit regions, text wrapping, and
+  layout invariants.
+- No doc_tab hit region tests (tabs removed).
+- All 403 project tests pass.
+
 ## [2026-05-21] — fix: organize in-app help and normalize help shortcuts
 
 Changed Help from a buried Settings sub-action to a top-level runtime
