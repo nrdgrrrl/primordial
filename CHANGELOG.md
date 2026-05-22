@@ -4,31 +4,24 @@ All notable changes to Primordial are documented in this file.
 
 ## [2026-05-22] — diagnostics: add predator collapse report
 
-Add a headless predator-collapse diagnostics runner and report generator
+Add a graphical predator-collapse diagnostics runner and report generator
 that produces both JSON and Markdown reports from multi-seed predator_prey
-simulations, with no gameplay changes.
+simulations. The runner uses full pygame + renderer mode so results match
+real gameplay behavior. No gameplay changes were made.
 
 New tool:
-- `tools/predator_collapse_diagnostics.py` — run predator_prey headlessly
-  for one or more seeds, collecting predator life diagnostics and producing
-  structured report sections A–I (run summary, predator life summary, death
-  context breakdown, origin breakdown, reproduction bottleneck, prey access /
-  hunting bottleneck, scarcity analysis, epistasis/body-plan analysis, and
-  data-driven recommendations).
+- `tools/predator_collapse_diagnostics.py` — run predator_prey in full
+  graphical mode for one or more seeds, collecting predator life diagnostics
+  and producing structured report sections A-I.
 
-Diagnostic field additions (observational only, no gameplay changes):
-- `age_at_death` — predator age in ticks at death
-- `predator_count_at_death` / `prey_count_at_death` — species census at death
-- `depth_band_at_death` — depth band (0/1/2) at death
-- `strategy_bucket_at_start` / `strategy_bucket_at_end` — phenotype strategy
-- `phenotype_modifiers_at_start` / `phenotype_modifiers_at_end` — dict of
-  effective phenotype modifier values at birth and death
-- `born_during_low_predator_rarity` — whether the predator was born when
-  predator count was ≤ 5
+Diagnostic field additions (observational only):
+- age_at_death, predator_count_at_death, prey_count_at_death
+- depth_band_at_death
+- strategy_bucket_at_start/end
+- phenotype_modifiers_at_start/end
+- born_during_low_predator_rarity
 
-Tests:
-- 23 new tests in `test_predator_collapse_diagnostics.py` covering all
-  aggregation helpers, report sections, markdown rendering, and edge cases.
+Tests: 23 new in test_predator_collapse_diagnostics.py
 
 ## [2026-05-22] — feat: expose effective phenotype in inspect mode
 

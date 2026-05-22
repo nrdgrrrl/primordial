@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Headless predator-collapse diagnostics runner and report generator.
+"""Graphical predator-collapse diagnostics runner and report generator.
 
-Runs predator_prey mode headlessly for one or more seeds, collects the
-existing predator-life diagnostics, and produces both a structured JSON
-file and a human-readable Markdown report.
+Runs predator_prey mode in full graphical mode (pygame + renderer) for one
+or more seeds, collects predator-life diagnostics, and produces both a
+structured JSON file and a human-readable Markdown report.
+
+The simulation must run in graphical mode because rendering affects
+simulation outcomes (e.g. frame pacing, predator_prey_game_over timing,
+adaptive tuning restarts). Headless stepping diverges from real gameplay.
 
 Usage:
   python tools/predator_collapse_diagnostics.py --runs 5 --max-ticks 20000 \
@@ -15,18 +19,37 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean, median
 from typing import Any
 
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import pygame
+
+from primordial.display.mode import DEFAULT_WINDOWED_SIZE
+from primordial.display.cursor import hide_runtime_cursor, restore_system_cursor
+from primordial.rendering import create_renderer, display_flags_for_settings
+from primordial.runtime import (
+    LoopTimingCollector,
+    advance_fixed_step_frame,
+    build_frame_metrics,
+    create_fixed_step_loop_state,
+    get_effective_target_fps,
+    simulation_timing_is_suppressed,
+)
 from primordial.scenarios import build_settings_for_scenario
+from primordial.settings import Settings
 from primordial.simulation import Simulation
 from primordial.simulation.depth import DEPTH_BAND_NAMES
 
@@ -40,17 +63,17 @@ _PREDATOR_PREY_MODE = "predator_prey"
 
 
 # ---------------------------------------------------------------------------
-# Headless runner
+# Graphical runner (full pygame + renderer loop)
 # ---------------------------------------------------------------------------
 
-def run_simulation_headless(
+def run_simulation_graphical(
     seed: int,
     max_ticks: int,
     *,
     scenario_id: str = "predator_prey_medium",
     epistasis: str | None = None,
 ) -> dict[str, Any]:
-    """Run a single predator_prey simulation headlessly and return results."""
+    """Run a single predator_prey simulation in full graphical mode and return results."""
     scenario, settings = build_settings_for_scenario(scenario_id)
     if settings.sim_mode != _PREDATOR_PREY_MODE:
         raise ValueError(
@@ -69,12 +92,28 @@ def run_simulation_headless(
     settings.mode_params.setdefault(_PREDATOR_PREY_MODE, {})
     settings.mode_params[_PREDATOR_PREY_MODE]["adaptive_tuning_enabled"] = False
 
+    # Force windowed mode so each seed gets a predictable display
+    settings.fullscreen = False
+    settings.show_hud = False
+
+    pygame.init()
+    width, height = DEFAULT_WINDOWED_SIZE
+    screen = pygame.display.set_mode(
+        (width, height),
+        display_flags_for_settings(settings),
+    )
+    pygame.display.set_caption(f"Primordial Diagnostics — seed {seed}")
+    hide_runtime_cursor()
+
     random.seed(seed)
-    simulation = Simulation(scenario.width, scenario.height, settings, seed=seed)
+    simulation = Simulation(width, height, settings, seed=seed)
+    renderer = create_renderer(screen, settings, debug=False)
+    renderer.resize(simulation.width, simulation.height, screen=screen)
+    clock = pygame.time.Clock()
+    runtime_loop = create_fixed_step_loop_state(settings)
 
     # Collect periodic species counts for time-series
     species_counts: list[dict[str, int]] = []
-
     pred_count, prey_count = simulation.get_species_counts()
     species_counts.append({"step": 0, "predators": pred_count, "prey": prey_count})
 
@@ -82,34 +121,62 @@ def run_simulation_headless(
     collapse_cause: str | None = None
     tick_of_first_predator_zero: int | None = None
 
-    for tick in range(1, max_ticks + 1):
-        simulation.step()
+    try:
+        while True:
+            # Pump events to keep the OS happy
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    # Treat window close as end-of-run
+                    break
 
-        pred_count, prey_count = simulation.get_species_counts()
-        species_counts.append({
-            "step": tick,
-            "predators": pred_count,
-            "prey": prey_count,
-        })
+            # Handle predator_prey runtime restarts (adaptive tuning)
+            if simulation.update_predator_prey_runtime(now_seconds=time.monotonic()):
+                renderer.reset_runtime_state()
+                runtime_loop.reset_timing_debt()
 
-        # Track first tick where predators reach zero
-        if pred_count == 0 and tick_of_first_predator_zero is None:
-            tick_of_first_predator_zero = tick
+            sim_suppressed = simulation_timing_is_suppressed(simulation)
 
-        # Check for game over
-        if simulation.predator_prey_game_over_active:
-            game_over = True
+            # Stop conditions
             state = simulation._predator_prey_state
-            collapse_cause = state.collapse_cause
-            # Continue just long enough for diagnostics to capture final state
-            break
+            if state.sim_ticks >= max_ticks:
+                break
+            if simulation.predator_prey_game_over_active:
+                game_over = True
+                collapse_cause = state.collapse_cause
+                break
 
-    # After the loop, gather diagnostics
+            sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
+                simulation,
+                runtime_loop,
+                allow_simulation=not sim_suppressed,
+            )
+
+            runtime_loop.restore_buffered_attacks(simulation)
+            renderer.draw(simulation)
+            pygame.display.flip()
+            clock.tick(max(1, get_effective_target_fps(settings)))
+
+            # Record species counts periodically (every ~60 simulation steps)
+            current_ticks = state.sim_ticks
+            if current_ticks % 60 == 0 and (not species_counts or species_counts[-1]["step"] != current_ticks):
+                pred_count, prey_count = simulation.get_species_counts()
+                species_counts.append({
+                    "step": current_ticks,
+                    "predators": pred_count,
+                    "prey": prey_count,
+                })
+                if pred_count == 0 and tick_of_first_predator_zero is None:
+                    tick_of_first_predator_zero = current_ticks
+
+    finally:
+        restore_system_cursor()
+        pygame.quit()
+
+    # Gather diagnostics after the loop
     diagnostics = simulation.export_predator_diagnostics()
     stability = simulation.get_predator_prey_stability_stats()
     epistasis_summary = simulation.get_epistasis_summary()
 
-    state = simulation._predator_prey_state
     final_pred, final_prey = simulation.get_species_counts()
 
     return {
@@ -983,11 +1050,12 @@ def main() -> int:
     print(f"Running predator-collapse diagnostics: {len(seeds)} seed(s), "
           f"max {args.max_ticks} ticks each, scenario={args.scenario}, "
           f"epistasis={args.epistasis}")
+    print("Each seed runs in full graphical mode (pygame window will appear).")
 
     runs: list[dict[str, Any]] = []
     for i, seed in enumerate(seeds):
-        print(f"  Seed {seed} ({i + 1}/{len(seeds)})...", end=" ", flush=True)
-        result = run_simulation_headless(
+        print(f"  Seed {seed} ({i + 1}/{len(seeds)})...", flush=True)
+        result = run_simulation_graphical(
             seed,
             args.max_ticks,
             scenario_id=args.scenario,
@@ -998,7 +1066,7 @@ def main() -> int:
         ticks = result["final_sim_ticks"]
         pred = result["final_predator_count"]
         prey = result["final_prey_count"]
-        print(f"ticks={ticks}, predators={pred}, prey={prey}, "
+        print(f"    ticks={ticks}, predators={pred}, prey={prey}, "
               f"cause={cause}")
 
     print("Building report...")
