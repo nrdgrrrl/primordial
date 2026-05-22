@@ -250,10 +250,10 @@ The following are **real biological simulations** implemented in code:
 
 The following are **visual metaphors, not biological models**:
 
-- The glyph shape does not affect survival. A more complex glyph is not
-  "more evolved" or "fitter." Glyph morphology is determined by neutral
-  visual traits, including simple eco-morphological epistasis where body-plan
-  traits change ecological performance.
+- The glyph shape does not independently affect survival, but eco-morphological
+  epistasis links some glyph-correlated traits (size, speed, complexity, symmetry,
+  appendages, motion style) to ecological performance. Inspect Mode shows both
+  the raw genome and the effective phenotype for each creature.
 - The glow and bioluminescent pulse are cosmetic. They do not signal mating
   readiness, territory, or fitness.
 - Trail length reflects motion style, not intelligence or health.
@@ -273,6 +273,10 @@ The following are **visual metaphors, not biological models**:
   alter effective speed, sensing, energy cost, reproduction, predation, and
   depth behavior
 - Neutral drift of unconstrained traits
+- Simple epistatic trait interactions where combinations of inherited traits
+  alter effective speed, sensing, energy cost, reproduction, predation, and
+  depth behavior. Inspect Mode (press I) shows each creature's effective
+  phenotype, including the body-plan bucket and specific modifier values.
 - Population dynamics driven by resource cycles and predation
 - Spatial effects on evolution (zone adaptation, local density)
 - Temporary local extinction and mutation-driven role recovery within a
@@ -839,9 +843,9 @@ unless an interactive overlay or Inspect Mode is active.
 | `F` | Toggle fullscreen/windowed |
 | `R` | Reset the current simulation run |
 | `S` | Open or close settings |
-| `I` | Toggle Inspect Mode |
+| `I` | Toggle Inspect Mode (shows body plan, key effect, and in detail mode, all effective phenotype modifiers) |
 | `M` | In Inspect Mode, switch between pause and slow motion |
-| `D` | In Inspect Mode, toggle compact/detailed card |
+| `D` | In Inspect Mode, toggle compact/detailed card (detail adds raw genome values and effective phenotype modifiers) |
 | mouse click | In Inspect Mode, select a creature |
 | hold `P` | Highlight predators |
 | `+` / `=` | Increase food spawn rate |
@@ -919,7 +923,14 @@ Some real mechanics are not obvious from the screen:
 - **Reproductive readiness** is not shown. A creature at 0.79 energy looks the
   same as one at 0.81.
 - **Trait distributions over time** are not graphed. The HUD shows current
-  snapshots; Inspect Mode shows one creature at a time.
+  snapshots; Inspect Mode shows one creature at a time, including its effective
+  phenotype modifiers.
+- **Epistatic trait interactions** are not visible on the screen. Inspect Mode
+  shows each creature's body-plan bucket (e.g. "heavy hunter", "swift small")
+  and key effect phrase. Detail mode shows the full set of effective phenotype
+  modifiers (speed, move cost, metabolism, sensing, food efficiency, reproduction
+  threshold, contact quality, flee agility, depth transition, in-band/cross-band
+  sense). When epistasis is disabled, the card shows "Epistasis disabled" instead.
 - **Zone cost modifiers** are not per-creature. Only visible as aggregate zone
   backgrounds.
 - **Evolutionary adaptation** is indirect; you infer it from population changes,

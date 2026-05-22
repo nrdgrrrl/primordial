@@ -35,6 +35,13 @@ from primordial.rendering.creature_observation import (
     infer_behavior_mode,
     infer_attention_target,
 )
+from primordial.simulation.phenotype import (
+    EffectivePhenotype,
+    describe_phenotype_effect,
+    format_phenotype_modifiers,
+    resolve_effective_phenotype,
+)
+from primordial.simulation.genome import Genome
 
 
 def _make_creature(
@@ -112,8 +119,28 @@ def _make_simulation(
     *,
     width: int = 800,
     height: int = 600,
+    epistasis_enabled: bool = True,
 ) -> SimpleNamespace:
-    return SimpleNamespace(creatures=creatures or [], width=width, height=height)
+    sim = SimpleNamespace(creatures=creatures or [], width=width, height=height)
+    sim._epistasis_enabled = lambda: epistasis_enabled
+    sim._get_epistasis_strength = lambda: 1.0
+
+    def _get_effective_phenotype(creature):
+        from primordial.simulation.phenotype import resolve_effective_phenotype
+        return resolve_effective_phenotype(
+            creature.genome,
+            species=creature.species,
+            epistasis_enabled=epistasis_enabled,
+            epistasis_strength=1.0,
+        )
+
+    sim._get_effective_phenotype = _get_effective_phenotype
+
+    def _get_creature_effective_phenotype(creature):
+        return sim._get_effective_phenotype(creature)
+
+    sim.get_creature_effective_phenotype = _get_creature_effective_phenotype
+    return sim
 
 
 class TestInspectModeToggle(unittest.TestCase):
@@ -387,6 +414,7 @@ class TestBuildCreatureCard(unittest.TestCase):
         self.assertIn("section_vitals", card)
         self.assertIn("section_genome", card)
         self.assertIn("section_behavior", card)
+        self.assertIn("section_phenotype", card)
 
     def test_predator_fields(self):
         c1 = _make_creature(
@@ -435,6 +463,231 @@ class TestBuildCreatureCard(unittest.TestCase):
         sim = _make_simulation([c1])
         card = build_creature_card(c1, sim)
         self.assertNotIn("attention", card)
+
+    def test_phenotype_section_present_with_epistasis_enabled(self):
+        from primordial.simulation.genome import Genome
+        g = Genome(speed=0.82, size=0.22, sense_radius=0.77, efficiency=0.63,
+                    complexity=0.68, symmetry=0.74, appendages=0.31, motion_style=0.28,
+                    longevity=0.54, depth_preference=0.50)
+        c1 = _make_creature(species="prey")
+        c1.genome = g
+        sim = _make_simulation([c1], epistasis_enabled=True)
+        card = build_creature_card(c1, sim)
+        self.assertIn("section_phenotype", card)
+        self.assertIn("body_plan", card)
+        self.assertIn("key_effect", card)
+        self.assertEqual(card["epistasis_enabled"], "yes")
+
+    def test_phenotype_section_shows_epistasis_disabled(self):
+        c1 = _make_creature(species="prey")
+        sim = _make_simulation([c1], epistasis_enabled=False)
+        card = build_creature_card(c1, sim)
+        self.assertIn("section_phenotype", card)
+        self.assertEqual(card["epistasis_enabled"], "no")
+        self.assertEqual(card["body_plan"], "—")
+
+    def test_phenotype_modifiers_in_card_with_epistasis(self):
+        from primordial.simulation.genome import Genome
+        g = Genome(speed=0.82, size=0.22, sense_radius=0.77, efficiency=0.63,
+                    complexity=0.68, symmetry=0.74, appendages=0.31, motion_style=0.28,
+                    longevity=0.54, depth_preference=0.50)
+        c1 = _make_creature(species="prey")
+        c1.genome = g
+        sim = _make_simulation([c1], epistasis_enabled=True)
+        card = build_creature_card(c1, sim)
+        self.assertIn("modifier_speed_mult", card)
+        self.assertIn("modifier_movement_cost_mult", card)
+        self.assertIn("modifier_metabolic_cost_mult", card)
+        self.assertIn("modifier_sense_radius_mult", card)
+        self.assertIn("modifier_food_efficiency_mult", card)
+        self.assertIn("modifier_predation_contact_mult", card)
+        self.assertIn("modifier_flee_agility_mult", card)
+        # Modifier values should start with ×
+        self.assertTrue(card["modifier_speed_mult"].startswith("×"))
+
+    def test_heavy_hunter_strategy_bucket(self):
+        from primordial.simulation.genome import Genome
+        g = Genome(speed=0.80, size=0.75, sense_radius=0.50, efficiency=0.50,
+                    complexity=0.50, symmetry=0.50, appendages=0.50, motion_style=0.50,
+                    longevity=0.50, depth_preference=0.50, aggression=0.80)
+        c1 = _make_creature(species="predator")
+        c1.genome = g
+        sim = _make_simulation([c1], epistasis_enabled=True)
+        card = build_creature_card(c1, sim)
+        self.assertEqual(card["body_plan"], "heavy hunter")
+
+    def test_compact_panel_includes_body_plan_section(self):
+        mode = InspectMode(enabled=True, detail_mode="compact")
+        card = {
+            "species": "Prey",
+            "lineage": "#3",
+            "stage": "Young adult",
+            "behavior": "wandering",
+            "depth": "mid",
+            "energy": "0.50",
+            "vel": "0.10",
+            "age": "20 / 80  (25%)",
+            "tags": "Swift",
+            "body_plan": "swift small",
+            "key_effect": "Small fast body: speed faster, move cost cheaper",
+            "epistasis_enabled": "yes",
+        }
+        lines = build_inspect_panel_lines(card, mode)
+        section_texts = [line.text for line in lines if line.kind == "section"]
+        self.assertIn("Body plan", section_texts)
+        body_plan_keys = [line.key for line in lines if line.kind in {"row", "row_pair"}]
+        self.assertIn("body_plan", body_plan_keys)
+
+    def test_detail_panel_includes_effective_phenotype_section(self):
+        mode = InspectMode(enabled=True, detail_mode="detail")
+        card = {
+            "species": "Predator",
+            "lineage": "#12",
+            "stage": "Adult",
+            "behavior": "hunting",
+            "depth": "mid",
+            "energy": "0.81",
+            "vel": "0.44",
+            "age": "80 / 100  (80%)",
+            "tags": "Swift, Keen-eyed",
+            "motion": "Dart",
+            "depth_pref": "Deep",
+            "speed": "0.90",
+            "size": "0.40",
+            "sense": "0.80",
+            "aggr": "0.88",
+            "eff": "0.35",
+            "pos": "(120, 44)",
+            "attention": "prey",
+            "attention_conf": "78%",
+            "body_plan": "heavy hunter",
+            "key_effect": "Large fast body: contact stronger, move cost costlier",
+            "epistasis_enabled": "yes",
+            "modifier_speed_mult": "×1.05",
+            "modifier_movement_cost_mult": "×1.18",
+            "modifier_metabolic_cost_mult": "×1.02",
+            "modifier_sense_radius_mult": "×1.00",
+            "modifier_food_efficiency_mult": "×0.97",
+            "modifier_reproduction_threshold_mult": "×1.12",
+            "modifier_predation_contact_mult": "×1.10",
+            "modifier_flee_agility_mult": "×0.95",
+            "modifier_depth_transition_mult": "×1.00",
+            "modifier_in_band_sense_mult": "×1.00",
+            "modifier_cross_band_sense_mult": "×1.00",
+            "recent_animal_e": "0.120",
+            "satiety": "30t",
+        }
+        lines = build_inspect_panel_lines(card, mode)
+        section_texts = [line.text for line in lines if line.kind == "section"]
+        self.assertIn("Effective phenotype", section_texts)
+        all_keys = {line.key for line in lines if line.kind in {"row", "row_pair"}}
+        self.assertIn("modifier_speed_mult", all_keys)
+        self.assertIn("modifier_predation_contact_mult", all_keys)
+
+    def test_detail_panel_prey_shows_flee_not_contact(self):
+        mode = InspectMode(enabled=True, detail_mode="detail")
+        card = {
+            "species": "Prey",
+            "lineage": "#5",
+            "stage": "Juvenile",
+            "behavior": "foraging",
+            "depth": "surface",
+            "energy": "0.55",
+            "vel": "0.20",
+            "age": "15 / 60  (25%)",
+            "tags": "Docile",
+            "motion": "Swim",
+            "depth_pref": "Mid",
+            "speed": "0.60",
+            "size": "0.40",
+            "sense": "0.45",
+            "aggr": "0.15",
+            "eff": "0.55",
+            "pos": "(200, 100)",
+            "body_plan": "generalist",
+            "key_effect": "Generalist body: baseline modifiers",
+            "epistasis_enabled": "yes",
+            "modifier_speed_mult": "×1.00",
+            "modifier_movement_cost_mult": "×1.00",
+            "modifier_metabolic_cost_mult": "×1.00",
+            "modifier_sense_radius_mult": "×1.00",
+            "modifier_food_efficiency_mult": "×1.00",
+            "modifier_reproduction_threshold_mult": "×1.00",
+            "modifier_predation_contact_mult": "×1.00",
+            "modifier_flee_agility_mult": "×1.02",
+            "modifier_depth_transition_mult": "×1.00",
+            "modifier_in_band_sense_mult": "×1.00",
+            "modifier_cross_band_sense_mult": "×1.00",
+        }
+        lines = build_inspect_panel_lines(card, mode)
+        all_keys = {line.key for line in lines if line.kind in {"row", "row_pair"}}
+        self.assertIn("modifier_flee_agility_mult", all_keys)
+        self.assertNotIn("modifier_predation_contact_mult", all_keys)
+
+    def test_detail_panel_predator_shows_contact_not_flee(self):
+        mode = InspectMode(enabled=True, detail_mode="detail")
+        card = {
+            "species": "Predator",
+            "lineage": "#7",
+            "stage": "Adult",
+            "behavior": "hunting",
+            "depth": "mid",
+            "energy": "0.70",
+            "vel": "0.35",
+            "age": "40 / 120  (33%)",
+            "tags": "Aggressive",
+            "motion": "Dart",
+            "depth_pref": "Deep",
+            "speed": "0.85",
+            "size": "0.65",
+            "sense": "0.70",
+            "aggr": "0.80",
+            "eff": "0.40",
+            "pos": "(300, 200)",
+            "body_plan": "heavy hunter",
+            "key_effect": "Large fast body: contact stronger, move cost costlier",
+            "epistasis_enabled": "yes",
+            "modifier_speed_mult": "×1.05",
+            "modifier_movement_cost_mult": "×1.22",
+            "modifier_metabolic_cost_mult": "×1.08",
+            "modifier_sense_radius_mult": "×1.04",
+            "modifier_food_efficiency_mult": "×0.95",
+            "modifier_reproduction_threshold_mult": "×1.10",
+            "modifier_predation_contact_mult": "×1.12",
+            "modifier_flee_agility_mult": "×0.98",
+            "modifier_depth_transition_mult": "×1.00",
+            "modifier_in_band_sense_mult": "×1.00",
+            "modifier_cross_band_sense_mult": "×1.00",
+            "recent_animal_e": "0.200",
+            "satiety": "60t",
+        }
+        lines = build_inspect_panel_lines(card, mode)
+        all_keys = {line.key for line in lines if line.kind in {"row", "row_pair"}}
+        self.assertIn("modifier_predation_contact_mult", all_keys)
+        self.assertNotIn("modifier_flee_agility_mult", all_keys)
+
+    def test_epistasis_disabled_shows_in_compact_panel(self):
+        mode = InspectMode(enabled=True, detail_mode="compact")
+        card = {
+            "species": "Prey",
+            "lineage": "#3",
+            "stage": "Young adult",
+            "behavior": "wandering",
+            "depth": "mid",
+            "energy": "0.50",
+            "vel": "0.10",
+            "age": "20 / 80  (25%)",
+            "tags": "Swift",
+            "body_plan": "—",
+            "key_effect": "—",
+            "epistasis_enabled": "no",
+        }
+        lines = build_inspect_panel_lines(card, mode)
+        body_plan_rows = [line for line in lines if line.key == "body_plan"]
+        self.assertTrue(len(body_plan_rows) > 0)
+        key_effect_rows = [line for line in lines if line.key == "key_effect"]
+        self.assertTrue(len(key_effect_rows) > 0)
+        self.assertEqual(key_effect_rows[0].value, "Epistasis disabled")
 
 
 class TestInspectPanelPresentation(unittest.TestCase):
@@ -841,6 +1094,73 @@ class TestInferAttentionTarget(unittest.TestCase):
         sim = _make_simulation([c])
         result = infer_attention_target(c, sim)
         self.assertIsNone(result)
+
+
+class TestDescribePhenotypeEffect(unittest.TestCase):
+    """Tests for describe_phenotype_effect and format_phenotype_modifiers."""
+
+    def test_descibe_heavy_hunter(self):
+        genome = Genome(
+            speed=0.80, size=0.75, sense_radius=0.50, efficiency=0.50,
+            complexity=0.50, symmetry=0.50, appendages=0.50, motion_style=0.50,
+            longevity=0.50, depth_preference=0.50, aggression=0.80,
+        )
+        phenotype = resolve_effective_phenotype(genome, species="predator")
+        desc = describe_phenotype_effect(phenotype, genome, species="predator")
+        self.assertIn("Large fast body", desc)
+        # Should mention at least one notable effect
+        self.assertTrue(len(desc) > len("Large fast body: "))
+
+    def test_describe_generalist(self):
+        genome = Genome(
+            speed=0.50, size=0.50, sense_radius=0.50, efficiency=0.50,
+            complexity=0.50, symmetry=0.50, appendages=0.30, motion_style=0.50,
+            longevity=0.50, depth_preference=0.50,
+        )
+        phenotype = resolve_effective_phenotype(genome, species="prey")
+        desc = describe_phenotype_effect(phenotype, genome, species="prey")
+        self.assertIn("Generalist body", desc)
+
+    def test_describe_depth_specialist(self):
+        genome = Genome(
+            speed=0.50, size=0.50, sense_radius=0.50, efficiency=0.50,
+            complexity=0.50, symmetry=0.50, appendages=0.30, motion_style=0.50,
+            longevity=0.50, depth_preference=0.95,
+        )
+        phenotype = resolve_effective_phenotype(genome, species="predator")
+        desc = describe_phenotype_effect(phenotype, genome, species="predator")
+        self.assertIn("Depth-specialised body", desc)
+
+    def test_format_modifiers_returns_all_fields(self):
+        genome = Genome(
+            speed=0.82, size=0.22, sense_radius=0.77, efficiency=0.63,
+            complexity=0.68, symmetry=0.74, appendages=0.31, motion_style=0.28,
+            longevity=0.54, depth_preference=0.50,
+        )
+        phenotype = resolve_effective_phenotype(genome, species="prey")
+        mods = format_phenotype_modifiers(phenotype)
+        self.assertIn("speed_mult", mods)
+        self.assertIn("movement_cost_mult", mods)
+        self.assertIn("metabolic_cost_mult", mods)
+        self.assertIn("sense_radius_mult", mods)
+        self.assertIn("food_efficiency_mult", mods)
+        self.assertIn("reproduction_threshold_mult", mods)
+        self.assertIn("predation_contact_mult", mods)
+        self.assertIn("flee_agility_mult", mods)
+        self.assertIn("depth_transition_mult", mods)
+        self.assertIn("in_band_sense_mult", mods)
+        self.assertIn("cross_band_sense_mult", mods)
+        for key, value in mods.items():
+            self.assertTrue(value.startswith("×"), f"{key} value {value!r} doesn't start with ×")
+
+    def test_format_modifiers_disabled_epistasis(self):
+        genome = Genome()
+        phenotype = resolve_effective_phenotype(
+            genome, species="prey", epistasis_enabled=False,
+        )
+        mods = format_phenotype_modifiers(phenotype)
+        for key, value in mods.items():
+            self.assertEqual(value, "×1.00", f"{key} expected ×1.00, got {value}")
 
 
 if __name__ == "__main__":

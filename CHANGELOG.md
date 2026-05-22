@@ -2,6 +2,35 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — feat: expose effective phenotype in inspect mode
+
+Inspect Mode now shows each creature's effective phenotype, making
+eco-morphological epistasis observable at the individual level.
+
+What changed:
+- Inspect Mode compact view now shows a "Body plan" section with the
+  creature's strategy bucket (e.g. "heavy hunter", "swift small",
+  "sensory specialist", "efficient glider", "evasive darter",
+  "depth specialist", "generalist") and a key-effect phrase summarizing
+  the most impactful modifier deviation.
+- Inspect Mode detail view (press D) now shows an "Effective phenotype"
+  section with all modifier values (speed ×N.NN, move cost ×N.NN,
+  metabolism ×N.NN, sense ×N.NN, food ×N.NN, repro threshold ×N.NN,
+  contact ×N.NN for predators, flee ×N.NN for prey, depth move ×N.NN,
+  in-band sense ×N.NN, cross-band sense ×N.NN).
+- Predators show predation contact quality; prey show flee agility.
+- When epistasis is disabled, compact view shows "Epistasis disabled" and
+  detail view omits the phenotype modifiers section.
+- `Simulation.get_creature_effective_phenotype()` is now a public method
+  for UI observability; simulation internals continue using the private
+  `_get_effective_phenotype()`.
+- Added `describe_phenotype_effect()` and `format_phenotype_modifiers()`
+  to `phenotype.py` as canonical UI-facing observability helpers.
+- Added 14 new tests covering phenotype card generation, strategy buckets,
+  predator/prey-specific modifier display, and epistasis-disabled handling.
+- Updated documentation: AGENTS.md, primordial_guide.md,
+  help_predator_prey.md, help_controls_settings.md.
+
 ## [2026-05-22] — docs: clarify predator-prey extinction grace and recovery
 
 Corrected stale documentation that described extinction as immediate GAME OVER

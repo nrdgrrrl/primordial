@@ -77,6 +77,10 @@ When a predator reaches contact range but the prey is in another band, that is a
 - **Heavy hunters** that win contact more reliably but burn energy fast if they stay large and quick.
 - **Sensory specialists** that read prey or food well but pay more upkeep.
 - **Depth specialists** that dominate one band while missing more across bands.
+- **Efficient gliders** with symmetric, low-drag bodies that save on movement cost.
+- **Evasive darters** with small, asymmetric, burst-motion bodies that flee more effectively.
+
+Use **Inspect Mode** (press `I`, then click a creature) to see any creature's **body plan** bucket and **key effect** phrase. Press `D` to toggle detail mode, which shows the full set of effective phenotype modifiers (speed, move cost, metabolism, sensing, food efficiency, reproduction threshold, contact quality, flee agility, depth transition, in-band/cross-band sensing). Predators show contact quality prominently; prey show flee agility. When epistasis is disabled, the card shows "Epistasis disabled" instead of modifier values.
 
 ## What Makes an Organism Predator or Prey
 

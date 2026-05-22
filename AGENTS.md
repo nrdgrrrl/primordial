@@ -50,6 +50,7 @@ primordial/                  ← project root
     │   ├── genome.py        # Genome dataclass — 16 heritable traits
     │   ├── creature.py      # Creature — position, velocity, energy, behavior, motion style
     │   ├── food.py          # Food particle and FoodManager with spatial bucketing
+    │   ├── phenotype.py     # EffectivePhenotype, strategy buckets, epistasis, describe/format helpers
     │   ├── simulation.py    # Simulation — orchestrates creatures, food, evolution, events
     ├── help/
     │   └── document_model.py # HelpDocEntry registry, document loading, markdown parsing
@@ -58,6 +59,7 @@ primordial/                  ← project root
         ├── animations.py    # AnimationManager — death/birth animations, decoupled from sim
         ├── themes.py        # Theme ABC and implementations (OceanTheme, StubTheme)
         ├── hud.py           # HUD overlay for simulation stats
+        ├── inspect_mode.py  # Inspect Mode — creature card with phenotype observability
         ├── help_overlay.py  # In-app help browser with section nav, search
         ├── help_layout.py   # Layout geometry for help overlay
         ├── help_navigation.py # Section selection, search, scroll state
@@ -120,7 +122,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 9. **Glyph determinism** — same genome must always produce same glyph (hash-seeded RNG)
 10. **Event queue ownership** — `death_events` and `birth_events` are populated by simulation, cleared by renderer after processing
 11. **Glyph morphology is semantically meaningful** — creature visual traits (complexity, symmetry, stroke_scale, appendages, rotation_speed) are heritable genome traits that mutate, drift, and mark ancestry. Glyph appearance is the organism's phenotype. Do not treat glyph rendering as purely decorative or decoupled from simulation meaning. Changes to glyph generation must preserve determinism and recognizability of lineage resemblance. Visual changes that would make related organisms look unrelated, or that would add cosmetic effects not traceable to genome traits, break the visual-evolution contract.
-12. **Raw genome vs effective phenotype stays separate** — inherited values remain the authoritative genome. Ecological consequences from trait interactions must flow through the phenotype translation layer (`primordial/simulation/phenotype.py`), not by mutating genome values or smearing ad hoc epistasis math across the simulation loop.
+12. **Raw genome vs effective phenotype stays separate** — inherited values remain the authoritative genome. Ecological consequences from trait interactions must flow through the phenotype translation layer (`primordial/simulation/phenotype.py`), not by mutating genome values or smearing ad hoc epistasis math across the simulation loop. Inspect Mode must show both raw genome and effective phenotype; the `describe_phenotype_effect()` and `format_phenotype_modifiers()` helpers in `phenotype.py` are the canonical observability surface for UI code.
 
 ## Config file and settings overlay
 

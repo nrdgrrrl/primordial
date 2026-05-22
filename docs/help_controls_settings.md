@@ -13,9 +13,9 @@ Move the mouse during normal playback to reveal a temporary bottom action bar wi
 | `Space` | Pause/unpause, or skip predator-prey game-over countdown |
 | `F` | Toggle fullscreen/windowed |
 | `R` | Reset the current simulation run |
-| `I` | Toggle Inspect Mode |
+| `I` | Toggle Inspect Mode (see body plan, key effect, and effective phenotype) |
 | `M` | In Inspect Mode, switch between pause and slow motion |
-| `D` | In Inspect Mode, toggle compact/detailed card |
+| `D` | In Inspect Mode, toggle compact/detailed card (detail shows effective phenotype modifiers) |
 | mouse click | In Inspect Mode, select a creature |
 | hold `P` | Highlight predators |
 | `+` / `=` | Increase food spawn rate |
@@ -79,11 +79,15 @@ Many visual systems, such as glyphs, trails, zones, aging, cosmic rays, and the 
 
 **Arms race**: Coevolution where predators and prey each evolve traits that counter the other's advantage.
 
+**Body plan**: A strategy bucket classifying a creature's eco-morphological role: swift-small, heavy-hunter, sensory-specialist, efficient-glider, evasive-darter, depth-specialist, or generalist. Shown in Inspect Mode.
+
 **Cosmic ray**: Rare spontaneous mutation to one trait on a living creature.
 
 **Cross-band miss**: A predator reaches prey in 2D space but cannot kill because they are in different depth bands.
 
 **Depth band**: Abstract predator-prey layer: surface, mid, or deep.
+
+**Effective phenotype**: The ecological modifiers derived from interacting genome traits through epistasis. Includes speed, movement cost, metabolic cost, sensing, food efficiency, reproduction threshold, predation contact, flee agility, depth transition, and depth sensing. When epistasis is disabled, all modifiers are ×1.00. Shown in Inspect Mode detail view.
 
 **Food cycle**: Repeating resource wave between famine and feast.
 

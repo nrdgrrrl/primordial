@@ -239,6 +239,108 @@ def _classify_strategy_bucket(
     return "generalist"
 
 
+def describe_phenotype_effect(
+    phenotype: EffectivePhenotype,
+    genome: Genome,
+    *,
+    species: str = "none",
+) -> str:
+    """Return a short human-readable phrase summarising the key phenotype effect.
+
+    The phrase explains *why* the modifier pattern matters for this creature,
+    for example "Large fast body: stronger contact, higher movement cost".
+    When epistasis is disabled every modifier equals 1.0, so the phrase
+    will indicate neutrality.
+    """
+    g = genome
+    bucket = phenotype.strategy_bucket
+
+    # Collect notable deviations from neutral (1.0)
+    notable: list[tuple[str, float, str]] = []
+    _MOD_FIELDS: list[tuple[str, str, str]] = [
+        ("speed_mult", "speed", "faster"),
+        ("movement_cost_mult", "move cost", "costlier"),
+        ("metabolic_cost_mult", "metabolism", "costlier"),
+        ("sense_radius_mult", "sense", "sharper"),
+        ("food_efficiency_mult", "food", "richer"),
+        ("reproduction_threshold_mult", "repro threshold", "higher"),
+        ("predation_contact_mult", "contact", "stronger"),
+        ("flee_agility_mult", "flee", "better"),
+        ("depth_transition_mult", "depth move", "slower"),
+        ("in_band_sense_mult", "in-band sense", "sharper"),
+        ("cross_band_sense_mult", "cross-band sense", "fainter"),
+    ]
+    for attr, label, direction_pos in _MOD_FIELDS:
+        value = getattr(phenotype, attr)
+        if value > 1.02:
+            notable.append((label, value, direction_pos))
+        elif value < 0.98:
+            direction_neg = {
+                "faster": "slower",
+                "costlier": "cheaper",
+                "sharper": "duller",
+                "richer": "poorer",
+                "higher": "lower",
+                "stronger": "weaker",
+                "better": "worse",
+                "slower": "faster",
+                "fainter": "stronger",
+            }.get(direction_pos, "lower")
+            notable.append((label, value, direction_neg))
+
+    # Bucket-specific phrases
+    if bucket == "heavy-hunter":
+        body = "Large fast body"
+    elif bucket == "swift-small":
+        body = "Small fast body"
+    elif bucket == "sensory-specialist":
+        body = "High-sense complex body"
+    elif bucket == "efficient-glider":
+        body = "Symmetric efficient body"
+    elif bucket == "evasive-darter":
+        body = "Small darting body"
+    elif bucket == "depth-specialist":
+        body = "Depth-specialised body"
+    else:
+        body = "Generalist body"
+
+    if not notable:
+        return f"{body}: baseline modifiers"
+
+    # Pick the top 2 most impactful deviations
+    notable.sort(key=lambda t: abs(t[1] - 1.0), reverse=True)
+    top = notable[:2]
+    parts = [f"{label} {direction}" for label, _, direction in top]
+    return f"{body}: {', '.join(parts)}"
+
+
+def format_phenotype_modifiers(phenotype: EffectivePhenotype) -> dict[str, str]:
+    """Return a dict of formatted modifier strings, e.g. {"speed_mult": "×1.05"}.
+
+    Intended for the inspect overlay detail view.  When all values are exactly
+    1.0 (epistasis disabled) this still returns the dict — the caller decides
+    how to represent "neutral".
+    """
+    fields = [
+        ("speed_mult", "Speed"),
+        ("movement_cost_mult", "Move cost"),
+        ("metabolic_cost_mult", "Metabolism"),
+        ("sense_radius_mult", "Sense"),
+        ("food_efficiency_mult", "Food"),
+        ("reproduction_threshold_mult", "Repro thresh"),
+        ("predation_contact_mult", "Contact"),
+        ("flee_agility_mult", "Flee"),
+        ("depth_transition_mult", "Depth move"),
+        ("in_band_sense_mult", "In-band sense"),
+        ("cross_band_sense_mult", "Cross-band sense"),
+    ]
+    result: dict[str, str] = {}
+    for attr, _label in fields:
+        value = getattr(phenotype, attr)
+        result[attr] = f"×{value:.2f}"
+    return result
+
+
 def _clamp_unit(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 

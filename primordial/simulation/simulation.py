@@ -374,6 +374,16 @@ class Simulation:
             epistasis_strength=self._get_epistasis_strength(),
         )
 
+    def get_creature_effective_phenotype(self, creature: Creature):
+        """Public accessor for a creature's effective phenotype.
+
+        Returns the EffectivePhenotype for *creature*, or a neutral phenotype
+        when epistasis is disabled.  Intended for observability UI (inspect
+        mode) — simulation internals should continue to use the private
+        ``_get_effective_phenotype`` method.
+        """
+        return self._get_effective_phenotype(creature)
+
     def _get_creature_speed_scale(self, creature: Creature) -> float:
         return self._get_effective_phenotype(creature).speed_mult
 

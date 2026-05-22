@@ -22,6 +22,10 @@ from .creature_observation import (
     infer_behavior_mode,
     infer_attention_target,
 )
+from ..simulation.phenotype import (
+    describe_phenotype_effect,
+    format_phenotype_modifiers,
+)
 
 if TYPE_CHECKING:
     from ..simulation.creature import Creature
@@ -200,6 +204,19 @@ _INSPECT_LABELS: dict[str, str] = {
     "satiety": "Satiety",
     "tags": "Temperament",
     "likely_goal": "Likely goal",
+    "body_plan": "Body plan",
+    "key_effect": "Key effect",
+    "modifier_speed_mult": "Speed",
+    "modifier_movement_cost_mult": "Move cost",
+    "modifier_metabolic_cost_mult": "Metabolism",
+    "modifier_sense_radius_mult": "Sense",
+    "modifier_food_efficiency_mult": "Food",
+    "modifier_reproduction_threshold_mult": "Repro thresh",
+    "modifier_predation_contact_mult": "Contact",
+    "modifier_flee_agility_mult": "Flee",
+    "modifier_depth_transition_mult": "Depth move",
+    "modifier_in_band_sense_mult": "In-band sense",
+    "modifier_cross_band_sense_mult": "Cross-band sense",
 }
 
 _STORY_STAGE_LABELS: dict[str, str] = {
@@ -345,6 +362,31 @@ def build_creature_card(
         card["attention"] = attention.kind
         card["attention_conf"] = f"{attention.confidence:.0%}"
 
+    # ── Phenotype / Body plan section ──
+    card["section_phenotype"] = ""
+    try:
+        phenotype = simulation.get_creature_effective_phenotype(creature)
+        epistasis_enabled = simulation._epistasis_enabled()
+    except Exception:
+        phenotype = None
+        epistasis_enabled = False
+
+    if phenotype is not None:
+        card["body_plan"] = phenotype.strategy_bucket.replace("-", " ")
+        card["key_effect"] = describe_phenotype_effect(
+            phenotype, creature.genome, species=creature.species
+        )
+        card["epistasis_enabled"] = "yes" if epistasis_enabled else "no"
+        # Store modifier values for detail mode
+        mods = format_phenotype_modifiers(phenotype)
+        for attr, formatted in mods.items():
+            card[f"modifier_{attr}"] = formatted
+        card["preferred_depth_band"] = str(phenotype.preferred_depth_band)
+    else:
+        card["body_plan"] = "—"
+        card["key_effect"] = "—"
+        card["epistasis_enabled"] = "no"
+
     return card
 
 
@@ -464,6 +506,30 @@ def build_inspect_panel_lines(
         ]
     )
 
+    # ── Phenotype / Body plan section (always shown) ──
+    body_plan = card.get("body_plan", "—")
+    key_effect = card.get("key_effect", "—")
+    epistasis_on = card.get("epistasis_enabled", "no") == "yes"
+
+    lines.extend(
+        [
+            InspectPanelLine(kind="section", text="Body plan"),
+            _build_row("body_plan", _titleize(body_plan)),
+        ]
+    )
+    if epistasis_on:
+        lines.append(_build_row("key_effect", key_effect))
+    else:
+        lines.append(
+            InspectPanelLine(
+                kind="row",
+                key="key_effect",
+                label=friendly_inspect_label("key_effect"),
+                value="Epistasis disabled",
+                style="body",
+            )
+        )
+
     if active_detail_mode == "detail":
         lines.extend(
             [
@@ -523,6 +589,97 @@ def build_inspect_panel_lines(
                     removable=True,
                     priority=100,
                 )
+            )
+
+        # ── Effective Phenotype detail section ──
+        if epistasis_on:
+            lines.extend(
+                [
+                    InspectPanelLine(
+                        kind="section",
+                        text="Effective phenotype",
+                        removable=True,
+                        priority=110,
+                    ),
+                    _build_row(
+                        "modifier_speed_mult",
+                        card.get("modifier_speed_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=115,
+                    ),
+                    _build_row(
+                        "modifier_movement_cost_mult",
+                        card.get("modifier_movement_cost_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=115,
+                    ),
+                    _build_row(
+                        "modifier_metabolic_cost_mult",
+                        card.get("modifier_metabolic_cost_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=115,
+                    ),
+                    _build_row_pair(
+                        "modifier_sense_radius_mult",
+                        card.get("modifier_sense_radius_mult", "×1.00"),
+                        "modifier_food_efficiency_mult",
+                        card.get("modifier_food_efficiency_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=115,
+                    ),
+                    _build_row(
+                        "modifier_reproduction_threshold_mult",
+                        card.get("modifier_reproduction_threshold_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=115,
+                    ),
+                ]
+            )
+            # Role-specific modifiers
+            if card.get("species", "").lower() == "predator":
+                lines.append(
+                    _build_row(
+                        "modifier_predation_contact_mult",
+                        card.get("modifier_predation_contact_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=120,
+                    )
+                )
+            if card.get("species", "").lower() == "prey":
+                lines.append(
+                    _build_row(
+                        "modifier_flee_agility_mult",
+                        card.get("modifier_flee_agility_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=120,
+                    )
+                )
+            lines.extend(
+                [
+                    _build_row_pair(
+                        "modifier_depth_transition_mult",
+                        card.get("modifier_depth_transition_mult", "×1.00"),
+                        "modifier_in_band_sense_mult",
+                        card.get("modifier_in_band_sense_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=125,
+                    ),
+                    _build_row(
+                        "modifier_cross_band_sense_mult",
+                        card.get("modifier_cross_band_sense_mult", "×1.00"),
+                        style="detail",
+                        removable=True,
+                        priority=125,
+                    ),
+                ]
             )
 
     return tuple(lines)
