@@ -94,7 +94,7 @@ def run_simulation_graphical(
 
     # Force windowed mode so each seed gets a predictable display
     settings.fullscreen = False
-    settings.show_hud = False
+    settings.show_hud = True
 
     pygame.init()
     width, height = DEFAULT_WINDOWED_SIZE
