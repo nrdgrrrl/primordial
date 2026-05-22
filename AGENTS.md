@@ -202,8 +202,12 @@ directly to flee max speed, and the optional low-energy taper uses
 not predator spawning, not predator rescue, not extinct-trait preservation,
 and not a direct reproduction-threshold change.
 Predator near-contact diagnostics are observational only.
-Predators also resolve a conservative post-move closing-strike contact check against the same pursued prey target in the same tick. This does not spawn/rescue predators, does not change reproduction thresholds or kill energy caps, and still requires normal contact distance plus same-depth overlap. Diagnostics now include post-move contact opportunities and post-move kills.
- The current config
+Post-move contact resolution is allowed only for the same pursued target, same
+depth, normal contact distance, and living prey, after predator movement in the
+same tick when no earlier kill already occurred.
+This timing fix must not add spawning, trait preservation, reproduction
+threshold changes, or kill-cap changes.
+The current config
 keys are `predator_near_contact_diagnostic_scale` and
 `predator_sustained_chase_min_frames`. They exist to measure same-depth
 contact/flee oscillation, cross-depth near misses, sustained chase without

@@ -124,9 +124,7 @@ When a predator reaches contact range but the prey is in another band, that is a
 **cross-band miss**. The HUD reports recent cross-band misses so you can tell
 whether depth is protecting prey.
 
-Near-contact diagnostics now also record when predators repeatedly reach a
-Predators also resolve a conservative post-move closing-strike contact check against the same pursued prey target in the same tick. This does not spawn/rescue predators, does not change reproduction thresholds or kill energy caps, and still requires normal contact distance plus same-depth overlap. Diagnostics now include post-move contact opportunities and post-move kills.
-
+Near-contact diagnostics also record when predators repeatedly reach a
 configurable band around contact range without converting the hunt. The
 diagnostics separate:
 
@@ -136,6 +134,13 @@ diagnostics separate:
 - sustained same-target chases that still fail to end in kills;
 - kills that land mainly on old or low-energy prey, which indicates prey
   frailty is doing work on the prey side rather than through predator rescue.
+
+Separately, predator_prey now includes a conservative post-move contact
+resolution to fix a timing asymmetry: after a predator closes movement, the
+same pursued prey target is checked again in the same tick if no kill already
+occurred. The kill still requires normal contact distance and same-depth
+overlap, and this does not change spawning, trait preservation, reproduction
+thresholds, kill energy caps, rarity/refuge tuning, or prey frailty tuning.
 
 ## Zones and Environmental Pressure
 
