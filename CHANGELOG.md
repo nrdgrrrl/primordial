@@ -1719,3 +1719,6 @@ Five major systems added in this pass: procedurally generated symbolic glyph cre
 **What changed:** Added stub themes that show "coming soon" overlay, created comprehensive README.md with installation/usage/extension guides, and AGENT.md with architectural documentation for future AI agents.
 
 **Why:** Stubs make the settings system complete while clearly indicating unimplemented features. Documentation enables both human users and AI agents to understand and extend the codebase.
+
+## Unreleased
+- Added predator rarity advantage modifiers for predator-prey mode with conservative blending against refuge modifiers and capped effects.

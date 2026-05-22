@@ -1018,3 +1018,7 @@ affect survival. Especially visible in visual traits and in drift mode.
 fleeing, scarcity pressure, kill distance, kill energy, and food-cycle amplitude.
 
 **Zone**: Soft environmental region that changes energy and sensing pressure.
+
+
+### Predator rarity advantage
+A modest predator-only hunting advantage can activate when predators are rare and prey are healthy; this affects only living predators and is capped.

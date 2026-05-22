@@ -182,14 +182,33 @@ class PredatorRefugeModifiers:
 
 
 @dataclass(frozen=True)
+class PredatorRarityModifiers:
+    pressure: float = 0.0
+    hunt_sense_bonus: float = 0.0
+    contact_bonus: float = 0.0
+    depth_transition_bonus: float = 0.0
+    hunting_cost_reduction: float = 0.0
+    active: bool = False
+
+
+@dataclass(frozen=True)
+class PredatorHuntModifiers:
+    refuge: PredatorRefugeModifiers = field(default_factory=PredatorRefugeModifiers)
+    rarity: PredatorRarityModifiers = field(default_factory=PredatorRarityModifiers)
+    hunt_sense_mult: float = 1.0
+    contact_mult: float = 1.0
+    depth_transition_mult: float = 1.0
+    hunting_cost_mult: float = 1.0
+    active: bool = False
+
+
+@dataclass(frozen=True)
 class PredatorHuntResult:
     """Predator-prey hunt outcome plus any refuge context used that frame."""
 
     engaged: bool
     killed: bool
-    refuge_modifiers: PredatorRefugeModifiers = field(
-        default_factory=PredatorRefugeModifiers
-    )
+    hunt_modifiers: PredatorHuntModifiers = field(default_factory=PredatorHuntModifiers)
 
 
 _PREDATOR_PREY_ADAPTIVE_DIALS: tuple[AdaptiveDialSpec, ...] = (
@@ -523,6 +542,68 @@ class Simulation:
         return max(
             soft_cap + 1,
             int(self._get_mode_param("predator_refuge_density_hard_cap", 7)),
+        )
+
+    def _predator_rarity_advantage_enabled(self) -> bool:
+        return bool(self._get_mode_param("predator_rarity_advantage_enabled", True))
+
+    def _get_predator_rarity_pressure(self, *, predator_count: int, prey_count: int) -> float:
+        if self.settings.sim_mode != "predator_prey" or prey_count < int(self._get_mode_param("predator_rarity_min_prey", 30)):
+            return 0.0
+        floor = max(1, int(self._get_mode_param("predator_rarity_floor", 8)))
+        full_bonus_at = max(1, min(floor, int(self._get_mode_param("predator_rarity_full_bonus_at", 3))))
+        if predator_count > floor:
+            return 0.0
+        if predator_count <= full_bonus_at:
+            rarity = 1.0
+        else:
+            rarity = (floor - predator_count) / max(1, floor - full_bonus_at)
+        prey_per_predator = prey_count / max(1, predator_count)
+        target = max(0.1, float(self._get_mode_param("predator_rarity_target_prey_per_predator", 8.0)))
+        prey_scale = max(0.0, min(1.0, prey_per_predator / target))
+        return max(0.0, min(1.0, rarity * prey_scale))
+
+    def _get_predator_rarity_modifiers(self, predator: Creature) -> PredatorRarityModifiers:
+        if self.settings.sim_mode != "predator_prey" or predator.species != "predator" or not self._predator_rarity_advantage_enabled():
+            return PredatorRarityModifiers()
+        pred_count, prey_count = self.get_species_counts()
+        pressure = self._get_predator_rarity_pressure(predator_count=pred_count, prey_count=prey_count)
+        if pressure <= 0.0:
+            return PredatorRarityModifiers()
+        return PredatorRarityModifiers(
+            pressure=pressure,
+            hunt_sense_bonus=max(0.0, min(0.20, float(self._get_mode_param("predator_rarity_hunt_sense_bonus", 0.08)))) * pressure,
+            contact_bonus=max(0.0, min(0.20, float(self._get_mode_param("predator_rarity_contact_bonus", 0.06)))) * pressure,
+            depth_transition_bonus=max(0.0, min(0.20, float(self._get_mode_param("predator_rarity_depth_transition_bonus", 0.08)))) * pressure,
+            hunting_cost_reduction=max(0.0, min(0.20, float(self._get_mode_param("predator_rarity_movement_cost_reduction", 0.05)))) * pressure,
+            active=True,
+        )
+
+    def _get_predator_hunt_modifiers(
+        self, predator: Creature, creature_bucket: dict[tuple[int, int], list[Creature]] | None = None
+    ) -> PredatorHuntModifiers:
+        refuge = self._get_predator_refuge_modifiers(predator, creature_bucket)
+        rarity = self._get_predator_rarity_modifiers(predator)
+        def _blend(a: float, b: float) -> float:
+            high = max(a, b)
+            low = min(a, b)
+            return high + 0.35 * low
+        hunt_bonus = _blend(refuge.hunt_sense_mult - 1.0, rarity.hunt_sense_bonus)
+        contact_bonus = _blend(refuge.contact_mult - 1.0, rarity.contact_bonus)
+        depth_bonus = _blend(refuge.depth_transition_mult - 1.0, rarity.depth_transition_bonus)
+        cost_reduction = _blend(1.0 - refuge.hunting_cost_mult, rarity.hunting_cost_reduction)
+        hunt_sense_mult = min(1.15, 1.0 + max(0.0, hunt_bonus))
+        contact_mult = min(1.14, 1.0 + max(0.0, contact_bonus))
+        depth_transition_mult = min(1.18, 1.0 + max(0.0, depth_bonus))
+        hunting_cost_mult = max(0.88, 1.0 - max(0.0, cost_reduction))
+        return PredatorHuntModifiers(
+            refuge=refuge,
+            rarity=rarity,
+            hunt_sense_mult=hunt_sense_mult,
+            contact_mult=contact_mult,
+            depth_transition_mult=depth_transition_mult,
+            hunting_cost_mult=hunting_cost_mult,
+            active=refuge.active or rarity.active,
         )
 
     def _get_predator_refuge_modifiers(
@@ -1496,7 +1577,7 @@ class Simulation:
                     longevity_cost=creature.genome.longevity * 0.0004,
                 )
                 hunting_cost_mult = (
-                    hunt_result.refuge_modifiers.hunting_cost_mult
+                    hunt_result.hunt_modifiers.hunting_cost_mult
                     if hunt_result.engaged
                     else 1.0
                 )
@@ -1518,7 +1599,7 @@ class Simulation:
                     prey_scarce=prey_scarce,
                     creature_bucket=creature_bucket,
                     refuge_modifiers=(
-                        hunt_result.refuge_modifiers
+                        hunt_result.hunt_modifiers.refuge
                         if hunt_result.engaged
                         else None
                     ),
@@ -1655,12 +1736,12 @@ class Simulation:
         if repro_threshold is None:
             repro_threshold = self._get_reproduction_threshold(predator)
         interference_factor = self._predator_interference_factor(predator, bucket)
-        refuge_modifiers = self._get_predator_refuge_modifiers(predator, bucket)
+        hunt_modifiers = self._get_predator_hunt_modifiers(predator, bucket)
         sense_multiplier = (
             self._get_predator_hunt_sense_multiplier()
             * interference_factor
             * hunt_balance_factor
-            * refuge_modifiers.hunt_sense_mult
+            * hunt_modifiers.hunt_sense_mult
         )
         speed_multiplier = (
             self._get_predator_hunt_speed_multiplier()
@@ -1671,7 +1752,7 @@ class Simulation:
             self._get_predator_contact_kill_distance_scale()
             * interference_factor
             * hunt_balance_factor
-            * refuge_modifiers.contact_mult
+            * hunt_modifiers.contact_mult
         )
         sense = self._get_effective_sensing_range(predator, multiplier=sense_multiplier)
         if close_range_only:
@@ -1704,7 +1785,7 @@ class Simulation:
             predator,
             best_prey.depth_band,
             urgency=_PREDATOR_DEPTH_TRACK_URGENCY,
-            extra_transition_mult=refuge_modifiers.depth_transition_mult,
+            extra_transition_mult=hunt_modifiers.depth_transition_mult,
         )
 
         sensed_prey = self._sense_target_position(
@@ -1722,7 +1803,7 @@ class Simulation:
             return PredatorHuntResult(
                 engaged=False,
                 killed=False,
-                refuge_modifiers=refuge_modifiers,
+                hunt_modifiers=hunt_modifiers,
             )
 
         predator.steer_toward(
@@ -1760,7 +1841,7 @@ class Simulation:
                 pre_kill_energy=pre_kill_energy,
                 post_kill_energy=predator.energy,
                 repro_threshold=repro_threshold,
-                refuge_modifiers=refuge_modifiers,
+                refuge_modifiers=hunt_modifiers.refuge,
             )
             self.active_attacks.append((
                 predator.x, predator.y,
@@ -1772,18 +1853,18 @@ class Simulation:
             return PredatorHuntResult(
                 engaged=True,
                 killed=True,
-                refuge_modifiers=refuge_modifiers,
+                refuge_modifiers=hunt_modifiers.refuge,
             )
         elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
             self._recent_cross_band_miss_frames.append(self._frame)
             self._record_predator_cross_band_miss(
                 predator,
-                refuge_modifiers=refuge_modifiers,
+                hunt_modifiers=hunt_modifiers,
             )
         return PredatorHuntResult(
             engaged=True,
             killed=False,
-            refuge_modifiers=refuge_modifiers,
+            hunt_modifiers=hunt_modifiers,
         )
 
     def _prey_flee(self, prey: Creature, bucket: dict) -> bool:
