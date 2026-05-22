@@ -388,3 +388,7 @@ For a deeper explanation of what organisms are, how their genomes determine
 both behavior and appearance, what you can learn by looking at them, and how to
 watch evolution happen over time, switch to the **Organism Biology** tab in the
 help browser.
+
+
+### Predator rarity advantage
+Predator-prey mode now supports a modest, capped rarity advantage for living predators when predator count is low and prey are abundant. It does not spawn predators, preserve extinct predator lineages, alter prey behavior, or directly change reproduction thresholds. It blends conservatively with refuge bonuses.
