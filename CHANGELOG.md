@@ -2,6 +2,40 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — feat: add predator ambush habitat modifiers
+
+Add the first predator-collapse mitigation pass: predator-only ambush habitat
+bonuses in hunting grounds. The change is intentionally conservative and does
+not add predator spawning, trait preservation, dormancy, or attraction
+behavior.
+
+What changed:
+- Added a public pure zone-context query surface in
+  `primordial/simulation/zones.py` so simulation and diagnostics code can ask
+  for the strongest zone type and its local influence at any position.
+- Added centralized predator refuge modifiers in
+  `primordial/simulation/simulation.py`. In `predator_prey`, predators already
+  inside a hunting ground can receive modest density-damped bonuses to hunt
+  sensing, contact kill distance, depth tracking, and hunting energy costs.
+- Applied the refuge modifier only in the predator hunt path; predators do not
+  steer toward refuges, do not spawn in them, and prey behavior is unchanged in
+  this pass.
+- Extended predator collapse diagnostics with refuge/habitat observability:
+  refuge frames, hunting-ground frames, kills inside/outside refuge, deaths in
+  refuge, refuge bonus at death, local predator density at death, and
+  cross-band misses inside/outside refuge.
+- Added mode-scoped config keys for predator refuge tuning in canonical
+  defaults, config validation, the settings overlay metadata, and the README
+  config table.
+- Updated `docs/predator_prey_system_guide.md`,
+  `docs/primordial_guide.md`, `README.md`, and `AGENTS.md` to describe refuges
+  as ambush habitat rather than spawn points or migration systems.
+
+Tests:
+- Added focused unit coverage in `tests/test_predator_refuge.py`.
+- Updated `tests/test_predator_collapse_diagnostics.py` for the new refuge
+  fields and report output.
+
 ## [2026-05-22] — diagnostics: add predator collapse report
 
 Add a graphical predator-collapse diagnostics runner and report generator

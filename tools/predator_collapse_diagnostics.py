@@ -528,6 +528,44 @@ def _section_f_prey_access(
         int(l["kills"]) for l in all_completed
     )
     total_cross_band = sum(cross_band_misses_list)
+    refuge_frames_per_life = [
+        int(l.get("refuge_frames", 0)) for l in all_completed
+    ]
+    hunting_ground_frames_per_life = [
+        int(l.get("hunting_ground_frames", 0)) for l in all_completed
+    ]
+    refuge_frame_shares = [
+        int(l.get("refuge_frames", 0)) / frames
+        for l in all_completed
+        for frames in [int(l["frames_observed"])]
+        if frames > 0
+    ]
+    hunting_ground_frame_shares = [
+        int(l.get("hunting_ground_frames", 0)) / frames
+        for l in all_completed
+        for frames in [int(l["frames_observed"])]
+        if frames > 0
+    ]
+    kills_inside_refuge = sum(int(l.get("kills_inside_refuge", 0)) for l in all_completed)
+    kills_outside_refuge = sum(int(l.get("kills_outside_refuge", 0)) for l in all_completed)
+    deaths_inside_refuge = sum(1 for l in all_completed if l.get("died_inside_refuge"))
+    refuge_bonus_at_death = [
+        float(l.get("refuge_bonus_factor_at_death", 0.0))
+        for l in all_completed
+    ]
+    predator_density_at_death = [
+        float(l["local_predator_density_at_death"])
+        for l in all_completed
+        if l.get("local_predator_density_at_death") is not None
+    ]
+    cross_band_inside_refuge = sum(
+        int(l.get("cross_band_misses_inside_refuge", 0))
+        for l in all_completed
+    )
+    cross_band_outside_refuge = sum(
+        int(l.get("cross_band_misses_outside_refuge", 0))
+        for l in all_completed
+    )
 
     return {
         "median_prey_sighting_share": _safe_median(prey_sight_shares),
@@ -545,6 +583,24 @@ def _section_f_prey_access(
             total_cross_band / total_kills
             if total_kills > 0 else None
         ),
+        "mean_refuge_frames_per_life": _safe_mean(refuge_frames_per_life),
+        "mean_hunting_ground_frames_per_life": _safe_mean(
+            hunting_ground_frames_per_life
+        ),
+        "median_refuge_frame_share": _safe_median(refuge_frame_shares),
+        "median_hunting_ground_frame_share": _safe_median(
+            hunting_ground_frame_shares
+        ),
+        "kills_inside_refuge": kills_inside_refuge,
+        "kills_outside_refuge": kills_outside_refuge,
+        "deaths_inside_refuge": deaths_inside_refuge,
+        "pct_deaths_inside_refuge": _pct(deaths_inside_refuge, len(all_completed)),
+        "mean_refuge_bonus_factor_at_death": _safe_mean(refuge_bonus_at_death),
+        "mean_local_predator_density_at_death": _safe_mean(
+            predator_density_at_death
+        ),
+        "cross_band_misses_inside_refuge": cross_band_inside_refuge,
+        "cross_band_misses_outside_refuge": cross_band_outside_refuge,
     }
 
 
@@ -935,6 +991,17 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Total cross-band misses:** {f.get('total_cross_band_misses', 0)}")
         lines.append(f"- **Total kills by completed lives:** {f.get('total_kills_by_completed_lives', 0)}")
         lines.append(f"- **Cross-band misses per kill:** {_fmt(f.get('cross_band_misses_per_kill'))}")
+        lines.append(f"- **Mean refuge frames / life:** {_fmt(f.get('mean_refuge_frames_per_life'))}")
+        lines.append(f"- **Mean hunting-ground frames / life:** {_fmt(f.get('mean_hunting_ground_frames_per_life'))}")
+        lines.append(f"- **Median refuge frame share:** {_pct_fmt(f.get('median_refuge_frame_share'))}")
+        lines.append(f"- **Median hunting-ground frame share:** {_pct_fmt(f.get('median_hunting_ground_frame_share'))}")
+        lines.append(f"- **Kills inside refuge:** {f.get('kills_inside_refuge', 0)}")
+        lines.append(f"- **Kills outside refuge:** {f.get('kills_outside_refuge', 0)}")
+        lines.append(f"- **Deaths inside refuge:** {f.get('deaths_inside_refuge', 0)} ({_pct_fmt(f.get('pct_deaths_inside_refuge'))})")
+        lines.append(f"- **Mean refuge bonus at death:** {_fmt(f.get('mean_refuge_bonus_factor_at_death'))}")
+        lines.append(f"- **Mean local predator density at death:** {_fmt(f.get('mean_local_predator_density_at_death'))}")
+        lines.append(f"- **Cross-band misses inside refuge:** {f.get('cross_band_misses_inside_refuge', 0)}")
+        lines.append(f"- **Cross-band misses outside refuge:** {f.get('cross_band_misses_outside_refuge', 0)}")
     lines.append("")
 
     # G. Scarcity

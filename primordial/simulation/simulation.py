@@ -164,6 +164,34 @@ class PredatorPreyStabilityState:
     )
 
 
+@dataclass(frozen=True)
+class PredatorRefugeModifiers:
+    """Read-only predator habitat bonuses derived from zone and crowding."""
+
+    zone_type: str | None = None
+    zone_label: str = ""
+    zone_influence: float = 0.0
+    local_predator_count: int = 0
+    density_factor: float = 0.0
+    refuge_factor: float = 0.0
+    hunt_sense_mult: float = 1.0
+    contact_mult: float = 1.0
+    depth_transition_mult: float = 1.0
+    hunting_cost_mult: float = 1.0
+    active: bool = False
+
+
+@dataclass(frozen=True)
+class PredatorHuntResult:
+    """Predator-prey hunt outcome plus any refuge context used that frame."""
+
+    engaged: bool
+    killed: bool
+    refuge_modifiers: PredatorRefugeModifiers = field(
+        default_factory=PredatorRefugeModifiers
+    )
+
+
 _PREDATOR_PREY_ADAPTIVE_DIALS: tuple[AdaptiveDialSpec, ...] = (
     AdaptiveDialSpec(
         key="predator_contact_kill_distance_scale",
@@ -428,6 +456,179 @@ class Simulation:
     def _get_predator_contact_kill_distance_scale(self) -> float:
         """Resolve predator contact-kill distance scale."""
         return float(self._get_mode_param("predator_contact_kill_distance_scale", 1.0))
+
+    def _predator_refuge_enabled(self) -> bool:
+        return bool(self._get_mode_param("predator_refuge_enabled", True))
+
+    def _get_predator_refuge_hunt_sense_bonus(self) -> float:
+        return max(
+            0.0,
+            min(
+                0.25,
+                float(self._get_mode_param("predator_refuge_hunt_sense_bonus", 0.08)),
+            ),
+        )
+
+    def _get_predator_refuge_contact_bonus(self) -> float:
+        return max(
+            0.0,
+            min(
+                0.25,
+                float(self._get_mode_param("predator_refuge_contact_bonus", 0.08)),
+            ),
+        )
+
+    def _get_predator_refuge_depth_transition_bonus(self) -> float:
+        return max(
+            0.0,
+            min(
+                0.30,
+                float(
+                    self._get_mode_param(
+                        "predator_refuge_depth_transition_bonus",
+                        0.10,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_refuge_movement_cost_reduction(self) -> float:
+        return max(
+            0.0,
+            min(
+                0.20,
+                float(
+                    self._get_mode_param(
+                        "predator_refuge_movement_cost_reduction",
+                        0.05,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_refuge_density_radius(self) -> float:
+        return max(
+            0.0,
+            float(self._get_mode_param("predator_refuge_density_radius", 140.0)),
+        )
+
+    def _get_predator_refuge_density_soft_cap(self) -> int:
+        return max(
+            0,
+            int(self._get_mode_param("predator_refuge_density_soft_cap", 3)),
+        )
+
+    def _get_predator_refuge_density_hard_cap(self) -> int:
+        soft_cap = self._get_predator_refuge_density_soft_cap()
+        return max(
+            soft_cap + 1,
+            int(self._get_mode_param("predator_refuge_density_hard_cap", 7)),
+        )
+
+    def _get_predator_refuge_modifiers(
+        self,
+        predator: Creature,
+        creature_bucket: dict[tuple[int, int], list[Creature]] | None = None,
+    ) -> PredatorRefugeModifiers:
+        """Return conservative habitat modifiers for predators already in refuge."""
+        zone_context = self.zone_manager.get_zone_context_at(predator.x, predator.y)
+        zone_label = zone_context.label or ""
+        if self.settings.sim_mode != "predator_prey" or predator.species != "predator":
+            return PredatorRefugeModifiers(
+                zone_type=zone_context.zone_type,
+                zone_label=zone_label,
+                zone_influence=zone_context.influence,
+            )
+        if not self._predator_refuge_enabled():
+            return PredatorRefugeModifiers(
+                zone_type=zone_context.zone_type,
+                zone_label=zone_label,
+                zone_influence=zone_context.influence,
+            )
+        if zone_context.zone_type != "hunting_ground" or zone_context.influence <= 0.0:
+            return PredatorRefugeModifiers(
+                zone_type=zone_context.zone_type,
+                zone_label=zone_label,
+                zone_influence=zone_context.influence,
+            )
+
+        if creature_bucket is None:
+            creature_bucket = self._build_creature_bucket()
+
+        density_radius = self._get_predator_refuge_density_radius()
+        nearby_predators = 0
+        if density_radius > 0.0:
+            for other in self._nearby_creatures(
+                predator.x,
+                predator.y,
+                density_radius,
+                creature_bucket,
+            ):
+                if other is predator or other.species != "predator" or other.energy <= 0.0:
+                    continue
+                if (
+                    predator.distance_to(other.x, other.y, self.width, self.height)
+                    <= density_radius
+                ):
+                    nearby_predators += 1
+
+        soft_cap = self._get_predator_refuge_density_soft_cap()
+        hard_cap = self._get_predator_refuge_density_hard_cap()
+        if nearby_predators <= soft_cap:
+            density_factor = 1.0
+        elif nearby_predators >= hard_cap:
+            density_factor = 0.0
+        else:
+            density_factor = 1.0 - (
+                (nearby_predators - soft_cap) / max(1, hard_cap - soft_cap)
+            )
+
+        refuge_factor = max(
+            0.0,
+            min(1.0, zone_context.influence * density_factor),
+        )
+        if refuge_factor <= 0.0:
+            return PredatorRefugeModifiers(
+                zone_type=zone_context.zone_type,
+                zone_label=zone_label,
+                zone_influence=zone_context.influence,
+                local_predator_count=nearby_predators,
+                density_factor=density_factor,
+            )
+
+        hunt_sense_mult = min(
+            1.12,
+            1.0 + (self._get_predator_refuge_hunt_sense_bonus() * refuge_factor),
+        )
+        contact_mult = min(
+            1.12,
+            1.0 + (self._get_predator_refuge_contact_bonus() * refuge_factor),
+        )
+        depth_transition_mult = min(
+            1.15,
+            1.0
+            + (self._get_predator_refuge_depth_transition_bonus() * refuge_factor),
+        )
+        hunting_cost_mult = max(
+            0.90,
+            1.0
+            - (
+                self._get_predator_refuge_movement_cost_reduction() * refuge_factor
+            ),
+        )
+        return PredatorRefugeModifiers(
+            zone_type=zone_context.zone_type,
+            zone_label=zone_label,
+            zone_influence=zone_context.influence,
+            local_predator_count=nearby_predators,
+            density_factor=density_factor,
+            refuge_factor=refuge_factor,
+            hunt_sense_mult=hunt_sense_mult,
+            contact_mult=contact_mult,
+            depth_transition_mult=depth_transition_mult,
+            hunting_cost_mult=hunting_cost_mult,
+            active=True,
+        )
 
     def _get_prey_flee_sense_multiplier(self) -> float:
         """Resolve prey flee sensing range multiplier."""
@@ -1252,14 +1453,14 @@ class Simulation:
                 repro_threshold = self._get_reproduction_threshold(creature) * (
                     1.0 + pred_repro_penalty
                 )
-                engaged, _killed = self._predator_hunt_prey(
+                hunt_result = self._predator_hunt_prey(
                     creature,
                     creature_bucket,
                     repro_threshold=repro_threshold,
                     hunt_balance_factor=hunt_balance_factor,
                     close_range_only=creature.satiety_ticks_remaining > 0,
                 )
-                if not engaged:
+                if not hunt_result.engaged:
                     self._creature_seek_food(
                         creature,
                         sense_override=(
@@ -1273,7 +1474,10 @@ class Simulation:
                 predator_cost_multiplier = 1.0 + (
                     0.4 * (1.0 - self._get_predator_food_efficiency_multiplier())
                 )
-                energy_cost = self._get_creature_movement_cost(creature) * predator_cost_multiplier
+                movement_cost = (
+                    self._get_creature_movement_cost(creature)
+                    * predator_cost_multiplier
+                )
                 if prey_scarce:
                     scarcity_multiplier = self._get_predator_prey_scarcity_penalty_multiplier()
                     omnivore_buffer = max(
@@ -1284,13 +1488,19 @@ class Simulation:
                             * (1.0 - self._get_predator_food_efficiency_multiplier())
                         ),
                     )
-                    energy_cost *= omnivore_buffer
-                if not engaged:
-                    energy_cost *= self._get_predator_forage_cost_multiplier()
-                energy_cost += self._get_creature_metabolic_cost(
+                    movement_cost *= omnivore_buffer
+                if not hunt_result.engaged:
+                    movement_cost *= self._get_predator_forage_cost_multiplier()
+                metabolic_cost = self._get_creature_metabolic_cost(
                     creature,
                     longevity_cost=creature.genome.longevity * 0.0004,
                 )
+                hunting_cost_mult = (
+                    hunt_result.refuge_modifiers.hunting_cost_mult
+                    if hunt_result.engaged
+                    else 1.0
+                )
+                energy_cost = (movement_cost + metabolic_cost) * hunting_cost_mult
                 energy_cost *= 1.0 + overcrowding_penalty
                 energy_cost *= self.zone_manager.get_energy_modifier(creature)
                 creature.energy = max(0.0, creature.energy - energy_cost)
@@ -1306,6 +1516,12 @@ class Simulation:
                     creature,
                     repro_threshold=repro_threshold,
                     prey_scarce=prey_scarce,
+                    creature_bucket=creature_bucket,
+                    refuge_modifiers=(
+                        hunt_result.refuge_modifiers
+                        if hunt_result.engaged
+                        else None
+                    ),
                 )
                 if (
                     creature.energy >= repro_threshold
@@ -1434,15 +1650,17 @@ class Simulation:
         repro_threshold: float | None = None,
         hunt_balance_factor: float = 1.0,
         close_range_only: bool = False,
-    ) -> tuple[bool, bool]:
+    ) -> PredatorHuntResult:
         """Predator seeks nearest prey; kills on contact."""
         if repro_threshold is None:
             repro_threshold = self._get_reproduction_threshold(predator)
         interference_factor = self._predator_interference_factor(predator, bucket)
+        refuge_modifiers = self._get_predator_refuge_modifiers(predator, bucket)
         sense_multiplier = (
             self._get_predator_hunt_sense_multiplier()
             * interference_factor
             * hunt_balance_factor
+            * refuge_modifiers.hunt_sense_mult
         )
         speed_multiplier = (
             self._get_predator_hunt_speed_multiplier()
@@ -1453,6 +1671,7 @@ class Simulation:
             self._get_predator_contact_kill_distance_scale()
             * interference_factor
             * hunt_balance_factor
+            * refuge_modifiers.contact_mult
         )
         sense = self._get_effective_sensing_range(predator, multiplier=sense_multiplier)
         if close_range_only:
@@ -1477,7 +1696,7 @@ class Simulation:
                 self.settings.creature_speed_base,
                 speed_scale=self._get_creature_speed_scale(predator),
             )
-            return False, False
+            return PredatorHuntResult(engaged=False, killed=False)
 
         self._record_predator_prey_sighting(predator)
 
@@ -1485,6 +1704,7 @@ class Simulation:
             predator,
             best_prey.depth_band,
             urgency=_PREDATOR_DEPTH_TRACK_URGENCY,
+            extra_transition_mult=refuge_modifiers.depth_transition_mult,
         )
 
         sensed_prey = self._sense_target_position(
@@ -1499,7 +1719,11 @@ class Simulation:
                 self.settings.creature_speed_base,
                 speed_scale=self._get_creature_speed_scale(predator),
             )
-            return False, False
+            return PredatorHuntResult(
+                engaged=False,
+                killed=False,
+                refuge_modifiers=refuge_modifiers,
+            )
 
         predator.steer_toward(
             sensed_prey[0], sensed_prey[1],
@@ -1536,6 +1760,7 @@ class Simulation:
                 pre_kill_energy=pre_kill_energy,
                 post_kill_energy=predator.energy,
                 repro_threshold=repro_threshold,
+                refuge_modifiers=refuge_modifiers,
             )
             self.active_attacks.append((
                 predator.x, predator.y,
@@ -1544,11 +1769,22 @@ class Simulation:
                 predator.genome.hue,
                 predator.genome.saturation,
             ))
-            return True, True
+            return PredatorHuntResult(
+                engaged=True,
+                killed=True,
+                refuge_modifiers=refuge_modifiers,
+            )
         elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
             self._recent_cross_band_miss_frames.append(self._frame)
-            self._record_predator_cross_band_miss(predator)
-        return True, False
+            self._record_predator_cross_band_miss(
+                predator,
+                refuge_modifiers=refuge_modifiers,
+            )
+        return PredatorHuntResult(
+            engaged=True,
+            killed=False,
+            refuge_modifiers=refuge_modifiers,
+        )
 
     def _prey_flee(self, prey: Creature, bucket: dict) -> bool:
         """Prey flees from nearest predator within a tuned sensing range.
@@ -3101,6 +3337,7 @@ class Simulation:
         target_band: int,
         *,
         urgency: float,
+        extra_transition_mult: float = 1.0,
     ) -> None:
         """Move a predator-prey creature by at most one bounded band."""
         if self.settings.sim_mode != "predator_prey":
@@ -3110,6 +3347,7 @@ class Simulation:
         if creature.depth_band == target:
             return
         urgency *= self._get_effective_phenotype(creature).depth_transition_mult
+        urgency *= max(0.5, min(1.5, extra_transition_mult))
         if random.random() < max(0.0, min(1.0, urgency)):
             creature.depth_band = step_depth_band_toward(creature.depth_band, target)
 
@@ -4279,6 +4517,29 @@ class Simulation:
             "predator_contact_kill_distance_scale": (
                 self._get_predator_contact_kill_distance_scale()
             ),
+            "predator_refuge_enabled": self._predator_refuge_enabled(),
+            "predator_refuge_zone_type": "hunting_ground",
+            "predator_refuge_hunt_sense_bonus": (
+                self._get_predator_refuge_hunt_sense_bonus()
+            ),
+            "predator_refuge_contact_bonus": (
+                self._get_predator_refuge_contact_bonus()
+            ),
+            "predator_refuge_depth_transition_bonus": (
+                self._get_predator_refuge_depth_transition_bonus()
+            ),
+            "predator_refuge_movement_cost_reduction": (
+                self._get_predator_refuge_movement_cost_reduction()
+            ),
+            "predator_refuge_density_radius": (
+                self._get_predator_refuge_density_radius()
+            ),
+            "predator_refuge_density_soft_cap": (
+                self._get_predator_refuge_density_soft_cap()
+            ),
+            "predator_refuge_density_hard_cap": (
+                self._get_predator_refuge_density_hard_cap()
+            ),
             "completed_lives": [self._copy_predator_life(life) for life in self._predator_diag_completed],
             "active_lives": [
                 self._copy_predator_life(life)
@@ -4658,6 +4919,8 @@ class Simulation:
             "frames_with_prey_sighted": 0,
             "prey_scarce_frames": 0,
             "cross_band_contact_misses": 0,
+            "cross_band_misses_inside_refuge": 0,
+            "cross_band_misses_outside_refuge": 0,
             "births_produced": 0,
             "threshold_min": None,
             "threshold_max": None,
@@ -4674,6 +4937,16 @@ class Simulation:
             "predator_count_at_death": None,
             "prey_count_at_death": None,
             "depth_band_at_death": None,
+            "hunting_ground_frames": 0,
+            "refuge_frames": 0,
+            "refuge_bonus_factor_sum": 0.0,
+            "kills_inside_refuge": 0,
+            "kills_outside_refuge": 0,
+            "died_inside_refuge": False,
+            "died_in_hunting_ground": False,
+            "death_zone_type": None,
+            "refuge_bonus_factor_at_death": 0.0,
+            "local_predator_density_at_death": None,
             "strategy_bucket_at_start": phenotype.strategy_bucket,
             "strategy_bucket_at_end": None,
             "phenotype_modifiers_at_start": {
@@ -4704,9 +4977,18 @@ class Simulation:
         life["frames_with_prey_sighted"] += 1
         life["last_saw_prey_frame"] = self._frame
 
-    def _record_predator_cross_band_miss(self, predator: Creature) -> None:
+    def _record_predator_cross_band_miss(
+        self,
+        predator: Creature,
+        *,
+        refuge_modifiers: PredatorRefugeModifiers,
+    ) -> None:
         life = self._ensure_predator_life(predator)
         life["cross_band_contact_misses"] += 1
+        if refuge_modifiers.active:
+            life["cross_band_misses_inside_refuge"] += 1
+        else:
+            life["cross_band_misses_outside_refuge"] += 1
 
     def _record_predator_kill(
         self,
@@ -4715,9 +4997,14 @@ class Simulation:
         pre_kill_energy: float,
         post_kill_energy: float,
         repro_threshold: float,
+        refuge_modifiers: PredatorRefugeModifiers,
     ) -> None:
         life = self._ensure_predator_life(predator)
         life["kills"] += 1
+        if refuge_modifiers.active:
+            life["kills_inside_refuge"] += 1
+        else:
+            life["kills_outside_refuge"] += 1
         life["last_kill_frame"] = self._frame
         life["highest_energy"] = max(life["highest_energy"], post_kill_energy)
         life["kill_pre_energies"].append(pre_kill_energy)
@@ -4736,11 +5023,23 @@ class Simulation:
         *,
         repro_threshold: float,
         prey_scarce: bool,
+        creature_bucket: dict[tuple[int, int], list[Creature]] | None = None,
+        refuge_modifiers: PredatorRefugeModifiers | None = None,
     ) -> None:
         life = self._ensure_predator_life(predator)
         life["frames_observed"] += 1
         if prey_scarce:
             life["prey_scarce_frames"] += 1
+        zone_context = self.zone_manager.get_zone_context_at(predator.x, predator.y)
+        if zone_context.zone_type == "hunting_ground":
+            life["hunting_ground_frames"] += 1
+        active_refuge = refuge_modifiers or self._get_predator_refuge_modifiers(
+            predator,
+            creature_bucket,
+        )
+        if active_refuge.active:
+            life["refuge_frames"] += 1
+            life["refuge_bonus_factor_sum"] += active_refuge.refuge_factor
         life["highest_energy"] = max(life["highest_energy"], predator.energy)
         if life["threshold_min"] is None or repro_threshold < life["threshold_min"]:
             life["threshold_min"] = repro_threshold
@@ -4784,6 +5083,19 @@ class Simulation:
         life["predator_count_at_death"] = predator_count
         life["prey_count_at_death"] = prey_count
         life["depth_band_at_death"] = creature.depth_band
+        creature_bucket = self._build_creature_bucket()
+        refuge_modifiers = self._get_predator_refuge_modifiers(
+            creature,
+            creature_bucket,
+        )
+        zone_context = self.zone_manager.get_zone_context_at(creature.x, creature.y)
+        life["died_inside_refuge"] = refuge_modifiers.active
+        life["died_in_hunting_ground"] = zone_context.zone_type == "hunting_ground"
+        life["death_zone_type"] = zone_context.zone_type
+        life["refuge_bonus_factor_at_death"] = refuge_modifiers.refuge_factor
+        life["local_predator_density_at_death"] = (
+            refuge_modifiers.local_predator_count
+        )
         end_phenotype = self._get_effective_phenotype(creature)
         life["strategy_bucket_at_end"] = end_phenotype.strategy_bucket
         life["phenotype_modifiers_at_end"] = {

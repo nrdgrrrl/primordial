@@ -183,6 +183,17 @@ Adaptive predator_prey dials are intentionally small and ecological only:
 `predator_contact_kill_distance_scale`, `predator_kill_energy_gain_cap`,
 `predator_hunt_sense_multiplier`, `prey_flee_sense_multiplier`,
 `predator_prey_scarcity_penalty_multiplier`, and `food_cycle_amplitude`.
+Predator ambush-habitat tuning is separate from those adaptive dials. The first
+pass is hardcoded to `hunting_ground` and only applies modest predator-only
+bonuses when predators are already inside that zone. It must remain
+density-damped and must not attract predators, spawn predators, preserve
+collapsed predator traits, or act as a predator-respawn system. Current
+mode-scoped keys are `predator_refuge_enabled`,
+`predator_refuge_hunt_sense_bonus`, `predator_refuge_contact_bonus`,
+`predator_refuge_depth_transition_bonus`,
+`predator_refuge_movement_cost_reduction`,
+`predator_refuge_density_radius`, `predator_refuge_density_soft_cap`, and
+`predator_refuge_density_hard_cap`.
 Snapshots must round-trip the adaptive tuning state, current seed, `sim_ticks`,
 and `survival_ticks`.
 The adaptive predator_prey tuning state is also persisted on app exit and

@@ -53,6 +53,8 @@ def _make_life(
     frames_with_prey_sighted=30,
     prey_scarce_frames=60,
     cross_band_contact_misses=0,
+    cross_band_misses_inside_refuge=0,
+    cross_band_misses_outside_refuge=0,
     threshold_min=None,
     threshold_max=None,
     closest_peak_gap=None,
@@ -70,6 +72,16 @@ def _make_life(
     predator_count_at_death=None,
     prey_count_at_death=None,
     depth_band_at_death=None,
+    hunting_ground_frames=0,
+    refuge_frames=0,
+    refuge_bonus_factor_sum=0.0,
+    kills_inside_refuge=0,
+    kills_outside_refuge=0,
+    died_inside_refuge=False,
+    died_in_hunting_ground=False,
+    death_zone_type=None,
+    refuge_bonus_factor_at_death=0.0,
+    local_predator_density_at_death=None,
     strategy_bucket_at_start="generalist",
     strategy_bucket_at_end=None,
     phenotype_modifiers_at_start=None,
@@ -95,6 +107,8 @@ def _make_life(
         "frames_with_prey_sighted": frames_with_prey_sighted,
         "prey_scarce_frames": prey_scarce_frames,
         "cross_band_contact_misses": cross_band_contact_misses,
+        "cross_band_misses_inside_refuge": cross_band_misses_inside_refuge,
+        "cross_band_misses_outside_refuge": cross_band_misses_outside_refuge,
         "births_produced": births_produced,
         "threshold_min": threshold_min,
         "threshold_max": threshold_max,
@@ -111,6 +125,16 @@ def _make_life(
         "predator_count_at_death": predator_count_at_death,
         "prey_count_at_death": prey_count_at_death,
         "depth_band_at_death": depth_band_at_death,
+        "hunting_ground_frames": hunting_ground_frames,
+        "refuge_frames": refuge_frames,
+        "refuge_bonus_factor_sum": refuge_bonus_factor_sum,
+        "kills_inside_refuge": kills_inside_refuge,
+        "kills_outside_refuge": kills_outside_refuge,
+        "died_inside_refuge": died_inside_refuge,
+        "died_in_hunting_ground": died_in_hunting_ground,
+        "death_zone_type": death_zone_type,
+        "refuge_bonus_factor_at_death": refuge_bonus_factor_at_death,
+        "local_predator_density_at_death": local_predator_density_at_death,
         "strategy_bucket_at_start": strategy_bucket_at_start,
         "strategy_bucket_at_end": strategy_bucket_at_end or strategy_bucket_at_start,
         "phenotype_modifiers_at_start": phenotype_modifiers_at_start or {
@@ -315,14 +339,31 @@ class TestReportSections(unittest.TestCase):
     def test_section_f_prey_access(self):
         lives = [
             _make_life(frames_observed=200, frames_with_prey_sighted=50,
-                        kills=3, cross_band_contact_misses=2),
+                        kills=3, cross_band_contact_misses=2,
+                        refuge_frames=80, hunting_ground_frames=120,
+                        kills_inside_refuge=2, kills_outside_refuge=1,
+                        cross_band_misses_inside_refuge=1,
+                        cross_band_misses_outside_refuge=1,
+                        died_inside_refuge=True,
+                        refuge_bonus_factor_at_death=0.55,
+                        local_predator_density_at_death=2),
             _make_life(frames_observed=150, frames_with_prey_sighted=0,
-                        kills=0, cross_band_contact_misses=0),
+                        kills=0, cross_band_contact_misses=0,
+                        refuge_frames=0, hunting_ground_frames=20,
+                        kills_inside_refuge=0, kills_outside_refuge=0,
+                        cross_band_misses_inside_refuge=0,
+                        cross_band_misses_outside_refuge=0,
+                        died_inside_refuge=False,
+                        refuge_bonus_factor_at_death=0.0,
+                        local_predator_density_at_death=6),
         ]
         run = _make_run(completed_lives=lives)
         result = _section_f_prey_access([run])
         # median of [50/200=0.25, 0/150=0.0] = 0.125
         self.assertAlmostEqual(result["median_prey_sighting_share"], 0.125)
+        self.assertEqual(result["kills_inside_refuge"], 2)
+        self.assertEqual(result["cross_band_misses_inside_refuge"], 1)
+        self.assertIn("mean_refuge_frames_per_life", result)
 
     def test_section_g_scarcity(self):
         lives = [
@@ -382,6 +423,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         self.assertIn("# Predator Collapse Diagnostics Report", md)
         self.assertIn("## A. Run Summary", md)
         self.assertIn("## I. Recommendations", md)
+        self.assertIn("Kills inside refuge", md)
 
 
 if __name__ == "__main__":

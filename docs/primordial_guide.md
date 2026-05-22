@@ -346,9 +346,9 @@ prey by sensing, steering, and probabilistically shifting depth.
 ### How Predators Behave
 
 A predator scans for the nearest prey within its sensing range (modified by
-the predator hunt sense multiplier, predator interference, and hunt balance
-factor). When it detects prey, it steers toward it and tries to match its
-depth band.
+the predator hunt sense multiplier, predator interference, hunt balance
+factor, and any active ambush-habitat bonus). When it detects prey, it steers
+toward it and tries to match its depth band.
 
 **Kill on contact**: when the predator and prey are close enough (sum of
 radii, scaled by `predator_contact_kill_distance_scale`) and in the same
@@ -372,6 +372,12 @@ which its hunting sense is reduced, causing it to search at close range only.
 **Interference**: predators near other predators suffer reduced hunting
 effectiveness. This natural interference prevents predator swarms from
 wiping out local prey instantly.
+
+**Ambush habitat**: hunting grounds provide a modest predator-only refuge
+bonus when a predator is already there. The bonus can slightly improve hunt
+sense, contact conversion, depth tracking, and hunting costs, but it fades near
+zone edges and is density-damped so stacked predators do not turn the habitat
+into a predator hotel. Predators do not actively seek this habitat.
 
 **Movement cost**: predators pay a metabolic premium on movement (up to 1.4x
 base cost, reduced toward 1.0x when broad omnivory/foraging is strong). When

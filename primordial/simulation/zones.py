@@ -92,6 +92,17 @@ class Zone:
     local_strength: float  # 0.5–1.0 per-zone random factor
 
 
+@dataclass(frozen=True)
+class ZoneContext:
+    """Pure summary of the strongest zone affecting a world position."""
+
+    zone_type: str | None = None
+    label: str = ""
+    influence: float = 0.0
+    center_weight: float = 0.0
+    local_strength: float = 0.0
+
+
 # ---------------------------------------------------------------------------
 # ZoneManager
 # ---------------------------------------------------------------------------
@@ -236,23 +247,51 @@ class ZoneManager:
 
     def get_sensing_modifier_at(self, x: float, y: float) -> float:
         """Return the sensing clarity modifier at a position."""
-        zone = self._strongest_zone_at(x, y)
-        if zone is None:
+        zone_context = self.get_zone_context_at(x, y)
+        if zone_context.zone_type is None:
             return 1.0
-        return _ZONE_SENSING_MODIFIERS.get(zone.zone_type, 1.0)
+        return _ZONE_SENSING_MODIFIERS.get(zone_context.zone_type, 1.0)
+
+    def get_zone_type_at(self, x: float, y: float) -> str | None:
+        """Return the strongest containing zone type at a position, if any."""
+        return self.get_zone_context_at(x, y).zone_type
+
+    def get_zone_influence_at(self, x: float, y: float) -> float:
+        """Return the strongest zone influence at a position on a 0..1 scale."""
+        return self.get_zone_context_at(x, y).influence
+
+    def get_zone_context_at(self, x: float, y: float) -> ZoneContext:
+        """Return the strongest zone summary affecting a position."""
+        zone = self._strongest_zone_at(x, y)
+        if zone is None or self.global_strength <= 0.0:
+            return ZoneContext()
+        center_weight = self._zone_weight(zone, x, y)
+        return ZoneContext(
+            zone_type=zone.zone_type,
+            label=str(ZONE_DEFINITIONS[zone.zone_type]["label"]),
+            influence=max(0.0, min(1.0, center_weight * zone.local_strength)),
+            center_weight=center_weight,
+            local_strength=zone.local_strength,
+        )
 
     def _strongest_zone_at(self, x: float, y: float) -> Zone | None:
         """Return the strongest containing zone at a position, if any."""
         best_zone: Zone | None = None
         best_weight = 0.0
         for zone in self.zones:
-            dx = x - zone.x
-            dy = y - zone.y
-            dist = math.sqrt(dx * dx + dy * dy)
-            if dist >= zone.radius:
+            weight = self._zone_weight(zone, x, y)
+            if weight <= 0.0:
                 continue
-            weight = 1.0 - dist / zone.radius
             if weight > best_weight:
                 best_weight = weight
                 best_zone = zone
         return best_zone
+
+    def _zone_weight(self, zone: Zone, x: float, y: float) -> float:
+        """Return center-to-edge weight for a point inside a zone."""
+        dx = x - zone.x
+        dy = y - zone.y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist >= zone.radius:
+            return 0.0
+        return 1.0 - dist / zone.radius

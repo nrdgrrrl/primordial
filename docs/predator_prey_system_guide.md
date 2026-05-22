@@ -65,6 +65,12 @@ match its depth band. A predator kills by contact if it is close enough and in
 the same band. A kill transfers a capped amount of the prey's remaining energy
 to the predator.
 
+Hunting grounds now also act as modest **ambush habitat** for predators already
+inside them. In the first pass, this bonus is habitat-only: predators do not
+steer toward hunting grounds, do not spawn there, and do not preserve collapsed
+predator lineages. The bonus is intentionally small, fades toward zone edges,
+and shrinks when too many predators stack together locally.
+
 Predators are not purely obligate hunters in the current implementation. When a
 predator is not engaged with prey, it can forage for food with predator-specific
 efficiency and cost rules. Predator reproduction still requires recent animal
@@ -85,7 +91,10 @@ make sensing less clear. Open water and hunting grounds sharpen it.
 
 Prey flee when they sense a nearby predator. Fleeing uses stronger steering than
 normal food seeking and may trigger a depth-band escape attempt. Predators track
-prey by sensing, steering, and probabilistically shifting depth.
+prey by sensing, steering, and probabilistically shifting depth. Inside a
+hunting ground, predators can get a small density-damped boost to hunt sensing,
+contact range, and depth tracking, plus a slight reduction in hunting energy
+costs.
 
 ## Depth Bands and Cross-Band Misses
 

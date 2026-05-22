@@ -96,6 +96,14 @@ _CANONICAL_MODE_KEYS: dict[str, tuple[str, ...]] = {
         "predator_hunt_sense_multiplier",
         "predator_hunt_speed_multiplier",
         "predator_contact_kill_distance_scale",
+        "predator_refuge_enabled",
+        "predator_refuge_hunt_sense_bonus",
+        "predator_refuge_contact_bonus",
+        "predator_refuge_depth_transition_bonus",
+        "predator_refuge_movement_cost_reduction",
+        "predator_refuge_density_radius",
+        "predator_refuge_density_soft_cap",
+        "predator_refuge_density_hard_cap",
         "prey_flee_sense_multiplier",
         "predator_prey_scarcity_penalty_multiplier",
         "food_cycle_amplitude",
@@ -155,6 +163,14 @@ _MODE_PARAM_RULES: dict[str, tuple[str, float | int | None, float | int | None]]
     "predator_hunt_sense_multiplier": ("float", 0.1, 5.0),
     "predator_hunt_speed_multiplier": ("float", 0.1, 5.0),
     "predator_contact_kill_distance_scale": ("float", 0.1, 5.0),
+    "predator_refuge_enabled": ("bool", None, None),
+    "predator_refuge_hunt_sense_bonus": ("float", 0.0, 0.25),
+    "predator_refuge_contact_bonus": ("float", 0.0, 0.25),
+    "predator_refuge_depth_transition_bonus": ("float", 0.0, 0.30),
+    "predator_refuge_movement_cost_reduction": ("float", 0.0, 0.20),
+    "predator_refuge_density_radius": ("float", 0.0, 1000.0),
+    "predator_refuge_density_soft_cap": ("int", 0, None),
+    "predator_refuge_density_hard_cap": ("int", 1, None),
     "prey_flee_sense_multiplier": ("float", 0.1, 5.0),
     "predator_prey_scarcity_penalty_multiplier": ("float", 0.1, 5.0),
     "food_cycle_amplitude": ("float", 0.0, 1.0),
@@ -428,6 +444,11 @@ class Config:
         self.predator_highlight_pulse_seconds = max(
             0.1, self.predator_highlight_pulse_seconds
         )
+        predator_prey_params = self.mode_params.get("predator_prey", {})
+        soft_cap = int(predator_prey_params.get("predator_refuge_density_soft_cap", 3))
+        hard_cap = int(predator_prey_params.get("predator_refuge_density_hard_cap", 7))
+        if hard_cap <= soft_cap:
+            predator_prey_params["predator_refuge_density_hard_cap"] = soft_cap + 1
         mode_capacities = [
             int(values["max_population"])
             for values in self.mode_params.values()

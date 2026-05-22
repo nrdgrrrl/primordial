@@ -271,7 +271,7 @@ Not every visual change is adaptive. Neutral drift can shift glyph traits over g
 
 In predator_prey mode, species is determined by the `aggression` trait using hysteresis thresholds: prey with aggression ≥ `prey_to_predator_aggression_threshold` (default 0.30) become predators, and predators with aggression < `predator_to_prey_aggression_threshold` (default 0.20) become prey. Unknown species fall back to 0.5. This means species is an emergent role, not a separate property. Offspring can change species from their parent if a mutation crosses the relevant threshold.
 
-**Predators** hunt prey on contact (same depth band required), gain capped energy per kill, and can forage for food when not actively hunting — but reproduction requires recent animal energy from kills. Predators also suffer interference (reduced effectiveness near other predators), a metabolic premium on movement, and a scarcity penalty when prey are below 15% of the population.
+**Predators** hunt prey on contact (same depth band required), gain capped energy per kill, and can forage for food when not actively hunting — but reproduction requires recent animal energy from kills. Predators also suffer interference (reduced effectiveness near other predators), a metabolic premium on movement, and a scarcity penalty when prey are below 15% of the population. Hunting grounds now act as modest ambush habitat for predators already inside them: the bonus is small, fades near the edge, and is density-damped so refuges do not become predator hotels. Predators do not seek those zones and no predator spawning or trait preservation was added.
 
 **Prey** seek food and flee nearby predators. Fleeing takes priority over feeding. Prey can escape into a different depth band (cross-band miss) or flee beyond the predator's sensing range.
 
@@ -336,6 +336,7 @@ A Lotka-Volterra-inspired ecosystem where creatures are born as either **predato
 - Arms race evolution: predator aggression and prey speed evolve under mutual selection pressure.
 - Cosmic ray hits can flip species identity when aggression crosses the hysteresis threshold (prey → predator at 0.30, predator → prey at 0.20).
 - When predators exceed 60% of the population, predator reproduction becomes harder: their reproduction threshold increases by 20%.
+- Hunting grounds provide a small density-damped ambush habitat bonus for predators already inside them, improving hunting conversion modestly without attracting predators or spawning new ones.
 - If predators or prey hit zero, predator_prey enters an extinction grace window. The simulation continues while zero ticks are counted. If the species recovers (through mutation-driven species switching) before the grace window expires, the run continues. If the zero state persists for `extinction_grace_ticks` (default 7200 at 30 Hz, ~4 minutes), the run enters a red `GAME OVER` overlay, holds for 10 seconds, then restarts with a new seed. Predator lineages are biologically gone when predators hit zero, but new predators can reappear from surviving prey via species flip.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
 - The `GAME OVER` overlay also shows the rolling median that the run had to beat, highlights the current survival ticks when they beat that rolling median, shows the current adaptive step modifier, lists the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and still notes when a run sets a new highest survival record.
@@ -452,6 +453,14 @@ Mode-specific tuning keys:
 |---|---|---|---|
 | modes.predator_prey | prey_energy_to_reproduce | float 0.05..1 | Prey-only reproduction threshold in `predator_prey`; falls back to shared `simulation.energy_to_reproduce` if absent |
 | modes.predator_prey | predator_energy_to_reproduce | float 0.05..1 | Predator-only reproduction threshold in `predator_prey`; falls back to shared `simulation.energy_to_reproduce` if absent |
+| modes.predator_prey | predator_refuge_enabled | bool | Enable predator ambush-habitat bonuses in hunting grounds |
+| modes.predator_prey | predator_refuge_hunt_sense_bonus | float 0..0.25 | Maximum extra predator hunt-sense bonus available in ambush habitat |
+| modes.predator_prey | predator_refuge_contact_bonus | float 0..0.25 | Maximum extra predator contact-kill distance bonus available in ambush habitat |
+| modes.predator_prey | predator_refuge_depth_transition_bonus | float 0..0.30 | Maximum extra predator depth-tracking urgency available in ambush habitat |
+| modes.predator_prey | predator_refuge_movement_cost_reduction | float 0..0.20 | Maximum hunting-cost reduction available to predators in ambush habitat |
+| modes.predator_prey | predator_refuge_density_radius | float >= 0 | Radius used to count nearby predators for refuge density damping |
+| modes.predator_prey | predator_refuge_density_soft_cap | int >= 0 | Nearby-predator count that still allows the full refuge bonus |
+| modes.predator_prey | predator_refuge_density_hard_cap | int >= 1 | Nearby-predator count where the refuge bonus fully fades out |
 | modes.predator_prey | prey_flee_sense_multiplier | float 0.1..5 | Multiplier applied to prey threat sensing while fleeing |
 | modes.predator_prey | predator_prey_scarcity_penalty_multiplier | float 0.1..5 | Extra predator energy-cost multiplier when prey fall below 15% of population |
 | modes.predator_prey | food_cycle_amplitude | float 0..1 | Blend between constant food rate (`0`) and the full feast/famine swing (`1`) |
