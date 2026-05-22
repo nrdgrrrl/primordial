@@ -66,6 +66,10 @@ def _make_life(
     near_contact_with_low_energy_prey_frames=0,
     near_contact_no_kill_with_old_prey_frames=0,
     near_contact_no_kill_with_low_energy_prey_frames=0,
+    post_move_contact_kills=0,
+    post_move_contact_opportunities=0,
+    post_move_contact_same_depth_opportunities=0,
+    post_move_contact_cross_depth_opportunities=0,
     sustained_chase_frames=0,
     max_sustained_chase_frames=0,
     kills_after_sustained_chase=0,
@@ -156,6 +160,10 @@ def _make_life(
         "near_contact_no_kill_with_low_energy_prey_frames": (
             near_contact_no_kill_with_low_energy_prey_frames
         ),
+        "post_move_contact_kills": post_move_contact_kills,
+        "post_move_contact_opportunities": post_move_contact_opportunities,
+        "post_move_contact_same_depth_opportunities": post_move_contact_same_depth_opportunities,
+        "post_move_contact_cross_depth_opportunities": post_move_contact_cross_depth_opportunities,
         "sustained_chase_frames": sustained_chase_frames,
         "max_sustained_chase_frames": max_sustained_chase_frames,
         "kills_after_sustained_chase": kills_after_sustained_chase,
@@ -459,6 +467,10 @@ class TestReportSections(unittest.TestCase):
                 near_contact_cross_depth_no_kill_frames=3,
                 near_contact_no_kill_with_old_prey_frames=4,
                 near_contact_no_kill_with_low_energy_prey_frames=5,
+                post_move_contact_opportunities=4,
+                post_move_contact_same_depth_opportunities=3,
+                post_move_contact_cross_depth_opportunities=1,
+                post_move_contact_kills=2,
                 max_sustained_chase_frames=24,
                 kills_after_sustained_chase=1,
                 killed_prey_age_fractions=[0.2, 0.82],
@@ -481,6 +493,10 @@ class TestReportSections(unittest.TestCase):
         self.assertEqual(result["killed_prey_age_bucket_counts"]["old"], 1)
         self.assertEqual(result["killed_prey_energy_bucket_counts"]["low_energy"], 1)
         self.assertAlmostEqual(result["average_killed_prey_energy"], 0.4)
+        self.assertEqual(result["post_move_contact_opportunities"], 4)
+        self.assertEqual(result["post_move_contact_same_depth_opportunities"], 3)
+        self.assertEqual(result["post_move_contact_cross_depth_opportunities"], 1)
+        self.assertEqual(result["post_move_contact_kills"], 2)
         self.assertAlmostEqual(
             result["pct_near_contact_no_kill_frames_with_low_energy_prey"],
             55.55555555555556,

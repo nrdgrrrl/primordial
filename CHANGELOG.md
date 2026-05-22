@@ -2,6 +2,14 @@
 
 All notable changes to Primordial are documented in this file.
 
+## Unreleased
+
+- fix: resolved predator contact timing by adding a same-target post-move
+  contact resolution in predator_prey (same depth and normal contact distance
+  still required).
+- Added post-move contact diagnostics for opportunities and kills.
+- No spawning, trait-preservation, reproduction-threshold, or kill-cap changes.
+
 ## [2026-05-22] — feat: add predator ambush habitat modifiers
 
 Add the first predator-collapse mitigation pass: predator-only ambush habitat
