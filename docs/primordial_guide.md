@@ -114,7 +114,8 @@ In predator_prey mode, reproduction has additional rules:
 - When predators exceed 60% of the population, their effective reproduction
   threshold increases by 20%, making it harder for predators to dominate.
 - An offspring may change species from its parent if the mutation shifted its
-  `aggression` across the 0.5 species boundary.
+  `aggression` across the hysteresis species thresholds (prey → predator at
+  0.30, predator → prey at 0.20).
 
 ## How Mutation Works
 
@@ -274,6 +275,8 @@ The following are **visual metaphors, not biological models**:
 - Neutral drift of unconstrained traits
 - Population dynamics driven by resource cycles and predation
 - Spatial effects on evolution (zone adaptation, local density)
+- Temporary local extinction and mutation-driven role recovery within a
+  grace window
 
 **Cannot model:**
 
@@ -476,7 +479,8 @@ Both species inherit full 16-trait genomes from their parents with mutation.
 Key traits under selection in each role:
 
 **Predators**: speed (catch prey faster), sense_radius (find prey at greater
-range), aggression (already above 0.5 by definition, but higher aggression
+range), aggression (determines role via hysteresis thresholds: prey → predator
+at 0.30, predator → prey at 0.20; higher aggression within the predator range
 affects hunt priority), depth_preference (matching prey depth bands improves
 kill rate).
 
@@ -487,21 +491,26 @@ longevity (surviving through famine periods may be more valuable than
 reproducing quickly).
 
 Because species assignment depends on the `aggression` trait boundary, there
-is gene flow between the roles when mutations cross the 0.5 threshold. A
+is gene flow between the roles when mutations cross the hysteresis thresholds
+(prey → predator at 0.30, predator → prey at 0.20). A
 high-speed prey organism can give birth to a predator offspring if the
 aggression mutation is large enough. This means predator and prey gene pools
 are not fully isolated.
 
 ### What Makes an Organism Predator or Prey
 
-In predator_prey mode, species is a role assigned at birth based on the
-`aggression` trait. If aggression is above 0.5, the creature is born a
-predator. If below 0.5, it is born prey. This means species is not a
-separate property — it is an emergent consequence of a single genome trait.
+In predator_prey mode, species is a role determined by the `aggression` trait
+using hysteresis thresholds (not a simple 0.5 boundary). A prey creature whose
+aggression reaches `prey_to_predator_aggression_threshold` (default 0.30)
+becomes a predator. A predator whose aggression drops below
+`predator_to_prey_aggression_threshold` (default 0.20) becomes prey. Unknown
+or unclassified species fall back to 0.5. This means species is not a
+separate property — it is an emergent consequence of a single genome trait,
+with a hysteresis gap that prevents rapid role-flipping.
 
 An offspring can be born a different species than its parent if the mutation
-shifts aggression across the 0.5 boundary. A cosmic ray mutation can also
-flip a living creature's species mid-life when aggression crosses 0.5.
+shifts aggression across the relevant hysteresis threshold. A cosmic ray
+mutation can also flip a living creature's species mid-life.
 
 Predators receive a warm color tint layered over their genome hue. Prey
 render directly from their genome color palette. This tint is cosmetic, not
@@ -559,17 +568,30 @@ Collapse can happen in several ways:
 
 - prey run out of food or cannot escape predation;
 - predators overtake the ecosystem and then starve when prey become scarce;
-- one role hits zero and stays there beyond the configured grace window;
+- one role hits zero and stays there beyond the configured grace window (default
+  7200 ticks at 30 Hz, roughly 4 minutes);
 - overcrowding raises costs when populations are high.
 
-The HUD shows the food-cycle bar, predator/prey counts, and danger status when a
-role has reached zero but is still inside the extinction grace window.
+If a species hits zero, the simulation enters an extinction grace window. The
+run is not immediately over: the remaining species continues to live, mutate,
+reproduce, and evolve. If the zero-count species recovers through mutation-driven
+species switching before the grace window expires, the run continues. The HUD
+shows a danger/grace line indicating which role is at zero and how many grace
+ticks remain. If the zero state persists for the full grace window, the run
+enters a red GAME OVER overlay, holds for 10 seconds, then restarts.
 
 ## Game Over and Adaptive Tuning
 
 Predator-prey mode has a clear failure state. If predators or prey remain at
-zero long enough to exceed the configured extinction grace window, the run
-freezes and shows a red **GAME OVER** overlay.
+zero for the full extinction grace window (default 7200 ticks), the run freezes
+and shows a red **GAME OVER** overlay.
+
+During the grace window before GAME OVER, the simulation continues. The
+remaining species lives, mutates, reproduces, and evolves. If the zero-count
+species recovers (through offspring mutation or cosmic ray species flip) before
+the grace window expires, the run continues normally. The HUD shows a
+danger/grace line indicating which role is at zero and how many grace ticks
+remain.
 
 The game-over overlay shows the collapse cause, seed, predator/prey counts,
 survival ticks, rolling survival history, adaptive dial values, and a restart
@@ -703,10 +725,13 @@ appearance:
   the screen, then lose ground to a newer lineage with a trait advantage
   (or just lucky positioning during a famine). Old kin lines fade as
   lineages die out and new ones take their place.
-- **Extinction events** in predator_prey mode can reset the system. When
-  one species collapses, the run ends and restarts. Over many runs, you may
-  observe which ecological configurations (speed distributions, depth
-  distributions, food cycle parameters) tend to produce longer survival.
+- **Extinction events** in predator_prey mode can reset the system, but not
+  immediately. If a species hits zero, the simulation enters an extinction grace
+  window. During the grace window, the remaining species continues to live,
+  mutate, reproduce, and evolve. Recovery is possible through mutation-driven
+  species switching. If the zero state persists for the full grace window, the
+  run enters GAME OVER and restarts. Over many runs, you may observe which
+  ecological configurations tend to produce longer survival.
 - In drift mode, all traits drift without direction. Watch glyph shapes
   slowly wander through the trait space over very long runs. No trait
   "improves" — it just changes. This is pure neutral evolution.
@@ -940,11 +965,13 @@ they are in different depth bands.
 depends on how common it is. Hunting is profitable when prey are common and
 unprofitable when prey are scarce.
 
-**Game over**: Predator-prey collapse state after a role remains at zero beyond
-the configured grace window.
+**Game over**: Predator-prey collapse state after a role remains at zero for
+the full extinction grace window. Temporary zero-count extinction can recover
+through mutation-driven species switching during the grace window.
 
 **Gene flow**: Exchange of genetic material between populations. In
-predator_prey mode, mutations that shift aggression across 0.5 transfer a
+predator_prey mode, mutations that shift aggression across the hysteresis
+thresholds (prey → predator at 0.30, predator → prey at 0.20) transfer a
 creature between species, creating gene flow between predator and prey gene
 pools.
 

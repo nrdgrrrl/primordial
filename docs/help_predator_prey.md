@@ -80,13 +80,15 @@ When a predator reaches contact range but the prey is in another band, that is a
 
 ## What Makes an Organism Predator or Prey
 
-In predator_prey mode, species is a role assigned at birth based on the `aggression` trait. If aggression is above 0.5, the creature is born a predator. If below 0.5, it is born prey.
+In predator_prey mode, species is a role determined by the `aggression` trait using hysteresis thresholds. A prey creature whose aggression reaches `prey_to_predator_aggression_threshold` (default 0.30) becomes a predator. A predator whose aggression drops below `predator_to_prey_aggression_threshold` (default 0.20) becomes prey. Unknown species fall back to 0.5.
 
-An offspring can be born a different species than its parent if the mutation shifts aggression across the 0.5 boundary. A cosmic ray mutation can also flip a living creature's species mid-life.
+An offspring can be born a different species than its parent if the mutation shifts aggression across the relevant hysteresis threshold. A cosmic ray mutation can also flip a living creature's species mid-life.
 
 ## Game Over and Adaptive Tuning
 
-If predators or prey remain at zero long enough to exceed the configured extinction grace window, the run freezes and shows a red **GAME OVER** overlay. The default hold is 10 seconds. Press `Space` to skip the countdown and restart immediately.
+If predators or prey hit zero, predator_prey enters an extinction grace window. The simulation continues while zero ticks are counted. If the species recovers through mutation-driven species switching before the grace window expires, the run continues. If the zero state persists for `extinction_grace_ticks` (default 7200), the run freezes and shows a red **GAME OVER** overlay. The default hold is 10 seconds. Press `Space` to skip the countdown and restart immediately.
+
+When predators hit zero, existing predator lineages are biologically gone. During the grace window, the remaining prey population continues to live, mutate, reproduce, and evolve. New predators can reappear if prey offspring or living prey cross the predator threshold through mutation or cosmic ray species flip. If `GAME OVER` occurs, the living world's biological history is reset on restart.
 
 Adaptive tuning exists in the codebase but is disabled by the committed default config. When enabled, the system can compare bounded ecological dial changes across repeated runs.
 

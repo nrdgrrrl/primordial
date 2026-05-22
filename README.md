@@ -269,7 +269,7 @@ Not every visual change is adaptive. Neutral drift can shift glyph traits over g
 
 ### Predator-Prey Biology
 
-In predator_prey mode, species is determined by the `aggression` trait: above 0.5 = predator, below 0.5 = prey. This means species is an emergent role, not a separate property. Offspring can change species from their parent if a mutation crosses the 0.5 boundary.
+In predator_prey mode, species is determined by the `aggression` trait using hysteresis thresholds: prey with aggression ≥ `prey_to_predator_aggression_threshold` (default 0.30) become predators, and predators with aggression < `predator_to_prey_aggression_threshold` (default 0.20) become prey. Unknown species fall back to 0.5. This means species is an emergent role, not a separate property. Offspring can change species from their parent if a mutation crosses the relevant threshold.
 
 **Predators** hunt prey on contact (same depth band required), gain capped energy per kill, and can forage for food when not actively hunting — but reproduction requires recent animal energy from kills. Predators also suffer interference (reduced effectiveness near other predators), a metabolic premium on movement, and a scarcity penalty when prey are below 15% of the population.
 
@@ -334,9 +334,9 @@ HUD shows: population, generation count, hunter/grazer/opportunist ratio, domina
 A Lotka-Volterra-inspired ecosystem where creatures are born as either **predator** or **prey**. The committed default starts at 12% predators and 88% prey. Predators hunt prey on contact and may forage when not actively hunting; prey search for food and flee nearby predators. The success metric is **stability**: how many simulation ticks the run survives before either species remains collapsed past the extinction grace window.
 
 - Arms race evolution: predator aggression and prey speed evolve under mutual selection pressure.
-- Cosmic ray hits can flip species identity when aggression crosses the 0.5 threshold.
+- Cosmic ray hits can flip species identity when aggression crosses the hysteresis threshold (prey → predator at 0.30, predator → prey at 0.20).
 - When predators exceed 60% of the population, predator reproduction becomes harder: their reproduction threshold increases by 20%.
-- Extinction is terminal in this mode: predator or prey collapse freezes the run, tints the screen red, shows a `GAME OVER` overlay for 10 seconds, then restarts with a new seed.
+- If predators or prey hit zero, predator_prey enters an extinction grace window. The simulation continues while zero ticks are counted. If the species recovers (through mutation-driven species switching) before the grace window expires, the run continues. If the zero state persists for `extinction_grace_ticks` (default 7200 at 30 Hz, ~4 minutes), the run enters a red `GAME OVER` overlay, holds for 10 seconds, then restarts with a new seed. Predator lineages are biologically gone when predators hit zero, but new predators can reappear from surviving prey via species flip.
 - Pressing `Space` during that `GAME OVER` screen skips the wait and starts the next seeded run immediately.
 - The `GAME OVER` overlay also shows the rolling median that the run had to beat, highlights the current survival ticks when they beat that rolling median, shows the current adaptive step modifier, lists the current run's adaptive dial values, highlights the dial changed for that run with its up/down delta, and still notes when a run sets a new highest survival record.
 - That dial highlight means "this run was the trial run that used this dial change," not "the dial change succeeded." A failed trial still highlights the changed dial, because that is the dial the run actually tested.

@@ -95,7 +95,9 @@ In predator_prey mode, reproduction has additional rules:
 - When predators exceed 60% of the population, their effective reproduction
   threshold increases by 20%, making it harder for predators to dominate.
 - An offspring may change species from its parent if the mutation shifted its
-  `aggression` across the 0.5 species boundary.
+  `aggression` across the hysteresis species thresholds (prey → predator at
+  `prey_to_predator_aggression_threshold`, predator → prey at
+  `predator_to_prey_aggression_threshold`).
 
 ---
 
@@ -269,6 +271,8 @@ The following are **visual metaphors, not biological models**:
 - Neutral drift of unconstrained traits
 - Population dynamics driven by resource cycles and predation
 - Spatial effects on evolution (zone adaptation, local density)
+- Temporary local extinction and mutation-driven role recovery within a
+  grace window
 
 **Cannot model:**
 
@@ -286,14 +290,18 @@ The following are **visual metaphors, not biological models**:
 
 ### What Makes an Organism Predator or Prey
 
-In predator_prey mode, species is a role assigned at birth based on the
-`aggression` trait. If aggression is above 0.5, the creature is born a
-predator. If below 0.5, it is born prey. This means species is not a
-separate property — it is an emergent consequence of a single genome trait.
+In predator_prey mode, species is a role determined by the `aggression` trait
+using hysteresis thresholds. A prey creature whose aggression reaches or exceeds
+`prey_to_predator_aggression_threshold` (default 0.30) becomes a predator. A
+predator whose aggression drops below `predator_to_prey_aggression_threshold`
+(default 0.20) becomes prey. Unknown or unclassified species fall back to 0.5.
+This means species is not a separate property — it is an emergent consequence of a
+single genome trait, with a hysteresis gap that prevents rapid role-flipping.
 
 An offspring can be born a different species than its parent if the mutation
-shifts aggression across the 0.5 boundary. A cosmic ray mutation can also
-flip a living creature's species mid-life when aggression crosses 0.5.
+shifts aggression across the relevant hysteresis threshold (prey → predator at
+0.30, predator → prey at 0.20). A cosmic ray mutation can also flip a living
+creature's species mid-life.
 
 Predators receive a warm color tint layered over their genome hue. Prey
 render directly from their genome color palette. This tint is cosmetic, not
@@ -439,7 +447,8 @@ Both species inherit full 16-trait genomes from their parents with mutation.
 Key traits under selection in each role:
 
 **Predators**: speed (catch prey faster), sense_radius (find prey at greater
-range), aggression (already above 0.5 by definition, but higher aggression
+range), aggression (determines role via hysteresis thresholds: prey → predator
+at 0.30, predator → prey at 0.20; higher aggression within the predator range
 affects hunt priority), depth_preference (matching prey depth bands improves
 kill rate).
 
@@ -449,8 +458,9 @@ earlier), efficiency (extract more energy from limited food), depth_preference
 longevity (surviving through famine periods may be more valuable than
 reproducing quickly).
 
-Because species assignment depends on the `aggression` trait boundary, there
-is gene flow between the roles when mutations cross the 0.5 threshold. A
+Because species assignment depends on the `aggression` trait with hysteresis
+thresholds (prey → predator at 0.30, predator → prey at 0.20), there
+is gene flow between the roles when mutations cross those thresholds. A
 high-speed prey organism can give birth to a predator offspring if the
 aggression mutation is large enough. This means predator and prey gene pools
 are not fully isolated.
@@ -575,10 +585,13 @@ appearance:
   the screen, then lose ground to a newer lineage with a trait advantage
   (or just lucky positioning during a famine). Old kin lines fade as
   lineages die out and new ones take their place.
-- **Extinction events** in predator_prey mode can reset the system. When
-  one species collapses, the run ends and restarts. Over many runs, you may
-  observe which ecological configurations (speed distributions, depth
-  distributions, food cycle parameters) tend to produce longer survival.
+- **Extinction events** in predator_prey mode can reset the system, but not
+  immediately. If a species hits zero, the simulation enters an extinction grace
+  window. During the grace window, the remaining species continues to live,
+  mutate, reproduce, and evolve. Recovery is possible through mutation-driven
+  species switching. If the zero state persists for the full grace window, the
+  run enters GAME OVER and restarts. Over many runs, you may observe which
+  ecological configurations tend to produce longer survival.
 - In drift mode, all traits drift without direction. Watch glyph shapes
   slowly wander through the trait space over very long runs. No trait
   "improves" — it just changes. This is pure neutral evolution.

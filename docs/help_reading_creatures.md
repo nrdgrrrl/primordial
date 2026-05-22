@@ -48,7 +48,7 @@ Watch individual creatures move, eat, and avoid each other. Notice their motion 
 Look for glyph family divergence. After 5-10 minutes, distinct visual clans emerge that share symmetry type, stroke style, and general glyph shape. In predator_prey mode, watch the population counts oscillate in the HUD. Watch territory shimmer centroids drift toward favorable zones.
 
 ### Over long runs (hours)
-Population-level trait averages shift directionally. Lineages spread and disappear. Extinction events in predator_prey mode can reset the system. In drift mode, all traits drift without direction — pure neutral evolution.
+Population-level trait averages shift directionally. Lineages spread and disappear. Extinction events in predator_prey mode can reset the system, but not immediately. If a species hits zero, the simulation enters a grace window where recovery through mutation-driven species switching is still possible. Only if the zero state persists for the full grace window does the run end. In drift mode, all traits drift without direction — pure neutral evolution.
 
 ### Why the HUD helps
 The simulation hides energy levels, sensing ranges, reproductive readiness, death causes, and trait distributions inside its internal state. The HUD exposes key aggregates. For understanding what is actually happening, the HUD is essential. The visual field is atmospheric and meaningful, but it is incomplete.

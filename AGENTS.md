@@ -163,10 +163,14 @@ thresholds by species only in `predator_prey`; if absent, resolution falls back
 to the shared `energy_to_reproduce`.
 When predators exceed 60% of the live population, predator reproduction becomes
 harder by increasing the resolved predator threshold by 20%.
-Predator/prey extinction is no longer rescued in normal operation: either
-species hitting zero triggers a frozen red `GAME OVER` state, then an automatic
-restart after 10 seconds with a new seed. Pressing `Space` during that screen
-skips the hold and restarts immediately.
+Predator/prey extinction uses a grace window: when a species hits zero,
+`predator_zero_ticks` or `prey_zero_ticks` starts counting. The simulation
+continues during the grace window. If the zero-count species recovers through
+mutation-driven species switching before `extinction_grace_ticks` (default 7200)
+expires, the run continues. If the zero state persists for the full grace window,
+the run enters a frozen red `GAME OVER` state, then an automatic restart after
+10 seconds. Pressing `Space` during that screen skips the hold and restarts
+immediately.
 That `GAME OVER` overlay also shows the run's dial values, highlights the dial
 changed for that run with its signed delta, and marks the highest survival tick
 record when the just-ended run sets a new best.

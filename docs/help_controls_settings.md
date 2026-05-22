@@ -89,9 +89,9 @@ Many visual systems, such as glyphs, trails, zones, aging, cosmic rays, and the 
 
 **Frequency-dependent selection**: Selection where the fitness of a strategy depends on how common it is.
 
-**Game over**: Predator-prey collapse state after a role remains at zero beyond the configured grace window.
+**Game over**: Predator-prey collapse state after a role remains at zero for the full extinction grace window. Temporary zero-count extinction can recover through mutation-driven species switching during the grace window.
 
-**Gene flow**: Exchange of genetic material between populations. In predator_prey mode, mutations that shift aggression across 0.5 transfer a creature between species.
+**Gene flow**: Exchange of genetic material between populations. In predator_prey mode, mutations that shift aggression across the hysteresis thresholds (prey → predator at 0.30, predator → prey at 0.20) transfer a creature between species.
 
 **Genome**: The inherited trait set that determines creature behavior and appearance. A frozen dataclass with 16 float traits.
 

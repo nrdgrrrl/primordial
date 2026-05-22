@@ -158,17 +158,34 @@ Collapse can happen in several ways:
 
 - prey run out of food or cannot escape predation;
 - predators overtake the ecosystem and then starve when prey become scarce;
-- one role hits zero and stays there beyond the configured grace window;
+- one role hits zero and stays there beyond the configured grace window
+  (default 7200 ticks at 30 Hz, roughly 4 minutes);
 - overcrowding raises costs when populations are high.
 
-The HUD shows the food-cycle bar, predator/prey counts, and danger status when a
-role has reached zero but is still inside the extinction grace window.
+If a species hits zero, the simulation enters an extinction grace window. The
+run is not immediately over: the remaining species continues to live, mutate,
+reproduce, and evolve. If the zero-count species recovers through mutation-driven
+species switching before the grace window expires, the run continues normally.
+When predators hit zero, the existing predator lineages are biologically gone,
+but new predators can reappear from surviving prey via species flip during the
+grace window. If the zero state persists for the full grace window, the run
+enters GAME OVER.
+
+The HUD shows the food-cycle bar, predator/prey counts, and a danger/grace line
+when a role has reached zero, indicating which role is at zero and how many
+grace ticks remain.
 
 ## Game Over and Adaptive Tuning
 
-Predator-prey mode has a clear failure state. If predators or prey remain at
-zero long enough to exceed the configured extinction grace window, the run
-freezes and shows a red **GAME OVER** overlay.
+Predator-prey mode has a clear failure state, but extinction is not immediate.
+If predators or prey hit zero, the simulation enters an extinction grace window
+(configured by `extinction_grace_ticks`, default 7200). During the grace window,
+the remaining species continues to live, mutate, reproduce, and evolve. Recovery
+is possible if the zero-count species reappears through mutation-driven species
+switching before the grace window expires.
+
+If the zero state persists for the full grace window, the run freezes and shows
+a red **GAME OVER** overlay.
 
 The game-over overlay shows the collapse cause, seed, predator/prey counts,
 survival ticks, rolling survival history, adaptive dial values, and a restart
@@ -337,8 +354,9 @@ they are in different depth bands.
 
 **Food cycle**: Repeating resource wave between famine and feast.
 
-**Game over**: Predator-prey collapse state after a role remains at zero beyond
-the configured grace window.
+**Game over**: Predator-prey collapse state after a role remains at zero for the
+full extinction grace window. Temporary zero-count extinction can recover through
+mutation-driven species switching during the grace window.
 
 **Genome**: The inherited trait set that determines creature behavior and
 appearance.

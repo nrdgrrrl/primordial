@@ -2,6 +2,36 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — docs: clarify predator-prey extinction grace and recovery
+
+Corrected stale documentation that described extinction as immediate GAME OVER
+and species assignment as a simple 0.5 aggression boundary.
+
+What changed:
+- Replaced all "simple 0.5 boundary" species-threshold descriptions with the
+  current hysteresis thresholds: prey → predator at
+  `prey_to_predator_aggression_threshold` (default 0.30), predator → prey at
+  `predator_to_prey_aggression_threshold` (default 0.20), with a 0.5 fallback
+  only for unknown/unclassified species.
+- Replaced "extinction is terminal" and "hitting zero immediately ends the run"
+  with accurate extinction grace window behavior: when a species hits zero, the
+  simulation continues for `extinction_grace_ticks` (default 7200). Recovery
+  through mutation-driven species switching is possible during the grace window.
+  GAME OVER occurs only if the zero state persists for the full window.
+- Added documentation of what is lost when predators hit zero (existing predator
+  lineages are gone; new predators can reappear from prey via species flip; if
+  GAME OVER occurs, the living world's history is reset).
+- Updated HUD docs to mention the danger/grace line.
+- Updated model-capability lists to note temporary local extinction and
+  mutation-driven role recovery within a grace window.
+- Updated AGENTS.md extinction contract to describe grace windows instead of
+  immediate GAME OVER.
+
+Files changed: README.md, docs/primordial_guide.md,
+  docs/predator_prey_system_guide.md, docs/help_predator_prey.md,
+  docs/organism_biology.md, docs/help_controls_settings.md,
+  docs/help_reading_creatures.md, AGENTS.md, CHANGELOG.md.
+
 ## [2026-05-22] — fix: restore HUD-gated environmental zone labels
 
 Restored the original environmental zone labels so `Warm Vent`, `Open Water`,
