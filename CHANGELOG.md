@@ -2,6 +2,18 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-22] — fix: remove visual theme from settings UI
+
+Removed the `Visual Theme` row from the settings UI so the in-app settings
+overlay and launcher config screen now only expose backend, fullscreen, target
+FPS, and HUD controls in the Display area.
+
+Docs and tests:
+- Updated the settings help text and guide docs to match the slimmer Display
+  category.
+- Added a regression assertion that `build_settings_fields()` no longer
+  includes `visual_theme`.
+
 ## [2026-05-22] — fix: repair help browser scrolling
 
 Fixed the in-app Help browser so sidebar and content scrolling now behave

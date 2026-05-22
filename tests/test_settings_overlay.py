@@ -234,6 +234,8 @@ class SettingsOverlayTests(unittest.TestCase):
         self.assertIn(CATEGORY_SIMULATION, categories)
         self.assertIn(CATEGORY_ECOLOGY, categories)
         self.assertIn(CATEGORY_ACTIONS, SETTING_CATEGORIES)
+        self.assertNotIn("Visual Theme", {field.label for field in fields})
+        self.assertNotIn("visual_theme", {field.attr for field in fields})
         self.assertTrue(all(field.description for field in fields))
         self.assertTrue(all(action.description for action in actions))
 

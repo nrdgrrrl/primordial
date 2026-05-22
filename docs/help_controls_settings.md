@@ -28,7 +28,7 @@ Press `S` in normal mode to open the settings overlay. The simulation pauses and
 Settings are grouped into categories:
 
 - **Simulation**: mode, population, food spawn, global speed.
-- **Display**: theme, backend, fullscreen, target FPS, HUD.
+- **Display**: backend, fullscreen, target FPS, HUD.
 - **Evolution**: mutation, cosmic rays, food cycle, zones.
 - **Ecology / Predator-Prey**: predator-prey-specific starting mix and dials.
 - **Rendering**: kin-line visuals and related rendering options.

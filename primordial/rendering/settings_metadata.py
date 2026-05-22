@@ -134,15 +134,6 @@ def build_settings_fields() -> list[Field]:
             guidance="Large changes can make hunting, flocking, and food gathering feel very different.",
         ),
         Field(
-            "Visual Theme",
-            "visual_theme",
-            "enum",
-            options=["ocean", "petri", "geometric", "chaotic"],
-            section=CATEGORY_DISPLAY,
-            description="Visual skin used by the renderer.",
-            guidance="Theme changes apply immediately; stub themes may show placeholder visuals.",
-        ),
-        Field(
             "Render Backend",
             "render_backend",
             "enum",

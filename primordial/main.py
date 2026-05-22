@@ -656,7 +656,6 @@ def _run_config_dialog() -> None:
         # Current settings
         lines = [
             ("Sim Mode", settings.sim_mode),
-            ("Visual Theme", settings.visual_theme),
             ("Population", str(settings.initial_population)),
             ("Target FPS", str(get_effective_target_fps(settings))),
         ]
