@@ -1853,7 +1853,7 @@ class Simulation:
             return PredatorHuntResult(
                 engaged=True,
                 killed=True,
-                refuge_modifiers=hunt_modifiers.refuge,
+                hunt_modifiers=hunt_modifiers,
             )
         elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
             self._recent_cross_band_miss_frames.append(self._frame)
@@ -5062,11 +5062,11 @@ class Simulation:
         self,
         predator: Creature,
         *,
-        refuge_modifiers: PredatorRefugeModifiers,
+        hunt_modifiers: PredatorHuntModifiers,
     ) -> None:
         life = self._ensure_predator_life(predator)
         life["cross_band_contact_misses"] += 1
-        if refuge_modifiers.active:
+        if hunt_modifiers.refuge.active:
             life["cross_band_misses_inside_refuge"] += 1
         else:
             life["cross_band_misses_outside_refuge"] += 1

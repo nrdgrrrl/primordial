@@ -177,6 +177,40 @@ class PredatorRefugeTests(unittest.TestCase):
         self.assertEqual(modifiers.hunt_sense_mult, 1.0)
         self.assertEqual(modifiers.contact_mult, 1.0)
 
+    def test_predator_hunt_kill_path_returns_result_without_type_error(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = self._creature("predator", x=100.0, y=100.0)
+        prey = self._creature("prey", x=100.0, y=100.0)
+        prey.depth_band = predator.depth_band
+        prey.energy = 0.6
+        simulation.creatures = [predator, prey]
+
+        result = simulation._predator_hunt_prey(
+            predator,
+            simulation._build_creature_bucket(),
+        )
+
+        self.assertTrue(result.engaged)
+        self.assertTrue(result.killed)
+        self.assertGreaterEqual(predator.energy, 0.5)
+
+    def test_predator_hunt_cross_band_miss_path_does_not_type_error(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = self._creature("predator", x=100.0, y=100.0)
+        prey = self._creature("prey", x=100.0, y=100.0)
+        prey.depth_band = (predator.depth_band + 1) % 3
+        prey.energy = 0.6
+        simulation.creatures = [predator, prey]
+        simulation._update_predator_prey_depth_band = lambda *args, **kwargs: None
+
+        result = simulation._predator_hunt_prey(
+            predator,
+            simulation._build_creature_bucket(),
+        )
+
+        self.assertTrue(result.engaged)
+        self.assertFalse(result.killed)
+
 
 if __name__ == "__main__":
     unittest.main()
