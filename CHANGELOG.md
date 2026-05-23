@@ -1776,3 +1776,4 @@ Guardrails preserved in this pass:
 - No trait preservation behavior added.
 - No reproduction-threshold tuning changes.
 - No predator kill-energy cap tuning changes.
+- Follow-up fix: predator hunt target acquisition now selects the best **usable sensed** prey candidate during scan (nearest unsensed prey no longer blocks farther sensed prey), and depth tracking now begins only after usable target selection.

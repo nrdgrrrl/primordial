@@ -428,3 +428,5 @@ Predator-prey mode now supports a modest, capped rarity advantage for living pre
 - Sensing remains finite-radius circular (pixel-distance bounded), omnidirectional (no facing cone), and modifier-driven (genome base sense + hunt multiplier + depth/phenotype/zone/rarity/refuge factors).
 - Chase balance defaults are now `predator_hunt_speed_multiplier=1.15` and `prey_flee_speed_multiplier=1.30` (configurable), replacing the old hardcoded prey flee `1.5` term.
 - This is a chase-balance correction only; it does not introduce predator spawning, trait preservation, reproduction-threshold changes, kill-cap changes, or direct prey suppression logic.
+
+Predators now choose among final sensed usable prey targets; a nearby prey that fails depth-adjusted sensing no longer blocks pursuit of another usable target.
