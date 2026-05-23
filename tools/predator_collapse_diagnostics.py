@@ -574,6 +574,15 @@ def _section_f_prey_access(
 
     return {
         "median_prey_sighting_share": _safe_median(prey_sight_shares),
+        "predator_hunt_speed_multiplier": float(
+            runs[0]["diagnostics"].get("predator_hunt_speed_multiplier", 0.0)
+        ),
+        "prey_flee_speed_multiplier": float(
+            runs[0]["diagnostics"].get("prey_flee_speed_multiplier", 0.0)
+        ),
+        "predator_contact_kill_distance_scale": float(
+            runs[0]["diagnostics"].get("predator_contact_kill_distance_scale", 0.0)
+        ),
         "pct_lives_with_no_prey_sightings": _pct(no_prey_sightings, len(all_completed)),
         "pct_lives_with_prey_sightings_but_no_kills": _pct(
             prey_sightings_no_kills, len(all_completed)
@@ -1048,7 +1057,7 @@ def _section_k_recommendations(
     if median_scarce_share is not None and median_prey_sighting is not None:
         if median_prey_sighting > 0.2 and median_scarce_share > 0.5:
             recommendations.append(
-                f"Paradoxical scarcity: prey sighting share "
+                f"Paradoxical scarcity: usable prey sighting share "
                 f"{median_prey_sighting:.0%} but scarce share "
                 f"{median_scarce_share:.0%}. Predators see prey in some frames "
                 f"but spend most time in scarcity. Predator sensing/refuge/foraging "
@@ -1261,9 +1270,10 @@ def render_markdown(report: dict[str, Any]) -> str:
     if "note" in f:
         lines.append(f["note"])
     else:
-        lines.append(f"- **Median prey-sighting share:** {_share_fmt(f.get('median_prey_sighting_share'))}")
+        lines.append(f"- **Median usable prey-sighting share:** {_share_fmt(f.get('median_prey_sighting_share'))}")
         lines.append(f"- **% lives with no prey sightings:** {_pct_fmt(f.get('pct_lives_with_no_prey_sightings'))}")
         lines.append(f"- **% lives with sightings but no kills:** {_pct_fmt(f.get('pct_lives_with_prey_sightings_but_no_kills'))}")
+        lines.append("- **Sighting metric note:** Counted only when final depth-adjusted sensing succeeds and a steerable target position exists; this is finite-radius omnidirectional target acquisition, not guaranteed catch opportunity.")
         lines.append(f"- **% lives with cross-band misses:** {_pct_fmt(f.get('pct_lives_with_cross_band_misses'))}")
         lines.append(f"- **Total cross-band misses:** {f.get('total_cross_band_misses', 0)}")
         lines.append(f"- **Total kills by completed lives:** {f.get('total_kills_by_completed_lives', 0)}")
@@ -1297,6 +1307,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Median max sustained chase frames:** {_fmt(g.get('median_max_sustained_chase_frames'))}")
         lines.append(f"- **% lives with sustained chase:** {_pct_fmt(g.get('pct_lives_with_sustained_chase'))}")
         lines.append(f"- **Kills after sustained chase:** {g.get('kills_after_sustained_chase', 0)}")
+        lines.append(
+            f"- **Chase balance note (current run):** predator_hunt_speed_multiplier={_fmt(f.get('predator_hunt_speed_multiplier'))}, prey_flee_speed_multiplier={_fmt(f.get('prey_flee_speed_multiplier'))}, predator_contact_kill_distance_scale={_fmt(f.get('predator_contact_kill_distance_scale'))}, near-contact frames/life={_fmt(g.get('near_contact_frames_per_completed_life'))}"
+        )
         lines.append(f"- **Killed prey age buckets:** {g.get('killed_prey_age_bucket_counts', {})}")
         lines.append(f"- **Killed prey energy buckets:** {g.get('killed_prey_energy_bucket_counts', {})}")
         lines.append(f"- **Killed prey condition buckets:** {g.get('killed_prey_condition_bucket_counts', {})}")

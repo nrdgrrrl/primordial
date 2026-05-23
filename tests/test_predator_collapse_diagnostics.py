@@ -266,6 +266,7 @@ def _make_run(
             "predator_hunt_sense_multiplier": 1.40,
             "predator_hunt_speed_multiplier": 0.70,
             "predator_contact_kill_distance_scale": 0.85,
+            "prey_flee_speed_multiplier": 1.30,
             "prey_flee_age_slowdown_enabled": True,
             "prey_flee_low_energy_slowdown_enabled": True,
             "prey_flee_low_energy_threshold": 0.35,
@@ -581,7 +582,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         report = build_report([run])
         md = render_markdown(report)
-        self.assertIn("Median prey-sighting share:** 37.0%", md)
+        self.assertIn("Median usable prey-sighting share:** 37.0%", md)
 
 
 if __name__ == "__main__":

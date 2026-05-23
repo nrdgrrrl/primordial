@@ -1763,3 +1763,17 @@ Five major systems added in this pass: procedurally generated symbolic glyph cre
 - Extended predator-collapse diagnostics with rarity-advantage life fields, rarity analysis section, and rarity-aware recommendations (diagnostics-only change).
 
 - Fixed diagnostics Markdown section ordering so scarcity content stays under G and rarity appears as a separate following section.
+
+## [2026-05-23] — feat: rebalance predator chase speed and clarify prey sightings
+
+- Updated predator-prey chase defaults: `predator_hunt_speed_multiplier` now `1.1500` (from `0.7000`) and added `prey_flee_speed_multiplier = 1.3000` as a mode-scoped setting replacing the previous hardcoded prey flee `1.5` factor.
+- Tightened prey-sighting diagnostics semantics in the hunt loop so sightings/chase frames are recorded only when final depth-adjusted sensing succeeds and the predator has a usable steer target.
+- Extended predator-collapse report wording to label sightings as usable sightings and added a chase-balance note with speed/contact dial values.
+- Added/updated tests for strict sighting semantics, sustained chase counting behavior, config authority for `prey_flee_speed_multiplier`, and report wording updates.
+
+Guardrails preserved in this pass:
+- No predator spawning behavior added.
+- No trait preservation behavior added.
+- No reproduction-threshold tuning changes.
+- No predator kill-energy cap tuning changes.
+- Follow-up fix: predator hunt target acquisition now selects the best **usable sensed** prey candidate during scan (nearest unsensed prey no longer blocks farther sensed prey), and depth tracking now begins only after usable target selection.

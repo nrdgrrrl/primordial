@@ -236,14 +236,14 @@ class EcologySensingTests(unittest.TestCase):
         flee_max = (
             prey.genome.speed
             * simulation.settings.creature_speed_base
-            * 1.5
+            * simulation._get_prey_flee_speed_multiplier()
             * simulation._get_creature_flee_speed_scale(prey)
         )
         self.assertLessEqual(math.hypot(prey.vx, prey.vy), flee_max + 1e-6)
 
     def test_young_healthy_prey_flee_speed_matches_previous_behavior(self) -> None:
         flee_speed = self._measure_flee_speed(age_fraction=0.10, energy=0.80)
-        baseline = 0.7 * 1.5 * 1.5
+        baseline = 0.7 * 1.5 * 1.3
         self.assertAlmostEqual(flee_speed, baseline, places=6)
 
     def test_old_prey_flee_speed_is_lower_than_young_prey(self) -> None:
@@ -411,6 +411,7 @@ class EcologySensingTests(unittest.TestCase):
         simulation.creatures = [predator, prey]
         bucket = simulation._build_creature_bucket()
 
+        simulation.settings.mode_params["predator_prey"]["predator_hunt_speed_multiplier"] = 0.70
         with patch("random.gauss", return_value=0.0):
             simulation._predator_hunt_prey(predator, bucket)
         baseline_speed = math.hypot(predator.vx, predator.vy)
@@ -424,6 +425,108 @@ class EcologySensingTests(unittest.TestCase):
         boosted_speed = math.hypot(predator.vx, predator.vy)
 
         self.assertGreater(boosted_speed, baseline_speed)
+
+    def test_prey_candidate_without_final_sense_does_not_count_sighting_or_chase(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        simulation._ensure_predator_life(predator)
+        with patch.object(simulation, "_sense_target_position", return_value=None):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["frames_with_prey_sighted"], 0)
+        self.assertEqual(life["sustained_chase_frames"], 0)
+
+    def test_final_sensed_prey_counts_sighting(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(120.0, 100.0)):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["frames_with_prey_sighted"], 1)
+
+    def test_nearest_unsensed_prey_does_not_block_farther_sensed_prey(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        near_prey = Creature(x=112.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        far_prey = Creature(x=130.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=3, species="prey")
+        simulation.creatures = [predator, near_prey, far_prey]
+
+        def _sense_side_effect(creature: Creature, x: float, y: float, **kwargs):
+            if (x, y) == (near_prey.x, near_prey.y):
+                return None
+            if (x, y) == (far_prey.x, far_prey.y):
+                return (131.0, 99.0)
+            return None
+
+        with patch.object(simulation, "_sense_target_position", side_effect=_sense_side_effect), patch.object(
+            simulation, "_record_predator_chase_target"
+        ) as record_target:
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["frames_with_prey_sighted"], 1)
+        record_target.assert_called_once()
+        self.assertIs(record_target.call_args.args[1], far_prey)
+        self.assertGreater(predator.vx, 0.0)
+
+    def test_predator_does_not_depth_track_when_no_usable_sensed_prey(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=None), patch.object(
+            simulation, "_update_predator_prey_depth_band"
+        ) as update_depth:
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        update_depth.assert_not_called()
+
+    def test_predator_depth_tracks_selected_usable_prey(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(120.0, 100.0)), patch.object(
+            simulation, "_update_predator_prey_depth_band"
+        ) as update_depth:
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        update_depth.assert_called_once()
+
+    def test_sustained_chase_only_increments_with_repeated_final_sensed_target(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_sustained_chase_min_frames"] = 2
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(120.0, 100.0)):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertGreaterEqual(life["sustained_chase_frames"], 1)
+
+    def test_sustained_chase_tracks_selected_usable_target_not_failed_nearest(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_sustained_chase_min_frames"] = 2
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        near_prey = Creature(x=112.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        far_prey = Creature(x=130.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=3, species="prey")
+        simulation.creatures = [predator, near_prey, far_prey]
+
+        def _sense_side_effect(creature: Creature, x: float, y: float, **kwargs):
+            if (x, y) == (near_prey.x, near_prey.y):
+                return None
+            return (far_prey.x, far_prey.y)
+
+        with patch.object(simulation, "_sense_target_position", side_effect=_sense_side_effect), patch.object(
+            simulation, "_record_predator_chase_target", wraps=simulation._record_predator_chase_target
+        ) as record_target:
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertTrue(all(call.args[1] is far_prey for call in record_target.call_args_list))
+        self.assertGreaterEqual(life["sustained_chase_frames"], 1)
 
     def test_predator_contact_kill_distance_scale_expands_contact_window(self) -> None:
         simulation = self._build_simulation("predator_prey")

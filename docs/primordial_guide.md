@@ -1042,3 +1042,11 @@ fleeing, scarcity pressure, kill distance, kill energy, and food-cycle amplitude
 
 ### Predator rarity advantage
 A modest predator-only hunting advantage can activate when predators are rare and prey are healthy; this affects only living predators and is capped.
+
+### Predator-prey chase/sighting clarification (2026-05)
+
+Predator "prey sighting" metrics now mean **depth-adjusted usable target acquisition** only: sightings are counted after final sensing succeeds and a steerable target position exists. This remains finite circular sensing (not infinite), omnidirectional (no FOV cone), and is still a target-acquisition metric rather than a guaranteed catch opportunity.
+
+Predator active chase speed and prey flee speed are intentionally separated: predator chase uses `predator_hunt_speed_multiplier` (default 1.15) and prey flee uses configurable `prey_flee_speed_multiplier` (default 1.30) plus frailty multipliers. Healthy prey can still escape; old/low-energy prey remain more vulnerable through the existing frailty layer.
+
+Predators now choose among final sensed usable prey targets; a nearby prey that fails depth-adjusted sensing no longer blocks pursuit of another usable target.
