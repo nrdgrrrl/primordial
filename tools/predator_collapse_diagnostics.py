@@ -781,9 +781,27 @@ def _section_g_near_contact_dance(
         ),
         "kills_after_sustained_chase": kills_after_sustained_chase,
         "memory_chase_frames": sum(int(l.get("memory_chase_frames", 0)) for l in all_completed),
+        "memory_chase_frames_per_completed_life": (
+            sum(int(l.get("memory_chase_frames", 0)) for l in all_completed) / len(all_completed)
+            if all_completed else None
+        ),
         "memory_target_reacquisitions": sum(int(l.get("memory_target_reacquisitions", 0)) for l in all_completed),
+        "memory_target_reacquisitions_per_completed_life": (
+            sum(int(l.get("memory_target_reacquisitions", 0)) for l in all_completed) / len(all_completed)
+            if all_completed else None
+        ),
         "target_switches": sum(int(l.get("target_switches", 0)) for l in all_completed),
+        "target_switches_per_completed_life": (
+            sum(int(l.get("target_switches", 0)) for l in all_completed) / len(all_completed)
+            if all_completed else None
+        ),
+        "memory_target_dropped_frames": sum(int(l.get("memory_target_dropped_frames", 0)) for l in all_completed),
+        "memory_target_expired_drops": sum(int(l.get("memory_target_expired_drops", 0)) for l in all_completed),
         "kills_after_memory_chase": sum(int(l.get("kills_after_memory_chase", 0)) for l in all_completed),
+        "pct_kills_after_memory_chase": _pct(
+            sum(int(l.get("kills_after_memory_chase", 0)) for l in all_completed),
+            total_kills,
+        ),
         "killed_prey_age_bucket_counts": age_bucket_counts,
         "killed_prey_energy_bucket_counts": energy_bucket_counts,
         "killed_prey_condition_bucket_counts": condition_counts,
@@ -1312,9 +1330,17 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **% lives with sustained chase:** {_pct_fmt(g.get('pct_lives_with_sustained_chase'))}")
         lines.append(f"- **Kills after sustained chase:** {g.get('kills_after_sustained_chase', 0)}")
         lines.append(f"- **Memory chase frames:** {g.get('memory_chase_frames', 0)}")
+        lines.append(f"- **Memory chase frames / completed life:** {_fmt(g.get('memory_chase_frames_per_completed_life'))}")
         lines.append(f"- **Memory target reacquisitions:** {g.get('memory_target_reacquisitions', 0)}")
+        lines.append(f"- **Reacquisitions / completed life:** {_fmt(g.get('memory_target_reacquisitions_per_completed_life'))}")
         lines.append(f"- **Target switches:** {g.get('target_switches', 0)}")
+        lines.append(f"- **Target switches / completed life:** {_fmt(g.get('target_switches_per_completed_life'))}")
+        lines.append(f"- **Memory target drops:** {g.get('memory_target_dropped_frames', 0)}")
+        lines.append(f"- **Memory expired drops:** {g.get('memory_target_expired_drops', 0)}")
         lines.append(f"- **Kills after memory chase:** {g.get('kills_after_memory_chase', 0)}")
+        lines.append(f"- **% kills after memory chase:** {_pct_fmt(g.get('pct_kills_after_memory_chase'))}")
+        lines.append("- **Interpretation:** high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.")
+        lines.append("- **Interpretation:** high target switches per life can indicate twitchy target selection.")
         lines.append(
             f"- **Chase balance note (current run):** predator_hunt_speed_multiplier={_fmt(f.get('predator_hunt_speed_multiplier'))}, prey_flee_speed_multiplier={_fmt(f.get('prey_flee_speed_multiplier'))}, predator_contact_kill_distance_scale={_fmt(f.get('predator_contact_kill_distance_scale'))}, near-contact frames/life={_fmt(g.get('near_contact_frames_per_completed_life'))}"
         )

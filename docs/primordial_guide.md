@@ -1053,3 +1053,6 @@ Predators now choose among final sensed usable prey targets; a nearby prey that 
 
 
 Predators now keep short quarry memory (target id, last-known position/depth, last-seen frame) and can briefly pursue last known position when live sensing drops out. Memory pursuit is weaker than live sensing, does not increment usable sighting metrics, and does not bypass normal same-depth contact kill rules.
+
+
+Quarry-memory diagnostics now distinguish strict target switches from same-target reacquisitions, and `kills_after_memory_chase` measures memory-assisted chase episodes that end in a same-target kill.

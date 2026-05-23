@@ -218,3 +218,5 @@ mode-param tuning remains TOML-only unless overlay metadata is added.
 Predator rarity advantage is predator-only, living-population-only tuning gated by low predator count plus healthy prey count. It does not create predators, preserve extinct predator traits, alter prey behaviour, or directly lower predator reproduction thresholds.
 
 Predator quarry memory is a short attention/last-known-position aid only: it never grants magical sensing or memory-only kills, and all kills still require normal same-depth contact rules.
+
+Predator target switching diagnostics are strict: first acquisition and same-target reacquisition do not count as switches.

@@ -1859,6 +1859,8 @@ class Simulation:
         best_dist_sq = sense * sense
         best_sensed_prey: tuple[float, float] | None = None
         best_score: float | None = None
+        life = self._ensure_predator_life(predator)
+        remembered_target_id = life.get("_memory_target_id")
 
         for other in self._nearby_creatures(predator.x, predator.y, sense, bucket):
             if other is predator or other.species != "prey" or other.energy <= 0.0:
@@ -1886,6 +1888,52 @@ class Simulation:
                 best_sensed_prey = sensed_prey
 
         used_memory_target = False
+        if (
+            remembered_target_id is not None
+            and best_prey is not None
+            and best_score is not None
+        ):
+            remembered_live_candidate = next(
+                (
+                    c for c in self.creatures
+                    if id(c) == remembered_target_id and c.species == "prey" and c.energy > 0.0
+                ),
+                None,
+            )
+            if remembered_live_candidate is not None:
+                remembered_dist_sq = self._distance_sq(
+                    predator.x,
+                    predator.y,
+                    remembered_live_candidate.x,
+                    remembered_live_candidate.y,
+                )
+                if remembered_dist_sq < (sense * sense):
+                    remembered_sensed_prey = self._sense_target_position(
+                        predator,
+                        remembered_live_candidate.x,
+                        remembered_live_candidate.y,
+                        sense_multiplier=sense_multiplier,
+                        target_depth_band=remembered_live_candidate.depth_band,
+                    )
+                    if remembered_sensed_prey is not None:
+                        remembered_score = (
+                            math.sqrt(remembered_dist_sq)
+                            + (
+                                depth_band_separation(
+                                    predator.depth_band,
+                                    remembered_live_candidate.depth_band,
+                                )
+                                * 20.0
+                            )
+                        )
+                        switch_ratio = self._get_predator_target_switch_score_ratio()
+                        if id(best_prey) != remembered_target_id and not (
+                            best_score <= (remembered_score * switch_ratio)
+                        ):
+                            best_prey = remembered_live_candidate
+                            best_dist_sq = remembered_dist_sq
+                            best_sensed_prey = remembered_sensed_prey
+                            best_score = remembered_score
         if best_prey is None or best_sensed_prey is None:
             memory_target = self._get_predator_memory_target(predator, sense=sense)
             if memory_target is not None:
@@ -1911,7 +1959,7 @@ class Simulation:
             self._record_predator_chase_target(predator, best_prey)
             self._remember_predator_target(predator, best_prey, best_sensed_prey, best_score)
         else:
-            self._record_predator_memory_chase(predator)
+            self._record_predator_memory_chase(predator, best_prey)
 
         memory_steer_mult = self._get_predator_memory_steering_mult() if used_memory_target else 1.0
         predator.steer_toward(
@@ -5171,6 +5219,7 @@ class Simulation:
             "memory_chase_frames": 0,
             "memory_target_reacquisitions": 0,
             "memory_target_dropped_frames": 0,
+            "memory_target_expired_drops": 0,
             "target_switches": 0,
             "kills_after_memory_chase": 0,
             "killed_prey_age_fractions": [],
@@ -5236,6 +5285,9 @@ class Simulation:
             "_memory_last_seen_frame": None,
             "_memory_last_score": None,
             "_memory_chasing": False,
+            "_current_chase_used_memory": False,
+            "_current_chase_memory_target_id": None,
+            "_last_memory_chase_frame": None,
         }
         self._predator_diag_next_life_id += 1
         self._predator_diag_active[id(creature)] = life
@@ -5286,10 +5338,19 @@ class Simulation:
         life = self._ensure_predator_life(predator)
         previous = life.get("_memory_target_id")
         current = id(prey)
-        if previous is not None and previous != current:
+        was_valid_previous_target = (
+            previous is not None
+            and any(
+                id(c) == previous and c.species == "prey" and c.energy > 0.0
+                for c in self.creatures
+            )
+        )
+        if was_valid_previous_target and previous != current:
             life["target_switches"] += 1
         if life.get("_memory_chasing") and previous == current:
             life["memory_target_reacquisitions"] += 1
+            life["_current_chase_used_memory"] = True
+            life["_current_chase_memory_target_id"] = current
         life["_memory_target_id"] = current
         life["_memory_target_pos"] = (float(sensed[0]), float(sensed[1]))
         life["_memory_target_depth_band"] = int(prey.depth_band)
@@ -5310,6 +5371,7 @@ class Simulation:
             return None
         if (self._frame - int(last_seen)) > self._get_predator_target_memory_ticks():
             life["memory_target_dropped_frames"] += 1
+            life["memory_target_expired_drops"] += 1
             self._clear_predator_memory_target(predator)
             return None
         target = next((c for c in self.creatures if id(c) == target_id), None)
@@ -5325,9 +5387,12 @@ class Simulation:
         life["_memory_chasing"] = True
         return target, (float(pos[0]), float(pos[1]))
 
-    def _record_predator_memory_chase(self, predator: Creature) -> None:
+    def _record_predator_memory_chase(self, predator: Creature, prey: Creature) -> None:
         life = self._ensure_predator_life(predator)
         life["memory_chase_frames"] += 1
+        life["_current_chase_used_memory"] = True
+        life["_current_chase_memory_target_id"] = id(prey)
+        life["_last_memory_chase_frame"] = self._frame
 
     def _clear_predator_memory_target(self, predator: Creature) -> None:
         life = self._predator_diag_active.get(id(predator))
@@ -5339,6 +5404,9 @@ class Simulation:
         life["_memory_last_seen_frame"] = None
         life["_memory_last_score"] = None
         life["_memory_chasing"] = False
+        life["_current_chase_used_memory"] = False
+        life["_current_chase_memory_target_id"] = None
+        life["_last_memory_chase_frame"] = None
 
     def _classify_prey_condition_bucket(
         self,
@@ -5432,8 +5500,13 @@ class Simulation:
         )
         if life["_current_chase_frames"] >= self._get_predator_sustained_chase_min_frames():
             life["kills_after_sustained_chase"] += 1
-        if life.get("_memory_chasing"):
+        if (
+            life.get("_current_chase_used_memory")
+            and life.get("_current_chase_memory_target_id") == id(prey)
+        ):
             life["kills_after_memory_chase"] += 1
+        life["_current_chase_used_memory"] = False
+        life["_current_chase_memory_target_id"] = None
         self._record_predator_gap(
             life,
             key="closest_peak_gap",

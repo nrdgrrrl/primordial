@@ -1783,3 +1783,5 @@ Guardrails preserved in this pass:
 - No reproduction-threshold tuning changes.
 - No predator kill-energy cap tuning changes.
 - Follow-up fix: predator hunt target acquisition now selects the best **usable sensed** prey candidate during scan (nearest unsensed prey no longer blocks farther sensed prey), and depth tracking now begins only after usable target selection.
+
+- Cleanup: clarified quarry-memory diagnostics semantics so `kills_after_memory_chase` counts memory-assisted chase episodes that end in killing the same target, and tightened target-switch counting to exclude first-acquire/same-target reacquisition noise.

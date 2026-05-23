@@ -162,6 +162,7 @@ def _make_life(
         "memory_chase_frames": 0,
         "memory_target_reacquisitions": 0,
         "memory_target_dropped_frames": 0,
+        "memory_target_expired_drops": 0,
         "target_switches": 0,
         "kills_after_memory_chase": 0,
         "killed_prey_age_fractions": killed_prey_age_fractions or [],
