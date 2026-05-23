@@ -194,6 +194,7 @@ mode-scoped keys are `predator_refuge_enabled`,
 `predator_refuge_movement_cost_reduction`,
 `predator_refuge_density_radius`, `predator_refuge_density_soft_cap`, and
 `predator_refuge_density_hard_cap`.
+Prey flee base chase speed in predator_prey is mode-scoped via `prey_flee_speed_multiplier` (default 1.30), replacing the previous hardcoded `1.5` flee factor.
 Prey flee frailty is a prey-only movement condition layer in `_prey_flee()`.
 `prey_flee_age_slowdown_enabled` applies `Creature.get_age_speed_mult()`
 directly to flee max speed, and the optional low-energy taper uses

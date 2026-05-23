@@ -71,6 +71,7 @@ prey_flee_age_slowdown_enabled = false
 prey_flee_low_energy_slowdown_enabled = false
 prey_flee_low_energy_threshold = 0.4200
 prey_flee_low_energy_min_mult = 0.6500
+prey_flee_speed_multiplier = 1.5500
 predator_kill_energy_gain_cap = 0.6500
 predator_hunt_sense_multiplier = 2.3000
 predator_hunt_speed_multiplier = 1.1500
@@ -135,6 +136,10 @@ adaptive_near_extinction_prey_floor = 7
         self.assertEqual(
             settings.mode_params["predator_prey"]["prey_flee_low_energy_min_mult"],
             0.65,
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["prey_flee_speed_multiplier"],
+            1.55,
         )
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"],

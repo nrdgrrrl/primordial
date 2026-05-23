@@ -472,6 +472,7 @@ Mode-specific tuning keys:
 | modes.predator_prey | predator_refuge_density_soft_cap | int >= 0 | Nearby-predator count that still allows the full refuge bonus |
 | modes.predator_prey | predator_refuge_density_hard_cap | int >= 1 | Nearby-predator count where the refuge bonus fully fades out |
 | modes.predator_prey | prey_flee_sense_multiplier | float 0.1..5 | Multiplier applied to prey threat sensing while fleeing |
+| modes.predator_prey | prey_flee_speed_multiplier | float 0.75..2 | Multiplier applied to prey flee movement speed (replaces hardcoded 1.5) |
 | modes.predator_prey | prey_flee_age_slowdown_enabled | bool | Apply age frailty directly to prey flee max speed |
 | modes.predator_prey | prey_flee_low_energy_slowdown_enabled | bool | Allow low-energy prey to lose flee speed below the configured threshold |
 | modes.predator_prey | prey_flee_low_energy_threshold | float 0.01..1 | Energy threshold where low-energy prey flee slowdown begins |

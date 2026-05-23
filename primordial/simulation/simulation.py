@@ -716,6 +716,10 @@ class Simulation:
         """Resolve prey flee sensing range multiplier."""
         return float(self._get_mode_param("prey_flee_sense_multiplier", 1.2))
 
+    def _get_prey_flee_speed_multiplier(self) -> float:
+        """Resolve prey flee movement-speed multiplier."""
+        return float(self._get_mode_param("prey_flee_speed_multiplier", 1.30))
+
     def _prey_flee_age_slowdown_enabled(self) -> bool:
         return bool(self._get_mode_param("prey_flee_age_slowdown_enabled", True))
 
@@ -1855,9 +1859,6 @@ class Simulation:
             )
             return PredatorHuntResult(engaged=False, killed=False)
 
-        self._record_predator_prey_sighting(predator)
-        self._record_predator_chase_target(predator, best_prey)
-
         self._update_predator_prey_depth_band(
             predator,
             best_prey.depth_band,
@@ -1873,6 +1874,7 @@ class Simulation:
             target_depth_band=best_prey.depth_band,
         )
         if sensed_prey is None:
+            self._clear_predator_chase_state(predator)
             predator.wander(
                 self.settings.creature_speed_base,
                 speed_scale=self._get_creature_speed_scale(predator),
@@ -1882,6 +1884,9 @@ class Simulation:
                 killed=False,
                 hunt_modifiers=hunt_modifiers,
             )
+
+        self._record_predator_prey_sighting(predator)
+        self._record_predator_chase_target(predator, best_prey)
 
         predator.steer_toward(
             sensed_prey[0], sensed_prey[1],
@@ -2015,7 +2020,7 @@ class Simulation:
         max_speed = (
             prey.genome.speed
             * self.settings.creature_speed_base
-            * 1.5
+            * self._get_prey_flee_speed_multiplier()
             * flee_speed_scale
             * flee_condition_mult
         )
@@ -4705,6 +4710,7 @@ class Simulation:
             "predator_contact_kill_distance_scale": (
                 self._get_predator_contact_kill_distance_scale()
             ),
+            "prey_flee_speed_multiplier": self._get_prey_flee_speed_multiplier(),
             "prey_flee_age_slowdown_enabled": self._prey_flee_age_slowdown_enabled(),
             "prey_flee_low_energy_slowdown_enabled": (
                 self._prey_flee_low_energy_slowdown_enabled()

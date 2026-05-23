@@ -421,3 +421,10 @@ help browser.
 
 ### Predator rarity advantage
 Predator-prey mode now supports a modest, capped rarity advantage for living predators when predator count is low and prey are abundant. It does not spawn predators, preserve extinct predator lineages, alter prey behavior, or directly change reproduction thresholds. It blends conservatively with refuge bonuses.
+
+### 2026-05 chase balance + sighting semantics update
+
+- Predator prey-sighting diagnostics now count **usable** sightings only: a prey candidate must pass final depth-adjusted `_sense_target_position()` before `frames_with_prey_sighted` or sustained same-target chase can increment.
+- Sensing remains finite-radius circular (pixel-distance bounded), omnidirectional (no facing cone), and modifier-driven (genome base sense + hunt multiplier + depth/phenotype/zone/rarity/refuge factors).
+- Chase balance defaults are now `predator_hunt_speed_multiplier=1.15` and `prey_flee_speed_multiplier=1.30` (configurable), replacing the old hardcoded prey flee `1.5` term.
+- This is a chase-balance correction only; it does not introduce predator spawning, trait preservation, reproduction-threshold changes, kill-cap changes, or direct prey suppression logic.
