@@ -780,6 +780,10 @@ def _section_g_near_contact_dance(
             len(all_completed),
         ),
         "kills_after_sustained_chase": kills_after_sustained_chase,
+        "memory_chase_frames": sum(int(l.get("memory_chase_frames", 0)) for l in all_completed),
+        "memory_target_reacquisitions": sum(int(l.get("memory_target_reacquisitions", 0)) for l in all_completed),
+        "target_switches": sum(int(l.get("target_switches", 0)) for l in all_completed),
+        "kills_after_memory_chase": sum(int(l.get("kills_after_memory_chase", 0)) for l in all_completed),
         "killed_prey_age_bucket_counts": age_bucket_counts,
         "killed_prey_energy_bucket_counts": energy_bucket_counts,
         "killed_prey_condition_bucket_counts": condition_counts,
@@ -1307,6 +1311,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Median max sustained chase frames:** {_fmt(g.get('median_max_sustained_chase_frames'))}")
         lines.append(f"- **% lives with sustained chase:** {_pct_fmt(g.get('pct_lives_with_sustained_chase'))}")
         lines.append(f"- **Kills after sustained chase:** {g.get('kills_after_sustained_chase', 0)}")
+        lines.append(f"- **Memory chase frames:** {g.get('memory_chase_frames', 0)}")
+        lines.append(f"- **Memory target reacquisitions:** {g.get('memory_target_reacquisitions', 0)}")
+        lines.append(f"- **Target switches:** {g.get('target_switches', 0)}")
+        lines.append(f"- **Kills after memory chase:** {g.get('kills_after_memory_chase', 0)}")
         lines.append(
             f"- **Chase balance note (current run):** predator_hunt_speed_multiplier={_fmt(f.get('predator_hunt_speed_multiplier'))}, prey_flee_speed_multiplier={_fmt(f.get('prey_flee_speed_multiplier'))}, predator_contact_kill_distance_scale={_fmt(f.get('predator_contact_kill_distance_scale'))}, near-contact frames/life={_fmt(g.get('near_contact_frames_per_completed_life'))}"
         )

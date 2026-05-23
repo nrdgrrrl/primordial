@@ -698,3 +698,6 @@ Use these tools when you want to understand long-run behavior, inspect lineage a
 - Added predator rarity advantage (living predators only) in predator-prey mode; no spawning, trait preservation, or prey behavior changes.
 
 Predators now choose among **final sensed usable prey targets**; a nearby prey that fails depth-adjusted sensing no longer blocks pursuit of a slightly farther usable target.
+
+
+- Predators now keep a short quarry memory (last seen prey position/depth) for conservative pursuit when live sensing briefly fails; this memory steering is weaker than live sensing and does not count as a usable prey sighting.
