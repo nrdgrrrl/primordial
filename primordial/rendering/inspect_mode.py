@@ -206,6 +206,12 @@ _INSPECT_LABELS: dict[str, str] = {
     "likely_goal": "Likely goal",
     "body_plan": "Body plan",
     "key_effect": "Key effect",
+    "age_seconds": "Age",
+    "lineage_age": "Lin age",
+    "lineage_size": "Lin size",
+    "species_age_percentile": "Age pct",
+    "above_population": "Above avg",
+    "below_population": "Below avg",
     "modifier_speed_mult": "Speed",
     "modifier_movement_cost_mult": "Move cost",
     "modifier_metabolic_cost_mult": "Metabolism",
@@ -338,6 +344,24 @@ def build_creature_card(
         card["satiety"] = f"{creature.satiety_ticks_remaining}t"
 
     card["pos"] = f"({creature.x:.0f}, {creature.y:.0f})"
+
+    try:
+        creature_obs = simulation.get_creature_observability(creature)
+    except Exception:
+        creature_obs = {}
+
+    if creature_obs:
+        card["age_seconds"] = f"{float(creature_obs.get('age_seconds', 0.0)):.1f}s"
+        card["lineage_age"] = f"{float(creature_obs.get('lineage_age_seconds', 0.0)):.1f}s"
+        card["lineage_size"] = str(int(creature_obs.get('lineage_size', 1)))
+        card["species_age_percentile"] = f"{float(creature_obs.get('species_age_percentile', 0.0)):.0f}%"
+        above = creature_obs.get("above_population_traits", ())
+        below = creature_obs.get("below_population_traits", ())
+        if above:
+            card["above_population"] = ", ".join(above)
+        if below:
+            card["below_population"] = ", ".join(below)
+
 
     # ── Genome section ──
     card["section_genome"] = ""
@@ -481,6 +505,8 @@ def build_inspect_panel_lines(
                 removable=True,
                 priority=35,
             ),
+            _build_row_pair("age_seconds", card.get("age_seconds", "—"), "lineage_age", card.get("lineage_age", "—"), removable=True, priority=35),
+            _build_row_pair("lineage", card.get("lineage", "—"), "lineage_size", card.get("lineage_size", "—"), removable=True, priority=36),
             InspectPanelLine(kind="section", text="Behavior"),
             _build_row("behavior", _titleize(card.get("behavior", "unknown"))),
         ]
@@ -567,7 +593,10 @@ def build_inspect_panel_lines(
                     priority=90,
                 ),
                 _build_row("eff", card.get("eff", "—"), style="detail", removable=True, priority=90),
+                _build_row("species_age_percentile", card.get("species_age_percentile", "—"), style="detail", removable=True, priority=90),
                 _build_row("pos", card.get("pos", "—"), style="detail", removable=True, priority=95),
+                _build_row("above_population", card.get("above_population", "—"), style="detail", removable=True, priority=96),
+                _build_row("below_population", card.get("below_population", "—"), style="detail", removable=True, priority=96),
             ]
         )
         if "recent_animal_e" in card:
@@ -1013,7 +1042,7 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
     value_font = fonts["body"] if line.style == "body" else fonts["detail"]
     label_text = f"{line.label}:"
     label_surf = label_font.render(label_text, True, _INSPECT_LABEL)
-    if line.key == "tags":
+    if line.key in {"tags", "above_population", "below_population"}:
         wrapped_values = _wrap_comma_separated_text(
             value_font,
             line.value,
@@ -1043,7 +1072,8 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
             "height": height,
         }
 
-    wrapped_values = _wrap_text(value_font, line.value, content_width - 14, max_lines=3)
+    max_lines = 4 if line.key in {"key_effect", "above_population", "below_population"} else 3
+    wrapped_values = _wrap_text(value_font, line.value, content_width - 14, max_lines=max_lines)
     return _render_wrapped_row(label_surf, value_font, wrapped_values, content_width)
 
 

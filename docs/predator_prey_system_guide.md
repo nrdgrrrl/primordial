@@ -434,3 +434,7 @@ Predators now choose among final sensed usable prey targets; a nearby prey that 
 Predators now keep short quarry memory (target id, last-known position/depth, last-seen frame) and can briefly pursue last known position when live sensing drops out. Memory pursuit is weaker than live sensing, does not increment usable sighting metrics, and does not bypass normal same-depth contact kill rules.
 
 Quarry-memory diagnostics now distinguish strict target switches from same-target reacquisitions, and `kills_after_memory_chase` reports memory-assisted same-target kills after memory chase episodes.
+
+- HUD/Inspect observability now includes average age, lineage age, and compact evolution drift direction (run-baseline trait-average deltas). These are descriptive observability metrics, not adaptation proof.
+
+- Snapshot compatibility note: older snapshots missing observability baseline metadata now capture a stable load-time baseline so evolution drift remains descriptive and does not use a moving fallback.

@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-24] — fix: keep ecology observability baselines honest and readable
+
+- Fixed observability reset baseline capture so each reset run snapshots baseline traits immediately after spawning population.
+- Replaced hardcoded 30 Hz age/lineage seconds conversion with active mode `simulation_tick_hz` fallback logic.
+- Preserved snapshot compatibility by accepting versions 1, 2, and 3; version 2 loads now rebuild stable lineage metadata and capture a one-time load baseline when missing.
+- Improved Inspect labels for new observability rows (`Age`, `Lin age`, `Lin size`, `Age pct`, `Above avg`, `Below avg`) and tightened HUD/Inspect text fitting/wrapping to avoid clipping.
+
 ## [2026-05-24] — chore: clean up predator prey docs and diagnostics
 
 - Cleaned predator-prey documentation wording for usable depth-adjusted prey sightings, finite-radius omnidirectional sensing, quarry-memory constraints, and prey frailty scope.
@@ -1792,3 +1799,5 @@ Guardrails preserved in this pass:
 - Follow-up fix: predator hunt target acquisition now selects the best **usable sensed** prey candidate during scan (nearest unsensed prey no longer blocks farther sensed prey), and depth tracking now begins only after usable target selection.
 
 - Cleanup: clarified quarry-memory diagnostics semantics so `kills_after_memory_chase` counts memory-assisted chase episodes that end in killing the same target, and tightened target-switch counting to exclude first-acquire/same-target reacquisition noise.
+
+- Added HUD/Inspect observability summaries for population age, lineage age, and run-baseline trait-drift direction/distance, including snapshot-compatible lineage first-seen metadata rebuild fallback for older saves.
