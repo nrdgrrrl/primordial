@@ -947,14 +947,14 @@ def _section_k_recommendations(
 
     if long_scarcity_pct > 40:
         recommendations.append(
-            f"LONG SCARCITY dominates ({long_scarcity_pct:.0f}% of deaths): "
+            f"LONG SCARCITY is common ({long_scarcity_pct:.0f}% of deaths): "
             "Predator rarity advantage or predator refuge likely helps. "
             "Predators are not finding prey often enough."
         )
 
     if active_hunting_pct + after_failed_pursuit_pct > 40:
         recommendations.append(
-            f"ACTIVE/FAILED PURSUIT dominates ({active_hunting_pct:.0f}% active, "
+            f"ACTIVE/FAILED PURSUIT is common ({active_hunting_pct:.0f}% active, "
             f"{after_failed_pursuit_pct:.0f}% failed pursuit): "
             "Contact/sense/depth tuning or refuges likely help. "
             "Predators see prey but cannot convert."
@@ -1375,7 +1375,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         memory_chase_frames = int(g.get("memory_chase_frames", 0))
         kills_after_memory_chase = int(g.get("kills_after_memory_chase", 0))
         if memory_chase_frames > 0 and kills_after_memory_chase == 0:
-            lines.append("- **Interpretation:** high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.")
+            lines.append("- **Interpretation:** memory chase frames are nonzero but kills_after_memory_chase stayed zero; verify memory-kill instrumentation and chase conversion.")
         elif kills_after_memory_chase > 0:
             lines.append("- **Interpretation:** Memory-assisted chase is contributing to kills; nonzero kills_after_memory_chase indicates quarry memory is participating in successful same-target chase episodes.")
         target_switches_per_life = g.get("target_switches_per_completed_life")
