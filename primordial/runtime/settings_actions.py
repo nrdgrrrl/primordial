@@ -135,7 +135,9 @@ def _apply_runtime_settings_change(
     if sync_overlay:
         renderer.settings_overlay.sync_from_settings()
         renderer.settings_overlay.set_snapshot_path(str(context.active_snapshot_path))
-        renderer.settings_overlay.set_snapshot_status("Reset settings to defaults.")
+        renderer.settings_overlay.set_snapshot_status(
+            "Settings reset to defaults. Reset simulation to fully apply runtime changes."
+        )
 
     begin_mode_transition = settings.sim_mode != context.previous_mode
     if not begin_mode_transition:

@@ -268,6 +268,7 @@ class SettingsOverlay:
             return "reset"
         self.confirm_reset_predator_prey_dials = False
         self.confirm_reset = True
+        self.set_snapshot_status("", is_error=False)
         return None
 
     def _clear_confirmations(self) -> None:
@@ -602,6 +603,21 @@ class SettingsOverlay:
             for line in self._wrap_text(self.snapshot_status, self._small, rect.width - 32):
                 panel.blit(self._small.render(line, True, status_color), (rect.x + 16, y))
                 y += 22
+        if self.confirm_reset:
+            y = min(rect.bottom - 126, y + 8)
+            confirmation_lines = [
+                "Reset all settings to defaults?",
+                "This will restore the built-in app and mode settings.",
+                "Saved worlds, logs, and diagnostics will not be deleted.",
+                "Press Enter to confirm or Esc to cancel.",
+            ]
+            for line in confirmation_lines:
+                for wrapped in self._wrap_text(line, self._small, rect.width - 32):
+                    panel.blit(
+                        self._small.render(wrapped, True, (244, 176, 126)),
+                        (rect.x + 16, y),
+                    )
+                    y += 22
 
     def _draw_footer(self, panel: pygame.Surface, rect: pygame.Rect) -> None:
         self._draw_box(panel, rect, (5, 20, 32), (34, 88, 112))

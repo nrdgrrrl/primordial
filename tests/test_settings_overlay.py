@@ -634,6 +634,48 @@ class SettingsOverlayTests(unittest.TestCase):
             self.assertIsNone(first_click)
             self.assertEqual(second_click, "reset")
 
+    def test_reset_settings_confirmation_cancel_leaves_values_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            original_mode = settings.sim_mode
+            settings.sim_mode = "boids" if original_mode != "boids" else "drift"
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            first_press = overlay.handle_event(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r)
+            )
+            cancel = overlay.handle_event(
+                pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+            )
+
+            self.assertIsNone(first_press)
+            self.assertEqual(cancel, "discard")
+            self.assertEqual(settings.sim_mode, "boids" if original_mode != "boids" else "drift")
+
+    def test_reset_confirmation_copy_is_rendered_in_details_panel(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Settings()
+
+            overlay = SettingsOverlay(settings)
+            overlay.open()
+            overlay.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r))
+            surface = pygame.Surface((900, 640), pygame.SRCALPHA)
+
+            with patch.object(overlay, "_wrap_text", wraps=overlay._wrap_text) as wrap_text:
+                overlay.draw(surface)
+
+            wrapped_inputs = [call.args[0] for call in wrap_text.call_args_list]
+            self.assertIn("Reset all settings to defaults?", wrapped_inputs)
+            self.assertIn(
+                "Saved worlds, logs, and diagnostics will not be deleted.",
+                wrapped_inputs,
+            )
+
     def test_cursor_helpers_hide_runtime_and_restore_interactive_visibility(self) -> None:
         with patch("primordial.display.cursor.pygame.mouse.set_visible") as set_visible:
             hide_runtime_cursor()
