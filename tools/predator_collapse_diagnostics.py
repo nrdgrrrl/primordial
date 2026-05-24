@@ -800,7 +800,7 @@ def _section_g_near_contact_dance(
         "kills_after_memory_chase": sum(int(l.get("kills_after_memory_chase", 0)) for l in all_completed),
         "pct_kills_after_memory_chase": _pct(
             sum(int(l.get("kills_after_memory_chase", 0)) for l in all_completed),
-            total_kills,
+            total_kill_samples,
         ),
         "killed_prey_age_bucket_counts": age_bucket_counts,
         "killed_prey_energy_bucket_counts": energy_bucket_counts,
