@@ -711,6 +711,12 @@ class TestInspectPanelPresentation(unittest.TestCase):
         self.assertEqual(friendly_inspect_label("vel"), "Moving")
         self.assertEqual(friendly_inspect_label("attention"), "Focus")
         self.assertEqual(friendly_inspect_label("recent_animal_e"), "Recent prey E")
+        self.assertEqual(friendly_inspect_label("age_seconds"), "Age")
+        self.assertEqual(friendly_inspect_label("lineage_age"), "Lin age")
+        self.assertEqual(friendly_inspect_label("lineage_size"), "Lin size")
+        self.assertEqual(friendly_inspect_label("species_age_percentile"), "Age pct")
+        self.assertEqual(friendly_inspect_label("above_population"), "Above avg")
+        self.assertEqual(friendly_inspect_label("below_population"), "Below avg")
 
     def test_compact_layout_omits_details_section(self):
         mode = InspectMode(enabled=True, detail_mode="compact")

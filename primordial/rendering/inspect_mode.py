@@ -206,6 +206,12 @@ _INSPECT_LABELS: dict[str, str] = {
     "likely_goal": "Likely goal",
     "body_plan": "Body plan",
     "key_effect": "Key effect",
+    "age_seconds": "Age",
+    "lineage_age": "Lin age",
+    "lineage_size": "Lin size",
+    "species_age_percentile": "Age pct",
+    "above_population": "Above avg",
+    "below_population": "Below avg",
     "modifier_speed_mult": "Speed",
     "modifier_movement_cost_mult": "Move cost",
     "modifier_metabolic_cost_mult": "Metabolism",
@@ -1036,7 +1042,7 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
     value_font = fonts["body"] if line.style == "body" else fonts["detail"]
     label_text = f"{line.label}:"
     label_surf = label_font.render(label_text, True, _INSPECT_LABEL)
-    if line.key == "tags":
+    if line.key in {"tags", "above_population", "below_population"}:
         wrapped_values = _wrap_comma_separated_text(
             value_font,
             line.value,
@@ -1066,7 +1072,8 @@ def _render_line(line: InspectPanelLine, fonts, content_width: int) -> dict[str,
             "height": height,
         }
 
-    wrapped_values = _wrap_text(value_font, line.value, content_width - 14, max_lines=3)
+    max_lines = 4 if line.key in {"key_effect", "above_population", "below_population"} else 3
+    wrapped_values = _wrap_text(value_font, line.value, content_width - 14, max_lines=max_lines)
     return _render_wrapped_row(label_surf, value_font, wrapped_values, content_width)
 
 

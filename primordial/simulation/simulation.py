@@ -1354,6 +1354,7 @@ class Simulation:
             self.settings.zone_strength,
         )
         self._spawn_initial_population()
+        self._capture_run_baseline_observability()
 
     def _generate_predator_prey_seed(self) -> int:
         return random.SystemRandom().randrange(1, 2_147_483_647)
@@ -5013,6 +5014,15 @@ class Simulation:
     def _capture_run_baseline_observability(self) -> None:
         self._run_baseline_traits = obs_average_traits(self.creatures, TRACKED_TRAITS)
 
+    def get_simulation_tick_hz(self) -> float:
+        """Return active simulation tick rate for observability formatting."""
+        configured = self._get_mode_param("simulation_tick_hz", None)
+        if isinstance(configured, (int, float)) and configured > 0:
+            return float(configured)
+        if getattr(self.settings, "target_fps", 0) > 0:
+            return float(self.settings.target_fps)
+        return 30.0
+
     def _rebuild_lineage_first_seen_ticks(self) -> None:
         if not self.creatures:
             self._lineage_first_seen_tick = {}
@@ -5073,9 +5083,10 @@ class Simulation:
         sorted_deltas = sorted(deltas.items(), key=lambda item: abs(item[1]), reverse=True)
         above = tuple(f"{name} {delta:+.02f}" for name, delta in sorted_deltas if delta >= 0.05)
         below = tuple(f"{name} {delta:+.02f}" for name, delta in sorted_deltas if delta <= -0.05)
+        tick_hz = self.get_simulation_tick_hz()
         return {
-            "age_seconds": creature.age / 30.0,
-            "lineage_age_seconds": max(0, self._frame - first_seen) / 30.0,
+            "age_seconds": creature.age / tick_hz,
+            "lineage_age_seconds": max(0, self._frame - first_seen) / tick_hz,
             "lineage_size": lineage_size,
             "species_age_percentile": percentile * 100.0,
             "above_population_traits": above[:3],

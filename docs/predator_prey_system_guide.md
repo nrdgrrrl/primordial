@@ -436,3 +436,5 @@ Predators now keep short quarry memory (target id, last-known position/depth, la
 Quarry-memory diagnostics now distinguish strict target switches from same-target reacquisitions, and `kills_after_memory_chase` reports memory-assisted same-target kills after memory chase episodes.
 
 - HUD/Inspect observability now includes average age, lineage age, and compact evolution drift direction (run-baseline trait-average deltas). These are descriptive observability metrics, not adaptation proof.
+
+- Snapshot compatibility note: older snapshots missing observability baseline metadata now capture a stable load-time baseline so evolution drift remains descriptive and does not use a moving fallback.

@@ -17,7 +17,7 @@ from .zones import Zone, ZoneManager
 
 
 SAVE_FORMAT_VERSION = 3
-_SUPPORTED_SAVE_FORMAT_VERSIONS = {1, SAVE_FORMAT_VERSION}
+_SUPPORTED_SAVE_FORMAT_VERSIONS = {1, 2, SAVE_FORMAT_VERSION}
 SAVE_KIND = "primordial.world_snapshot"
 
 _SIMULATION_SETTING_FIELDS = (
@@ -110,6 +110,10 @@ def load_snapshot_payload(
     if resolved_settings.sim_mode == "predator_prey":
         simulation.restore_predator_prey_runtime_state(world.get("predator_prey", {}))
     simulation.rebuild_derived_state()
+    if not simulation._run_baseline_traits:
+        # Older snapshots do not include observability baseline metadata.
+        # Capture load-time population means once so drift is stable and honest.
+        simulation._capture_run_baseline_observability()
 
     random.setstate(_deserialize_random_state(world["rng_state"]))
     return simulation

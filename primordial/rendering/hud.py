@@ -10,9 +10,6 @@ if TYPE_CHECKING:
     from ..simulation.simulation import Simulation
 
 
-TICKS_PER_SECOND = 30.0
-
-
 class HUD:
     """
     Heads-up display for simulation information.
@@ -68,9 +65,10 @@ class HUD:
     def _observability_lines(self, simulation: "Simulation") -> list[str]:
         pop = simulation.get_population_observability_summary()
         evo = simulation.get_evolution_summary()
-        avg_age = pop["average_age_ticks"] / TICKS_PER_SECOND
-        avg_lin = pop["average_lineage_age_ticks"] / TICKS_PER_SECOND
-        old_lin = pop["oldest_lineage_age_ticks"] / TICKS_PER_SECOND
+        tick_hz = simulation.get_simulation_tick_hz()
+        avg_age = pop["average_age_ticks"] / tick_hz
+        avg_lin = pop["average_lineage_age_ticks"] / tick_hz
+        old_lin = pop["oldest_lineage_age_ticks"] / tick_hz
         directions = ", ".join(evo["top_directions"][:3]) if evo["top_directions"] else "stable"
         return [
             f"Age avg {avg_age:.0f}s | Lin {int(pop['active_lineage_count'])} avg {avg_lin:.0f}s old {old_lin:.0f}s",
@@ -223,6 +221,8 @@ class HUD:
         lines.append(f"FPS: {fps:.0f}")
         if debug_lines:
             lines.extend(debug_lines)
+        max_panel_width = max(220, surface.get_width() - 20)
+        lines = self._fit_lines(lines, max_panel_width - self.padding * 2)
 
         food_bar_height = 12
         food_bar_margin = 6
@@ -239,7 +239,7 @@ class HUD:
             bar_row_width = 80 + bar_label_w * 2 + 8
             max_width = max(max_width, bar_row_width)
 
-        panel_width = max_width + self.padding * 2
+        panel_width = min(max_panel_width, max_width + self.padding * 2)
         panel_height = (
             len(lines) * self.line_height
             + (food_bar_height + food_bar_margin if show_food_bar else 0)
@@ -283,6 +283,36 @@ class HUD:
         screen_height = surface.get_height()
         pos = (10, screen_height - panel_height - 10)
         surface.blit(panel, pos)
+
+    def _fit_lines(self, lines: list[str], max_text_width: int) -> list[str]:
+        fitted: list[str] = []
+        for line in lines:
+            if self.font.size(line)[0] <= max_text_width:
+                fitted.append(line)
+                continue
+            words = line.split(" ")
+            if not words:
+                fitted.append("...")
+                continue
+            current = words[0]
+            for word in words[1:]:
+                candidate = f"{current} {word}"
+                if self.font.size(candidate)[0] <= max_text_width:
+                    current = candidate
+                    continue
+                fitted.append(self._truncate(current, max_text_width))
+                current = word
+            fitted.append(self._truncate(current, max_text_width))
+        return fitted
+
+    def _truncate(self, text: str, max_width: int) -> str:
+        if self.font.size(text)[0] <= max_width:
+            return text
+        trimmed = text
+        ellipsis = "..."
+        while trimmed and self.font.size(trimmed + ellipsis)[0] > max_width:
+            trimmed = trimmed[:-1]
+        return (trimmed + ellipsis) if trimmed else ellipsis
 
     def toggle(self) -> None:
         """Toggle HUD visibility."""

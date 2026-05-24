@@ -11,6 +11,8 @@ from primordial.simulation.observability import (
     top_trait_directions,
     trait_deltas,
 )
+from primordial.settings import Settings
+from primordial.simulation.simulation import Simulation
 
 
 def _creature(age: int, lineage_id: int, species: str = "prey", **traits):
@@ -45,3 +47,30 @@ def test_lineage_summary_active_counts_and_ages():
     assert summary.active_lineage_count == 2
     assert summary.oldest_lineage_age_ticks == 80
     assert summary.average_lineage_age_ticks == 50
+
+
+def test_reset_recaptures_run_baseline_observability():
+    settings = Settings()
+    settings.sim_mode = "energy"
+    sim = Simulation(240, 160, settings)
+    assert sim._run_baseline_traits
+    original = dict(sim._run_baseline_traits)
+    sim._run_baseline_traits = {}
+    sim.reset()
+    assert sim._run_baseline_traits
+    assert sim._run_baseline_traits != {}
+    assert set(sim._run_baseline_traits) == set(original)
+
+
+def test_creature_observability_uses_mode_tick_hz():
+    settings = Settings()
+    settings.sim_mode = "drift"
+    settings.mode_params["drift"]["simulation_tick_hz"] = 60
+    sim = Simulation(240, 160, settings)
+    creature = sim.creatures[0]
+    creature.age = 120
+    sim._frame = 240
+    sim._lineage_first_seen_tick[creature.lineage_id] = 60
+    obs = sim.get_creature_observability(creature)
+    assert obs["age_seconds"] == pytest.approx(2.0)
+    assert obs["lineage_age_seconds"] == pytest.approx(3.0)

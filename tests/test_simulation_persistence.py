@@ -159,6 +159,24 @@ class SimulationPersistenceTests(unittest.TestCase):
         self.assertTrue(all(c.recent_animal_energy == 0.0 for c in loaded.creatures))
         self.assertTrue(all(c.satiety_ticks_remaining == 0 for c in loaded.creatures))
 
+    def test_load_snapshot_version_2_without_observability_metadata(self) -> None:
+        settings = self._build_settings("energy")
+        settings.initial_population = 8
+        random.seed(999)
+        simulation = Simulation(320, 180, settings)
+        snapshot = build_snapshot(simulation)
+        snapshot["version"] = 2
+        snapshot["world"].pop("observability", None)
+
+        loaded = load_snapshot_payload(snapshot, settings=self._build_settings("energy"))
+
+        self.assertTrue(loaded.creatures)
+        self.assertTrue(loaded._run_baseline_traits)
+        self.assertEqual(
+            set(loaded._run_baseline_traits.keys()),
+            {"speed", "size", "sense_radius", "aggression", "efficiency", "longevity", "depth_preference", "conformity", "motion_style"},
+        )
+
     def test_load_rebuilds_boids_flock_state_without_persisting_it(self) -> None:
         settings = self._build_settings("boids")
         settings.mode_params["boids"].update({
