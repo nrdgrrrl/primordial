@@ -2,6 +2,12 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-24] — chore: clean up predator prey docs and diagnostics
+
+- Cleaned predator-prey documentation wording for usable depth-adjusted prey sightings, finite-radius omnidirectional sensing, quarry-memory constraints, and prey frailty scope.
+- Removed awkward duplicated paragraph spacing in predator-prey guide sections after recent merges.
+- Refined predator collapse report wording for temporary predator-zero interpretation and active/failed pursuit recommendation language without changing report semantics.
+
 ## [2026-05-23] — feat: add predator quarry memory
 
 - Added conservative predator quarry memory with short-lived last-known-position pursuit in predator_prey mode.

@@ -604,7 +604,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         md = render_markdown(build_report([run]))
         self.assertIn(
-            "high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.",
+            "memory chase frames are nonzero but kills_after_memory_chase stayed zero; verify memory-kill instrumentation and chase conversion.",
             md,
         )
 
@@ -621,7 +621,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         md = render_markdown(build_report([run]))
         self.assertNotIn(
-            "high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.",
+            "memory chase frames are nonzero but kills_after_memory_chase stayed zero; verify memory-kill instrumentation and chase conversion.",
             md,
         )
         self.assertIn(
@@ -680,10 +680,10 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-23] — feat: add predator quarry memory",
+            "## [2026-05-24] — chore: clean up predator prey docs and diagnostics",
         )
         self.assertEqual(
-            changelog.count("## [2026-05-23] — feat: add predator quarry memory"),
+            changelog.count("## [2026-05-24] — chore: clean up predator prey docs and diagnostics"),
             1,
         )
 

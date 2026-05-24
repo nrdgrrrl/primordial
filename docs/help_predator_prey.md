@@ -13,7 +13,7 @@ Predator-prey mode also adds an abstract vertical layer called **depth bands**. 
 
 ## How Predators Behave
 
-A predator scans for the nearest prey within its sensing range. When it detects prey, it steers toward it and tries to match its depth band. Simple epistasis can bend that sensing and contact quality: large fast predators tend to handle contact better but pay more to move, while depth specialists sense best in-band and worse across bands.
+A predator scans within a finite-radius omnidirectional sensing range and pursues a final depth-adjusted usable prey target. When it has a usable target, it steers toward that prey and tries to match its depth band. Simple epistasis can bend that sensing and contact quality: large fast predators tend to handle contact better but pay more to move, while depth specialists sense best in-band and worse across bands.
 
 **Kill on contact**: when the predator and prey are close enough and in the same depth band, the predator kills the prey. Kill energy gain is capped.
 
@@ -25,13 +25,15 @@ A predator scans for the nearest prey within its sensing range. When it detects 
 
 **Interference**: predators near other predators suffer reduced hunting effectiveness, preventing predator swarms from wiping out local prey instantly.
 
+**Quarry memory**: predators keep short-term last-known-position memory for conservative pursuit when live sensing drops out. Memory pursuit is weaker than live sensing, does not increment usable sighting metrics, and still requires normal same-depth contact for kills.
+
 **Movement cost**: predators pay a metabolic premium on movement. When prey are scarce (below 15% of population), predators pay additional scarcity penalty energy costs.
 
 ## How Prey Behave
 
 Prey search for nearby food within their current depth band. If food is unavailable in their band, they may shift toward another band where food is present. Small fast prey, asymmetric darters, and appendage-rich bodies can gain modest fleeing advantages, while specialized depth morphs tend to read their home band better than other bands.
 
-**Fleeing**: when a prey senses a nearby predator, it steers directly away and may attempt to shift to a different depth band to escape. Fleeing takes priority over food seeking.
+**Fleeing**: when a prey senses a nearby predator, it steers directly away and may attempt to shift to a different depth band to escape. Fleeing takes priority over food seeking. Prey frailty (age and low-energy slowdown) makes compromised prey easier to catch, but it does not directly suppress prey population counts.
 
 **Cost model**: prey pay standard movement cost, longevity metabolic cost, sensing upkeep, overcrowding penalty, and zone modifiers. They do not pay the predator metabolic premium.
 

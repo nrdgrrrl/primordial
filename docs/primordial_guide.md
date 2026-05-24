@@ -1051,8 +1051,6 @@ Predator active chase speed and prey flee speed are intentionally separated: pre
 
 Predators now choose among final sensed usable prey targets; a nearby prey that fails depth-adjusted sensing no longer blocks pursuit of another usable target.
 
-
 Predators now keep short quarry memory (target id, last-known position/depth, last-seen frame) and can briefly pursue last known position when live sensing drops out. Memory pursuit is weaker than live sensing, does not increment usable sighting metrics, and does not bypass normal same-depth contact kill rules.
-
 
 Quarry-memory diagnostics now distinguish strict target switches from same-target reacquisitions, and `kills_after_memory_chase` reports memory-assisted same-target kills after memory chase episodes.
