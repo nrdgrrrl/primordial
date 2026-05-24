@@ -49,6 +49,9 @@ zone_background_intensity = 1.20
 predator_highlight_alpha = 220
 predator_highlight_radius_scale = 2.10
 predator_highlight_pulse_seconds = 1.10
+predation_kill_effects_enabled = true
+predation_kill_effect_intensity = 1.00
+predation_kill_effect_max_active = 64
 
 # Per-mode parameter overrides — these override the base [simulation] values
 # when that mode is active. Edit to tune each mode independently.

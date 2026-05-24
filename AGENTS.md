@@ -144,6 +144,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 - The runtime mouse-activated bottom action bar lives in `primordial/rendering/action_bar.py`. Keep its displayed shortcut metadata aligned with the real handlers in `primordial/input/keyboard.py` and the small `K_p` hold path in `primordial/main.py`.
 - Settings overlay geometry lives in `primordial/rendering/settings_layout.py`; keep future modal/sidebar/list/details/footer sizing there instead of adding one-off rectangle math in the renderer.
 - Runtime cursor behavior lives in `primordial/display/cursor.py`: normal simulation playback hides the OS cursor, interactive UI states such as tutorial/settings/help/inspect show it, and clean shutdown restores it.
+- Predator kill visibility is renderer-owned. Simulation may attach render-only predation metadata (for example predator position/color on a `death_event`) so the renderer can build bounded kill effects, but simulation must not own visual timers, surfaces, or pygame state. Current rendering keys are `predation_kill_effects_enabled`, `predation_kill_effect_intensity`, and `predation_kill_effect_max_active`.
 - Settings that require reset are marked in the overlay; simulation reset is only triggered by explicit `R`.
 - Eco-morphological epistasis is controlled by `simulation.epistasis_enabled` and `simulation.epistasis_strength`. Keep the raw genome separate from effective phenotype values so future mate choice, recombination, and reproductive compatibility work can reuse the same translation layer.
 

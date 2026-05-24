@@ -184,6 +184,63 @@ class DeathAnimation(Animation):
             surface.blit(self._p_surfs[idx], (int(p.x) - 3, int(p.y) - 3))
 
 
+class PredationDeathAnimation(DeathAnimation):
+    """Sharper death dissolve used for predator kills."""
+
+    TOTAL_FRAMES = 44
+    PARTICLE_LIFE = 24
+    MIN_SCALE = 0.22
+    _FLASH_CACHE: dict[tuple[int, int, int], list[tuple[pygame.Surface, int]]] = {}
+
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        glyph_surface: pygame.Surface | None,
+        color: tuple[int, int, int],
+        num_particles: int = 7,
+        predator_pos: tuple[float, float] | None = None,
+    ) -> None:
+        super().__init__(x, y, glyph_surface, color, max(6, num_particles))
+        if predator_pos is not None:
+            px, py = predator_pos
+            escape_angle = math.atan2(y - py, x - px)
+            for particle in self.particles:
+                angle = escape_angle + _render_rng.uniform(-0.55, 0.55)
+                speed = _render_rng.uniform(1.6, 3.3)
+                particle.vx = math.cos(angle) * speed
+                particle.vy = math.sin(angle) * speed
+
+        if color not in self._FLASH_CACHE:
+            frames: list[tuple[pygame.Surface, int]] = []
+            warm = (255, 156, 214)
+            cool = (120, 244, 255)
+            for frame in range(14):
+                t = frame / 13
+                radius = int(10 + (18 * t))
+                size = radius * 2 + 10
+                center = size // 2
+                surf = pygame.Surface((size, size), pygame.SRCALPHA)
+                halo_alpha = int(132 * (1.0 - t) ** 1.15)
+                core_alpha = int(230 * (1.0 - t) ** 0.7)
+                pygame.draw.circle(surf, (*cool, halo_alpha), (center, center), radius)
+                pygame.draw.circle(surf, (*warm, halo_alpha // 2), (center, center), max(4, int(radius * 0.72)))
+                pygame.draw.circle(surf, (255, 248, 255, core_alpha), (center, center), max(3, int(radius * 0.24)))
+                pygame.draw.circle(surf, (*warm, max(0, halo_alpha // 2)), (center, center), max(3, radius - 1), 2)
+                frames.append((surf, center))
+            self._FLASH_CACHE[color] = frames
+
+    def draw(self, surface: pygame.Surface) -> None:
+        flash_frames = self._FLASH_CACHE[self.color]
+        frame_index = min(self.frame, len(flash_frames) - 1)
+        flash_surface, flash_offset = flash_frames[frame_index]
+        surface.blit(
+            flash_surface,
+            (int(self.x) - flash_offset, int(self.y) - flash_offset),
+        )
+        super().draw(surface)
+
+
 # ---------------------------------------------------------------------------
 # Birth animation scale tracker
 # ---------------------------------------------------------------------------
@@ -339,11 +396,23 @@ class AnimationManager:
         y: float,
         glyph_surface: pygame.Surface | None,
         color: tuple[int, int, int],
+        *,
+        cause: str = "energy",
+        predator_pos: tuple[float, float] | None = None,
     ) -> None:
         """Create a death animation at the given position."""
-        self._animations.append(
-            DeathAnimation(x, y, glyph_surface, color, self._num_particles)
-        )
+        if cause == "predation":
+            animation = PredationDeathAnimation(
+                x,
+                y,
+                glyph_surface,
+                color,
+                self._num_particles + 2,
+                predator_pos=predator_pos,
+            )
+        else:
+            animation = DeathAnimation(x, y, glyph_surface, color, self._num_particles)
+        self._animations.append(animation)
 
     def add_birth(self, creature: Creature) -> None:
         """Start a birth scale-up animation for a new creature."""
@@ -381,11 +450,19 @@ class AnimationManager:
         """
         for event in death_events:
             color = get_color(event)
+            predator_pos = None
+            if event.get("cause") == "predation":
+                predator_x = event.get("predator_x")
+                predator_y = event.get("predator_y")
+                if predator_x is not None and predator_y is not None:
+                    predator_pos = (float(predator_x), float(predator_y))
             self.add_death(
                 event["x"],
                 event["y"],
                 event["glyph_surface"],
                 color,
+                cause=str(event.get("cause", "energy")),
+                predator_pos=predator_pos,
             )
 
         for creature in birth_events:

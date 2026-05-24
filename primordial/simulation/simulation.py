@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from ..settings import Settings
 
 AttackRenderEvent = tuple[float, float, float, float, str, float, float]
+PredationRenderContext = dict[str, float | int | str]
 
 _DEPTH_SENSING_FACTORS = {
     0: 1.0,
@@ -334,6 +335,7 @@ class Simulation:
         self._recent_kill_frames: deque[int] = deque()
         self._recent_cross_band_miss_frames: deque[int] = deque()
         self._predation_victims_this_frame: set[int] = set()
+        self._predation_render_context_by_victim: dict[int, PredationRenderContext] = {}
 
         # Rolling average lifespan for old-age deaths (last 20)
         self._old_age_lifespans: deque[float] = deque(maxlen=20)
@@ -1344,6 +1346,7 @@ class Simulation:
         self._recent_kill_frames.clear()
         self._recent_cross_band_miss_frames.clear()
         self._predation_victims_this_frame.clear()
+        self._predation_render_context_by_victim.clear()
         self._old_age_lifespans.clear()
         self._flock_sizes = {}
         self._flock_count = 0
@@ -1594,6 +1597,7 @@ class Simulation:
         self._spawn_food()
         self.active_attacks.clear()
         self._predation_victims_this_frame.clear()
+        self._predation_render_context_by_victim.clear()
 
         new_creatures: list[Creature] = []
         dead_creatures: list[Creature] = []
@@ -2027,6 +2031,14 @@ class Simulation:
             best_prey.energy = 0.0
             self.predation_kill_count += 1
             self._predation_victims_this_frame.add(id(best_prey))
+            self._predation_render_context_by_victim[id(best_prey)] = {
+                "predator_x": predator.x,
+                "predator_y": predator.y,
+                "predator_species": predator.species,
+                "predator_hue": predator.genome.hue,
+                "predator_saturation": predator.genome.saturation,
+                "predator_depth_band": predator.depth_band,
+            }
             self._recent_kill_frames.append(self._frame)
             self._record_predator_kill(
                 predator,
@@ -4102,6 +4114,9 @@ class Simulation:
         dead_set = set(id(c) for c in dead_creatures)
         for creature in dead_creatures:
             cause = dead_causes.get(id(creature), "energy")
+            predation_context = self._predation_render_context_by_victim.pop(
+                id(creature), None
+            )
             if cause == "age":
                 self._old_age_lifespans.append(creature.age)
             if creature.species == "predator":
@@ -4120,6 +4135,8 @@ class Simulation:
                 "lineage_id": creature.lineage_id,
                 "cause": cause,
             })
+            if cause == "predation" and predation_context is not None:
+                self.death_events[-1].update(predation_context)
             self.total_deaths += 1
 
         self.creatures = [c for c in self.creatures if id(c) not in dead_set]

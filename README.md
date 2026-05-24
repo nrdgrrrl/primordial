@@ -278,6 +278,7 @@ In predator_prey mode, species is determined by the `aggression` trait using hys
 Several mechanisms prevent permanent predator dominance: the reproduction gate (recent kills required), the 60% dominance penalty (+20% reproduction threshold), prey scarcity costs, predator interference, and cross-band misses. These create negative feedback: predator success reduces prey density, which makes predation harder, which reduces predator reproduction, which allows prey to recover.
 
 Predator-collapse diagnostics also track near-contact "dance" behavior: same-depth close passes without kills, cross-depth near misses, sustained same-target chases, and whether successful kills skew toward old or low-energy prey. These diagnostics are observational only; they do not change kill distance or add a lunge/strike mechanic.
+Predator kills now also get a renderer-only visibility pass: a brighter bioluminescent strike tether, a localized bloom at the prey position, a soft ripple, and a subtle predator pulse. This presentation layer does not alter same-depth contact rules, kill distance, predator/prey speed, kill energy, spawning, mutation, or adaptive tuning. On the pygame path the effect uses cached bloom/ripple/pulse surfaces; on the GPU path it uses bounded radial and line sprites so the extra visual work stays capped.
 
 For the full predator-prey ecology explanation, see [docs/organism_biology.md](docs/organism_biology.md) and [docs/predator_prey_system_guide.md](docs/predator_prey_system_guide.md).
 
@@ -457,6 +458,9 @@ Configuration is TOML-backed and persistent across app updates.
 | display | target_fps | int >= 1 | Frame limit |
 | display | show_hud | bool | HUD visibility |
 | rendering | glyph_size_base, kin/shimmer/animation fields | validated numeric ranges | Renderer tuning knobs (advanced) |
+| rendering | predation_kill_effects_enabled | bool | Enable the richer predator-prey strike/bloom/ripple visibility pass |
+| rendering | predation_kill_effect_intensity | float 0.1..2.5 | Scale the brightness and spread of predator kill effects |
+| rendering | predation_kill_effect_max_active | int 1..256 | Cap live predator kill effect objects to bound worst-case render work |
 
 Mode-specific tuning keys:
 

@@ -680,10 +680,10 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-24] — chore: clean up predator prey docs and diagnostics",
+            "## [2026-05-24] — feat: make predator kills visibly bloom",
         )
         self.assertEqual(
-            changelog.count("## [2026-05-24] — chore: clean up predator prey docs and diagnostics"),
+            changelog.count("## [2026-05-24] — feat: make predator kills visibly bloom"),
             1,
         )
 

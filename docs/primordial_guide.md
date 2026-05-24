@@ -25,7 +25,7 @@ The default ocean theme draws:
 - **Kin lines** between nearby related creatures, when enabled.
 - **Territory shimmer** around dominant lineages, when enabled.
 - **Environmental zones** as faint colored regions.
-- **Attack lines** for predator kills.
+- **Predator kill effects**: luminous strike tethers, a localized bloom, a soft ripple, and subtle predator feedback.
 - **Birth and death animations** when creatures appear or dissolve.
 - **Cosmic ray rings** when a living creature receives a spontaneous mutation.
 
@@ -649,9 +649,9 @@ similar but distinct offspring.
 | **Kin lines** | Shared `lineage_id` | Faint filament threads between nearby same-lineage creatures. Show family clusters, not social bonds |
 | **Territory shimmer** | Top 3 dominant lineages | Soft pulsing elliptical glow at lineage centroids. Shows which families are most numerous in an area |
 | **Birth budding** | Reproduction event | New creatures appear at 0.2x scale and ease out to full size over 30 frames |
-| **Death dissolution** | Death event | Dying creatures flash white, shrink, and fade over 40 frames with scattered particles |
+| **Death dissolution** | Death event | Starvation and old age keep a soft dissolve; predation adds a sharper flash, warmer bloom, and more directional scatter |
 | **Cosmic ray ring** | Spontaneous mutation event | Faint white ring briefly expands around a creature that received a cosmic ray mutation |
-| **Attack lines** | Predator kill event | Thin colored thread briefly connects predator and prey during a kill |
+| **Attack lines** | Predator kill event | Predator-prey kills add a brighter tether, local bloom, ripple, and a subtle predator pulse |
 | **Zone backgrounds** | Static zone layout | Subtle radial tints marking environmental zones. Not visible on every display at default alpha |
 | **Depth cues** | `depth_band` | Surface creatures are slightly brighter and larger; deep creatures are slightly dimmer and smaller |
 
@@ -665,7 +665,7 @@ appearance:
 | **Energy level** | Not drawn on creatures. Must use the HUD or Inspect Mode |
 | **Sensing range** | Not drawn. A creature may be starving because it cannot sense nearby food |
 | **Depth band** | Only hinted by subtle brightness/size differences. Not labeled |
-| **Death cause** | Death animations are the same regardless of cause (starvation, predation, old age) |
+| **Death cause** | Partly visible now: predation gets a sharper tether/bloom/ripple pass, but starvation and old age are still not separately labeled |
 | **Reproductive readiness** | Not shown. A creature at 0.79 energy looks the same as one at 0.81 |
 | **Species role** | In energy mode, aggression tiers are not marked. In predator_prey mode, the warm tint is the primary cue but can become less reliable after many generations of hue mutation |
 | **Trait distributions over time** | No historical trait graphs. The HUD shows current snapshots; Inspect Mode shows one creature at a time |
@@ -944,8 +944,9 @@ Some real mechanics are not obvious from the screen:
 - **Sensing range** is not drawn. A creature may be starving because it cannot
   sense nearby food.
 - **Depth bands** are only hinted by subtle brightness and size differences.
-- **Death cause** is not visible in the death animation. Starvation, predation,
-  and old age all produce the same dissolution effect.
+- **Death cause** is only partly visible. Predation now gets a sharper
+  tether/bloom/ripple presentation, but starvation and old age are still not
+  separately labeled.
 - **Reproductive readiness** is not shown. A creature at 0.79 energy looks the
   same as one at 0.81.
 - **Trait distributions over time** are not graphed. The HUD shows current

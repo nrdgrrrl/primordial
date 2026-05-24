@@ -15,6 +15,7 @@ from .animations import AnimationManager
 from .help_overlay import HelpOverlay
 from .hud import HUD
 from .inspect_mode import InspectMode
+from .predation_effects import PredationEffectManager
 from .settings_overlay import SettingsOverlay
 from .themes import AmbientParticle, OceanTheme, Theme, get_theme
 from .tutorial_overlay import TutorialOverlay
@@ -239,6 +240,11 @@ class Renderer:
         self.animation_manager = AnimationManager(
             num_particles=settings.death_particle_count
         )
+        self.predation_effect_manager = PredationEffectManager(
+            enabled=bool(getattr(settings, "predation_kill_effects_enabled", True)),
+            intensity=float(getattr(settings, "predation_kill_effect_intensity", 1.0)),
+            max_active=int(getattr(settings, "predation_kill_effect_max_active", 64)),
+        )
 
         # Territory shimmer state: lineage_id → ShimmerState
         self._shimmer_states: dict[int, ShimmerState] = {}
@@ -325,6 +331,11 @@ class Renderer:
         self.animation_manager = AnimationManager(
             num_particles=self.settings.death_particle_count
         )
+        self.predation_effect_manager = PredationEffectManager(
+            enabled=bool(getattr(self.settings, "predation_kill_effects_enabled", True)),
+            intensity=float(getattr(self.settings, "predation_kill_effect_intensity", 1.0)),
+            max_active=int(getattr(self.settings, "predation_kill_effect_max_active", 64)),
+        )
         self._shimmer_states.clear()
         self.frame_times.clear()
         self.fps = 0.0
@@ -409,6 +420,26 @@ class Renderer:
             str(event.get("species", "none")),
             float(event["genome"].hue),
             float(event["genome"].saturation),
+        )
+        resolve_attack_color = lambda species, hue, saturation: self.theme.resolve_color_for_species(
+            str(species),
+            float(hue),
+            float(saturation),
+        )
+        self.predation_effect_manager.configure(
+            enabled=(
+                simulation.settings.sim_mode == "predator_prey"
+                and bool(getattr(self.settings, "predation_kill_effects_enabled", True))
+            ),
+            intensity=float(getattr(self.settings, "predation_kill_effect_intensity", 1.0)),
+            max_active=int(getattr(self.settings, "predation_kill_effect_max_active", 64)),
+        )
+        self.predation_effect_manager.process_events(
+            simulation.death_events,
+            simulation.active_attacks,
+            resolve_attack_color=resolve_attack_color,
+            resolve_death_color=get_color,
+            now=current_time,
         )
 
         self.animation_manager.process_events(
@@ -506,15 +537,23 @@ class Renderer:
         self._draw_predator_highlights(simulation, anim_time)
         timings["predator_highlights_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        # --- Attack lines (drawn above creatures, very faint) ---
+        # --- Attack lines fallback (used when richer predation effects are disabled) ---
         t0 = time.perf_counter()
-        if isinstance(self.theme, OceanTheme) and simulation.active_attacks:
+        if (
+            isinstance(self.theme, OceanTheme)
+            and simulation.active_attacks
+            and not self.predation_effect_manager.enabled
+        ):
             self._draw_attack_lines(simulation)
         timings["attacks_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        # --- Animation effects (death bursts etc.) ---
+        # --- Animation effects (death bursts, kill blooms, cosmic pulses) ---
         t0 = time.perf_counter()
         self.animation_manager.tick_and_draw(target)
+        if self.predation_effect_manager.enabled and self.predation_effect_manager.active_count > 0:
+            self._attack_surf.fill((0, 0, 0, 0))
+            self.predation_effect_manager.draw_pygame(self._attack_surf, current_time)
+            self._target_surface.blit(self._attack_surf, (0, 0))
         timings["anim_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Stub overlay ---

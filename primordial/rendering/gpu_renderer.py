@@ -90,6 +90,7 @@ from .glyphs import build_glyph_surface
 from .help_overlay import HelpOverlay
 from .hud import HUD
 from .inspect_mode import InspectMode
+from .predation_effects import PredationEffectManager
 from .renderer import _ZONE_BG_COLORS, _blit_zone_labels
 from .settings_overlay import SettingsOverlay
 from .tutorial_overlay import TutorialOverlay
@@ -420,6 +421,11 @@ class PredatorPreyGpuRenderer:
         self._snapshot_debug_metrics: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
         self._debug_inspect_click_marker: tuple[float, float, float] | None = None
+        self.predation_effect_manager = PredationEffectManager(
+            enabled=bool(getattr(settings, "predation_kill_effects_enabled", True)),
+            intensity=float(getattr(settings, "predation_kill_effect_intensity", 1.0)),
+            max_active=int(getattr(settings, "predation_kill_effect_max_active", 64)),
+        )
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
         self._zone_cache_key: tuple[object, ...] | None = None
         self._zone_cache: tuple[RadialSprite, ...] = ()
@@ -606,6 +612,11 @@ class PredatorPreyGpuRenderer:
         self._zone_label_cache_key = None
         self._zone_label_surface = None
         self._debug_inspect_click_marker = None
+        self.predation_effect_manager = PredationEffectManager(
+            enabled=bool(getattr(self.settings, "predation_kill_effects_enabled", True)),
+            intensity=float(getattr(self.settings, "predation_kill_effect_intensity", 1.0)),
+            max_active=int(getattr(self.settings, "predation_kill_effect_max_active", 64)),
+        )
 
     def toggle_hud(self) -> None:
         self.hud.toggle()
@@ -649,8 +660,34 @@ class PredatorPreyGpuRenderer:
         current_time = time.time()
         anim_time = current_time - self.start_time
         self._update_fps(current_time)
+        resolve_death_color = lambda event: self.theme.resolve_color_for_species(
+            str(event.get("species", "none")),
+            float(event["genome"].hue),
+            float(event["genome"].saturation),
+        )
+        resolve_attack_color = lambda species, hue, saturation: self.theme.resolve_color_for_species(
+            str(species),
+            float(hue),
+            float(saturation),
+        )
+        self.predation_effect_manager.configure(
+            enabled=(
+                simulation.settings.sim_mode == "predator_prey"
+                and bool(getattr(self.settings, "predation_kill_effects_enabled", True))
+            ),
+            intensity=float(getattr(self.settings, "predation_kill_effect_intensity", 1.0)),
+            max_active=int(getattr(self.settings, "predation_kill_effect_max_active", 64)),
+        )
+        self.predation_effect_manager.process_events(
+            simulation.death_events,
+            simulation.active_attacks,
+            resolve_attack_color=resolve_attack_color,
+            resolve_death_color=resolve_death_color,
+            now=current_time,
+        )
         t0 = time.perf_counter()
         snapshot = self._build_snapshot(simulation, anim_time)
+        predation_sprites = self.predation_effect_manager.build_gpu_sprites(current_time)
         timings["snapshot_ms"] = (time.perf_counter() - t0) * 1000.0
         timings.update(self._snapshot_debug_metrics)
         bg = snapshot.background_color
@@ -697,6 +734,16 @@ class PredatorPreyGpuRenderer:
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
+        if predation_sprites.strike_glow_lines:
+            self._draw_lines(predation_sprites.strike_glow_lines, width=3.0)
+        if predation_sprites.strike_core_lines:
+            self._draw_lines(predation_sprites.strike_core_lines, width=1.5)
+        if predation_sprites.bloom_radials:
+            self._draw_radials(predation_sprites.bloom_radials, blend="additive")
+        if predation_sprites.ripple_radials:
+            self._draw_radials(predation_sprites.ripple_radials, blend="normal")
+        if predation_sprites.predator_pulse_radials:
+            self._draw_radials(predation_sprites.predator_pulse_radials, blend="additive")
         self._draw_lines(snapshot.attack_lines, width=1.0)
         timings["attacks_ms"] = (time.perf_counter() - t0) * 1000.0
 
@@ -896,10 +943,18 @@ class PredatorPreyGpuRenderer:
         kin_shimmer_sprites = kin_render.shimmer_sprites
         kin_ms = (time.perf_counter() - kin_t0) * 1000.0
 
-        attack_lines = [
-            LineSprite(ax, ay, tx, ty, (*_rgb01(self.theme.resolve_color_for_species(species, hue, saturation), 0.28),))
-            for ax, ay, tx, ty, species, hue, saturation in simulation.active_attacks
-        ]
+        attack_lines = []
+        if not self.predation_effect_manager.enabled:
+            attack_lines = [
+                LineSprite(
+                    ax,
+                    ay,
+                    tx,
+                    ty,
+                    (*_rgb01(self.theme.resolve_color_for_species(species, hue, saturation), 0.28),),
+                )
+                for ax, ay, tx, ty, species, hue, saturation in simulation.active_attacks
+            ]
         self._snapshot_debug_metrics = {
             "kin_lines_build_ms": kin_ms,
             "kin_line_count": float(kin_render.diagnostics.get("kin_line_count", 0)),

@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-24] — feat: make predator kills visibly bloom
+
+- Added a renderer-only predator-prey kill visibility pass: lingering luminous strike tethers, a localized kill bloom, a soft water-ripple pulse, and subtle predator feedback on successful kills.
+- Predation deaths now render distinctly from starvation and old age while keeping the underlying predator-prey rules unchanged: same-depth contact, kill distance, energy gain, timing, and adaptive ecology logic are all untouched.
+- Wired the new pass into both render backends with bounded effect counts, cached pygame bloom/ripple/pulse surfaces, and sprite-based OpenGL drawing when the GPU backend is active.
+- Added rendering settings for enabling the pass, scaling intensity, and capping active effects, plus focused unit coverage for effect creation, aging, capping, disable behavior, renderer queue contracts, and config validation.
+
 ## [2026-05-24] — feat: add settings reset to defaults action
 
 - Expanded the settings overlay reset flow into a full in-app **Reset all settings to defaults** action with explicit confirmation copy and safer messaging.

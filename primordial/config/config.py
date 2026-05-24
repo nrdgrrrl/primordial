@@ -68,6 +68,9 @@ _SECTION_FIELDS: dict[str, dict[str, tuple[str, str]]] = {
         "predator_highlight_alpha": ("predator_highlight_alpha", "int"),
         "predator_highlight_radius_scale": ("predator_highlight_radius_scale", "float"),
         "predator_highlight_pulse_seconds": ("predator_highlight_pulse_seconds", "float"),
+        "predation_kill_effects_enabled": ("predation_kill_effects_enabled", "bool"),
+        "predation_kill_effect_intensity": ("predation_kill_effect_intensity", "float"),
+        "predation_kill_effect_max_active": ("predation_kill_effect_max_active", "int"),
     },
 }
 
@@ -486,6 +489,10 @@ class Config:
         self.predator_highlight_pulse_seconds = max(
             0.1, self.predator_highlight_pulse_seconds
         )
+        self.predation_kill_effect_intensity = max(
+            0.1, min(2.5, self.predation_kill_effect_intensity)
+        )
+        self.predation_kill_effect_max_active = max(1, min(256, self.predation_kill_effect_max_active))
         predator_prey_params = self.mode_params.get("predator_prey", {})
         soft_cap = int(predator_prey_params.get("predator_refuge_density_soft_cap", 3))
         hard_cap = int(predator_prey_params.get("predator_refuge_density_hard_cap", 7))
@@ -578,6 +585,9 @@ zone_background_intensity = {self.zone_background_intensity:.2f}
 predator_highlight_alpha = {self.predator_highlight_alpha}
 predator_highlight_radius_scale = {self.predator_highlight_radius_scale:.2f}
 predator_highlight_pulse_seconds = {self.predator_highlight_pulse_seconds:.2f}
+predation_kill_effects_enabled = {str(self.predation_kill_effects_enabled).lower()}
+predation_kill_effect_intensity = {self.predation_kill_effect_intensity:.2f}
+predation_kill_effect_max_active = {self.predation_kill_effect_max_active}
 
 # Per-mode parameter overrides — these override the base [simulation] values
 # when that mode is active. Edit to tune each mode independently.

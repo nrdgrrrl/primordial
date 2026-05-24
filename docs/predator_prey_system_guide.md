@@ -42,13 +42,21 @@ The default ocean theme draws:
 - **Kin lines** between nearby related creatures, when enabled.
 - **Territory shimmer** around dominant lineages, when enabled.
 - **Environmental zones** as faint colored regions.
-- **Attack lines** for predator kills.
+- **Predator kill effects**: luminous strike tethers, a localized bloom, a soft ripple, and subtle predator feedback.
 - **Birth and death animations** when creatures appear or dissolve.
 - **Cosmic ray rings** when a living creature receives a spontaneous mutation.
 
 Predators have a warm species tint in predator-prey mode, while prey generally
 read cooler. The `P` highlight key makes predators much easier to find in dense
 scenes.
+
+Predation is now visually distinct from starvation and old age. A successful kill
+briefly leaves a bioluminescent tether between predator and prey, a bloom and
+ripple at the prey location, and a small predator pulse. This is presentation
+only: same-depth contact, kill distance, energy transfer, and population
+balance are unchanged. The pygame renderer uses cached bloom/ripple/pulse
+surfaces, and the GPU renderer uses bounded line/radial sprites, so the effect
+can stay visible without unbounded per-frame work.
 
 Some features are deliberately subtle. Depth bands, sensing range, energy cost,
 and most trait values are not directly labeled on creatures.
@@ -257,7 +265,7 @@ Settings are grouped into categories:
 - **Display**: backend, fullscreen, target FPS, HUD.
 - **Evolution**: mutation, cosmic rays, epistasis, food cycle, zones.
 - **Ecology / Predator-Prey**: predator-prey-specific starting mix and dials.
-- **Rendering**: kin-line visuals and related rendering options.
+- **Rendering**: kin-line visuals, predator kill visibility effects, and related presentation options.
 - **Actions**: snapshots, guide, reset actions.
 
 The selected setting has a description panel explaining what it does, its range

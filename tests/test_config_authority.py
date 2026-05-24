@@ -389,5 +389,32 @@ territory_top_n = 3
         self.assertFalse(settings.is_render_setting_explicit("kin_line_max_distance"))
 
 
+    def test_predation_kill_effect_settings_validate_and_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                """
+[rendering]
+predation_kill_effects_enabled = false
+predation_kill_effect_intensity = 9.50
+predation_kill_effect_max_active = -12
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Config()
+
+            saved = tomllib.loads(settings.to_toml())
+
+        self.assertFalse(settings.predation_kill_effects_enabled)
+        self.assertEqual(settings.predation_kill_effect_intensity, 2.5)
+        self.assertEqual(settings.predation_kill_effect_max_active, 1)
+        self.assertFalse(saved["rendering"]["predation_kill_effects_enabled"])
+        self.assertEqual(saved["rendering"]["predation_kill_effect_intensity"], 2.5)
+        self.assertEqual(saved["rendering"]["predation_kill_effect_max_active"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
