@@ -300,6 +300,40 @@ predator_energy_to_reproduce = 0.7100
             user_data["modes"]["predator_prey"],
         )
 
+    def test_reset_to_defaults_restores_base_and_mode_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Config()
+
+            default_mode = settings.mode_params["predator_prey"]["food_spawn_rate"]
+            settings.fullscreen = not settings.fullscreen
+            settings.mode_params["predator_prey"]["food_spawn_rate"] = 0.13
+            settings.save()
+
+            settings.reset_to_defaults()
+
+        self.assertEqual(
+            settings.fullscreen,
+            tomllib.loads(get_canonical_defaults_path().read_text(encoding="utf-8"))["display"]["fullscreen"],
+        )
+        self.assertEqual(
+            settings.mode_params["predator_prey"]["food_spawn_rate"],
+            default_mode,
+        )
+
+    def test_reset_to_defaults_keeps_mode_defaults_deep_copied(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Config()
+
+            settings.reset_to_defaults()
+            baseline = settings.DEFAULT_MODE_PARAMS["boids"]["max_population"]
+            settings.mode_params["boids"]["max_population"] = baseline + 77
+
+        self.assertEqual(settings.DEFAULT_MODE_PARAMS["boids"]["max_population"], baseline)
+
     def test_render_effect_zero_values_are_preserved_as_disable_switches(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.toml"

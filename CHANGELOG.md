@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-24] — feat: add settings reset to defaults action
+
+- Expanded the settings overlay reset flow into a full in-app **Reset all settings to defaults** action with explicit confirmation copy and safer messaging.
+- Reset now restores canonical global + mode defaults through config-owned reset logic, refreshes overlay values immediately, and preserves predator-prey adaptive dial reset as a separate explicit action.
+- Runtime reset status now clarifies that simulation reset may be needed for some changes to fully apply.
+- Added unit coverage for config default restoration/deep-copy behavior and settings-overlay confirmation/cancel UX.
+
 ## [2026-05-24] — fix: keep ecology observability baselines honest and readable
 
 - Fixed observability reset baseline capture so each reset run snapshots baseline traits immediately after spawning population.
