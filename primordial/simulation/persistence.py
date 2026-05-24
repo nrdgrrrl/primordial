@@ -16,7 +16,7 @@ from .simulation import Simulation
 from .zones import Zone, ZoneManager
 
 
-SAVE_FORMAT_VERSION = 2
+SAVE_FORMAT_VERSION = 3
 _SUPPORTED_SAVE_FORMAT_VERSIONS = {1, SAVE_FORMAT_VERSION}
 SAVE_KIND = "primordial.world_snapshot"
 
@@ -97,6 +97,14 @@ def load_snapshot_payload(
     simulation.total_deaths = int(counters["total_deaths"])
     simulation._frame = int(counters["frame"])
     simulation._next_lineage_id = int(counters["next_lineage_id"])
+    simulation._lineage_first_seen_tick = {
+        int(k): int(v)
+        for k, v in world.get("observability", {}).get("lineage_first_seen_tick", {}).items()
+    }
+    simulation._run_baseline_traits = {
+        str(k): float(v)
+        for k, v in world.get("observability", {}).get("run_baseline_traits", {}).items()
+    }
     simulation.paused = False
     simulation._old_age_lifespans.clear()
     if resolved_settings.sim_mode == "predator_prey":
@@ -133,6 +141,10 @@ def build_snapshot(simulation: Simulation) -> dict[str, Any]:
             "food": _serialize_food_manager(simulation.food_manager),
             "zones": _serialize_zone_manager(simulation.zone_manager),
             "rng_state": _serialize_random_state(random.getstate()),
+            "observability": {
+                "lineage_first_seen_tick": simulation._lineage_first_seen_tick,
+                "run_baseline_traits": simulation._run_baseline_traits,
+            },
             "predator_prey": (
                 simulation.export_predator_prey_runtime_state()
                 if simulation.settings.sim_mode == "predator_prey"

@@ -28,6 +28,15 @@ from .phenotype import (
     strategy_bucket_template,
 )
 from .zones import ZoneManager
+from .observability import (
+    TRACKED_TRAITS,
+    average_age_ticks as obs_average_age_ticks,
+    average_traits as obs_average_traits,
+    evolution_distance_mean_abs as obs_evolution_distance_mean_abs,
+    lineage_summary_for_population,
+    top_trait_directions as obs_top_trait_directions,
+    trait_deltas as obs_trait_deltas,
+)
 
 if TYPE_CHECKING:
     from ..settings import Settings
@@ -313,6 +322,8 @@ class Simulation:
 
         # Lineage counter — each new lineage gets a unique integer ID
         self._next_lineage_id: int = 1
+        self._lineage_first_seen_tick: dict[int, int] = {}
+        self._run_baseline_traits: dict[str, float] = {}
 
         # Event queues read by renderer each frame (renderer clears them)
         self.death_events: list[dict] = []
@@ -354,6 +365,7 @@ class Simulation:
         # Initialize population
         if bootstrap_world:
             self._spawn_initial_population()
+        self._capture_run_baseline_observability()
 
     def set_predator_prey_run_logger(self, run_logger: Any) -> None:
         """Attach an optional run logger used by predator-prey stability mode."""
@@ -1147,6 +1159,7 @@ class Simulation:
         """Allocate and return a new unique lineage ID."""
         lid = self._next_lineage_id
         self._next_lineage_id += 1
+        self._lineage_first_seen_tick.setdefault(lid, self._frame)
         return lid
 
     def _spawn_initial_population(self) -> None:
@@ -1321,6 +1334,8 @@ class Simulation:
         self.total_deaths = 0
         self._frame = 0
         self._next_lineage_id = 1
+        self._lineage_first_seen_tick = {}
+        self._run_baseline_traits = {}
         self.death_events.clear()
         self.birth_events.clear()
         self.cosmic_ray_events.clear()
@@ -1420,6 +1435,8 @@ class Simulation:
         self._recent_cross_band_miss_frames.clear()
         self._predation_victims_this_frame.clear()
         self._reset_predator_diagnostics()
+
+        self._rebuild_lineage_first_seen_ticks()
 
         for creature in self.creatures:
             creature.trail = []
@@ -4992,6 +5009,78 @@ class Simulation:
     def get_lineage_count(self) -> int:
         """Return number of distinct lineages currently alive."""
         return len(set(c.lineage_id for c in self.creatures))
+
+    def _capture_run_baseline_observability(self) -> None:
+        self._run_baseline_traits = obs_average_traits(self.creatures, TRACKED_TRAITS)
+
+    def _rebuild_lineage_first_seen_ticks(self) -> None:
+        if not self.creatures:
+            self._lineage_first_seen_tick = {}
+            return
+        rebuilt: dict[int, int] = {}
+        for creature in self.creatures:
+            lineage_id = int(creature.lineage_id)
+            known = self._lineage_first_seen_tick.get(lineage_id)
+            if known is not None:
+                rebuilt[lineage_id] = min(rebuilt.get(lineage_id, known), known)
+                continue
+            # Older snapshots may not persist first-seen lineage metadata.
+            # Conservative fallback: infer a plausible origin from the oldest
+            # living member age in the lineage (current_tick - max_member_age).
+            inferred = max(0, self._frame - int(creature.age))
+            rebuilt[lineage_id] = min(rebuilt.get(lineage_id, inferred), inferred)
+        self._lineage_first_seen_tick = rebuilt
+
+    def get_population_observability_summary(self) -> dict[str, float | int]:
+        lineage = lineage_summary_for_population(
+            self.creatures,
+            current_tick=self._frame,
+            lineage_first_seen_ticks=self._lineage_first_seen_tick,
+        )
+        return {
+            "average_age_ticks": obs_average_age_ticks(self.creatures),
+            "active_lineage_count": lineage.active_lineage_count,
+            "average_lineage_age_ticks": lineage.average_lineage_age_ticks,
+            "oldest_lineage_age_ticks": lineage.oldest_lineage_age_ticks,
+        }
+
+    def get_evolution_summary(self) -> dict[str, object]:
+        current = obs_average_traits(self.creatures, TRACKED_TRAITS)
+        baseline = self._run_baseline_traits or current
+        deltas = obs_trait_deltas(current, baseline)
+        return {
+            "distance": obs_evolution_distance_mean_abs(deltas),
+            "top_directions": obs_top_trait_directions(deltas),
+            "deltas": deltas,
+        }
+
+    def get_creature_observability(self, creature: Creature) -> dict[str, object]:
+        if creature not in self.creatures:
+            return {}
+        pop_traits = obs_average_traits(self.creatures, ("speed", "size", "sense_radius", "aggression", "efficiency", "depth_preference"))
+        lineage_size = sum(1 for c in self.creatures if c.lineage_id == creature.lineage_id)
+        first_seen = self._lineage_first_seen_tick.get(creature.lineage_id, max(0, self._frame - creature.age))
+        species_ages = [c.age for c in self.creatures if c.species == creature.species] or [creature.age]
+        younger_or_equal = sum(1 for age in species_ages if age <= creature.age)
+        percentile = younger_or_equal / len(species_ages)
+
+        deltas = {
+            "speed": creature.genome.speed - pop_traits["speed"],
+            "size": creature.genome.size - pop_traits["size"],
+            "sense": creature.genome.sense_radius - pop_traits["sense_radius"],
+            "aggr": creature.genome.aggression - pop_traits["aggression"],
+        }
+        sorted_deltas = sorted(deltas.items(), key=lambda item: abs(item[1]), reverse=True)
+        above = tuple(f"{name} {delta:+.02f}" for name, delta in sorted_deltas if delta >= 0.05)
+        below = tuple(f"{name} {delta:+.02f}" for name, delta in sorted_deltas if delta <= -0.05)
+        return {
+            "age_seconds": creature.age / 30.0,
+            "lineage_age_seconds": max(0, self._frame - first_seen) / 30.0,
+            "lineage_size": lineage_size,
+            "species_age_percentile": percentile * 100.0,
+            "above_population_traits": above[:3],
+            "below_population_traits": below[:3],
+        }
 
     def get_most_variable_trait(self) -> str:
         """Return trait name with highest variance across population."""

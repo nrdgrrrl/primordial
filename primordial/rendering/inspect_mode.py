@@ -339,6 +339,24 @@ def build_creature_card(
 
     card["pos"] = f"({creature.x:.0f}, {creature.y:.0f})"
 
+    try:
+        creature_obs = simulation.get_creature_observability(creature)
+    except Exception:
+        creature_obs = {}
+
+    if creature_obs:
+        card["age_seconds"] = f"{float(creature_obs.get('age_seconds', 0.0)):.1f}s"
+        card["lineage_age"] = f"{float(creature_obs.get('lineage_age_seconds', 0.0)):.1f}s"
+        card["lineage_size"] = str(int(creature_obs.get('lineage_size', 1)))
+        card["species_age_percentile"] = f"{float(creature_obs.get('species_age_percentile', 0.0)):.0f}%"
+        above = creature_obs.get("above_population_traits", ())
+        below = creature_obs.get("below_population_traits", ())
+        if above:
+            card["above_population"] = ", ".join(above)
+        if below:
+            card["below_population"] = ", ".join(below)
+
+
     # ── Genome section ──
     card["section_genome"] = ""
     card["speed"] = f"{creature.genome.speed:.2f}"
@@ -481,6 +499,8 @@ def build_inspect_panel_lines(
                 removable=True,
                 priority=35,
             ),
+            _build_row_pair("age_seconds", card.get("age_seconds", "—"), "lineage_age", card.get("lineage_age", "—"), removable=True, priority=35),
+            _build_row_pair("lineage", card.get("lineage", "—"), "lineage_size", card.get("lineage_size", "—"), removable=True, priority=36),
             InspectPanelLine(kind="section", text="Behavior"),
             _build_row("behavior", _titleize(card.get("behavior", "unknown"))),
         ]
@@ -567,7 +587,10 @@ def build_inspect_panel_lines(
                     priority=90,
                 ),
                 _build_row("eff", card.get("eff", "—"), style="detail", removable=True, priority=90),
+                _build_row("species_age_percentile", card.get("species_age_percentile", "—"), style="detail", removable=True, priority=90),
                 _build_row("pos", card.get("pos", "—"), style="detail", removable=True, priority=95),
+                _build_row("above_population", card.get("above_population", "—"), style="detail", removable=True, priority=96),
+                _build_row("below_population", card.get("below_population", "—"), style="detail", removable=True, priority=96),
             ]
         )
         if "recent_animal_e" in card:

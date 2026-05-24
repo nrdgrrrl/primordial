@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from ..simulation.simulation import Simulation
 
 
+TICKS_PER_SECOND = 30.0
+
+
 class HUD:
     """
     Heads-up display for simulation information.
@@ -62,6 +65,19 @@ class HUD:
     # Mode-specific line builders
     # ------------------------------------------------------------------
 
+    def _observability_lines(self, simulation: "Simulation") -> list[str]:
+        pop = simulation.get_population_observability_summary()
+        evo = simulation.get_evolution_summary()
+        avg_age = pop["average_age_ticks"] / TICKS_PER_SECOND
+        avg_lin = pop["average_lineage_age_ticks"] / TICKS_PER_SECOND
+        old_lin = pop["oldest_lineage_age_ticks"] / TICKS_PER_SECOND
+        directions = ", ".join(evo["top_directions"][:3]) if evo["top_directions"] else "stable"
+        return [
+            f"Age avg {avg_age:.0f}s | Lin {int(pop['active_lineage_count'])} avg {avg_lin:.0f}s old {old_lin:.0f}s",
+            f"Evo Δ{float(evo['distance']):.3f}: {directions}",
+        ]
+
+
     def _epistasis_lines(self, simulation: "Simulation") -> list[str]:
         summary = simulation.get_epistasis_summary()
         if not summary["enabled"] or simulation.population <= 0:
@@ -98,6 +114,7 @@ class HUD:
             f"Avg lifespan: {avg_ls_str}",
             f"Zone: {dom_zone}",
             f"Food: {simulation.food_count}",
+            *self._observability_lines(simulation),
             *self._epistasis_lines(simulation),
             f"Mode: {simulation.settings.sim_mode}",
             f"Theme: {simulation.settings.visual_theme}",
@@ -149,6 +166,7 @@ class HUD:
             ),
             danger_line,
             trial_line,
+            *self._observability_lines(simulation),
             *self._epistasis_lines(simulation),
             f"Zone: {dom_zone}",
             f"Mode: predator_prey",
@@ -166,6 +184,7 @@ class HUD:
             f"Largest flock: {largest}  Loners: {loners}",
             f"Avg conformity: {avg_conformity:.2f}",
             f"Generation: {simulation.generation}",
+            *self._observability_lines(simulation),
             *self._epistasis_lines(simulation),
             f"Mode: boids",
             f"Theme: {simulation.settings.visual_theme}",
@@ -180,6 +199,7 @@ class HUD:
             f"Generation: {simulation.generation}",
             f"Lineages: {lineage_count}",
             f"Most variable: {most_var}",
+            *self._observability_lines(simulation),
             *self._epistasis_lines(simulation),
             f"Mode: drift",
             f"Theme: {simulation.settings.visual_theme}",
