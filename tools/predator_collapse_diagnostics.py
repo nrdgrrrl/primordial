@@ -857,6 +857,9 @@ def _section_rarity_advantage(runs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+_HIGH_TARGET_SWITCHES_PER_LIFE_THRESHOLD = 10.0
+
+
 def _section_h_epistasis(
     runs: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -1110,6 +1113,20 @@ def _section_k_recommendations(
     return recommendations
 
 
+def _report_extinction_grace_ticks(runs: list[dict[str, Any]]) -> int | None:
+    """Return the configured extinction grace window when present in run data."""
+    for run in runs:
+        stability = run.get("stability") or {}
+        grace_ticks = stability.get("extinction_grace_ticks")
+        if grace_ticks is not None:
+            return int(grace_ticks)
+        diagnostics = run.get("diagnostics") or {}
+        grace_ticks = diagnostics.get("extinction_grace_ticks")
+        if grace_ticks is not None:
+            return int(grace_ticks)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Full report builder
 # ---------------------------------------------------------------------------
@@ -1142,6 +1159,7 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "report_timestamp": datetime.now(timezone.utc).isoformat(),
         "runs": len(runs),
         "max_ticks": runs[0]["max_ticks"] if runs else 0,
+        "extinction_grace_ticks": _report_extinction_grace_ticks(runs),
         "section_a_run_summary": section_a,
         "section_b_predator_life_summary": section_b,
         "section_c_death_context_breakdown": section_c,
@@ -1194,8 +1212,8 @@ def render_markdown(report: dict[str, Any]) -> str:
     # A. Run Summary
     lines.append("## A. Run Summary")
     lines.append("")
-    lines.append("| Seed | Ticks | Game Over | Collapse Cause | First Pred 0 | Pred0 Ticks | Pred Count | Prey Count | Total Kills | Survival Ticks |")
-    lines.append("|------|-------|-----------|-----------------|--------------|-------------|------------|------------|-------------|----------------|")
+    lines.append("| Seed | Ticks | Game Over | Collapse Cause | First Pred 0 Tick | Sustained Pred0 Ticks | Pred Count | Prey Count | Total Kills | Survival Ticks |")
+    lines.append("|------|-------|-----------|-----------------|-------------------|-----------------------|------------|------------|-------------|----------------|")
     for row in report["section_a_run_summary"]:
         lines.append(
             f"| {row['seed']} "
@@ -1209,6 +1227,21 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"| {row['total_kills']} "
             f"| {row['survival_ticks']} |"
         )
+    lines.append("")
+    grace_ticks = report.get("extinction_grace_ticks")
+    grace_text = (
+        f"the full extinction grace window ({grace_ticks} ticks)"
+        if grace_ticks is not None
+        else "the configured sustained predator-zero threshold"
+    )
+    lines.append(
+        "- **Predator-zero note:** A run can briefly hit predator count 0 and later "
+        "recover through existing simulation mechanics. Formal game over only "
+        f"occurs after predator count stays at 0 for {grace_text}. "
+        '"First Pred 0 Tick" marks the first observed zero-count moment, '
+        '"Sustained Pred0 Ticks" shows the current or end-of-run zero streak, '
+        'and "Pred Count" is the final predator count.'
+    )
     lines.append("")
 
     # B. Predator Life Summary
@@ -1339,8 +1372,22 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Memory expired drops:** {g.get('memory_target_expired_drops', 0)}")
         lines.append(f"- **Kills after memory chase:** {g.get('kills_after_memory_chase', 0)}")
         lines.append(f"- **% kills after memory chase:** {_pct_fmt(g.get('pct_kills_after_memory_chase'))}")
-        lines.append("- **Interpretation:** high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.")
-        lines.append("- **Interpretation:** high target switches per life can indicate twitchy target selection.")
+        memory_chase_frames = int(g.get("memory_chase_frames", 0))
+        kills_after_memory_chase = int(g.get("kills_after_memory_chase", 0))
+        if memory_chase_frames > 0 and kills_after_memory_chase == 0:
+            lines.append("- **Interpretation:** high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.")
+        elif kills_after_memory_chase > 0:
+            lines.append("- **Interpretation:** Memory-assisted chase is contributing to kills; nonzero kills_after_memory_chase indicates quarry memory is participating in successful same-target chase episodes.")
+        target_switches_per_life = g.get("target_switches_per_completed_life")
+        if (
+            target_switches_per_life is not None
+            and float(target_switches_per_life)
+            > _HIGH_TARGET_SWITCHES_PER_LIFE_THRESHOLD
+        ):
+            lines.append(
+                "- **Interpretation:** target switches per completed life are high "
+                f"(>{_HIGH_TARGET_SWITCHES_PER_LIFE_THRESHOLD:.1f}), which can indicate twitchy target selection."
+            )
         lines.append(
             f"- **Chase balance note (current run):** predator_hunt_speed_multiplier={_fmt(f.get('predator_hunt_speed_multiplier'))}, prey_flee_speed_multiplier={_fmt(f.get('prey_flee_speed_multiplier'))}, predator_contact_kill_distance_scale={_fmt(f.get('predator_contact_kill_distance_scale'))}, near-contact frames/life={_fmt(g.get('near_contact_frames_per_completed_life'))}"
         )
