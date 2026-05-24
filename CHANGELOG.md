@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-23] — feat: add predator quarry memory
+
+- Added conservative predator quarry memory with short-lived last-known-position pursuit in predator_prey mode.
+- Memory pursuit is weaker than live sensing and does not increment usable prey-sighting diagnostics.
+- Added diagnostics for memory chase frames, reacquisitions, drops, strict target switches, and memory-assisted kills.
+- Clarified diagnostics/reporting after validation.
+
 ## [2026-05-22] — feat: add predator ambush habitat modifiers
 
 Add the first predator-collapse mitigation pass: predator-only ambush habitat
@@ -1777,3 +1784,5 @@ Guardrails preserved in this pass:
 - No reproduction-threshold tuning changes.
 - No predator kill-energy cap tuning changes.
 - Follow-up fix: predator hunt target acquisition now selects the best **usable sensed** prey candidate during scan (nearest unsensed prey no longer blocks farther sensed prey), and depth tracking now begins only after usable target selection.
+
+- Cleanup: clarified quarry-memory diagnostics semantics so `kills_after_memory_chase` counts memory-assisted chase episodes that end in killing the same target, and tightened target-switch counting to exclude first-acquire/same-target reacquisition noise.

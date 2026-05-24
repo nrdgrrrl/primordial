@@ -727,5 +727,75 @@ class EcologySensingTests(unittest.TestCase):
         self.assertLess(long_rate, short_rate)
 
 
+    def test_predator_memory_pursuit_does_not_increment_usable_sighting(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", side_effect=[(120.0, 100.0), None]):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["frames_with_prey_sighted"], 1)
+        self.assertEqual(life["memory_chase_frames"], 1)
+
+    def test_predator_memory_expires_after_timeout(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_target_memory_ticks"] = 1
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(120.0, 100.0)):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        simulation._frame += 3
+        with patch.object(simulation, "_sense_target_position", return_value=None), patch.object(predator, "wander") as wander:
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        wander.assert_called_once()
+
+    def test_reacquiring_same_target_increments_reacquisition_not_switch(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(120.0, 100.0)):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        with patch.object(simulation, "_sense_target_position", return_value=None):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        with patch.object(simulation, "_sense_target_position", return_value=(120.0, 100.0)):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["memory_target_reacquisitions"], 1)
+        self.assertEqual(life["target_switches"], 0)
+
+    def test_first_target_acquisition_does_not_count_switch(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(120.0, 100.0)):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["target_switches"], 0)
+
+    def test_kill_after_memory_chase_increments_metric(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), energy=0.2, lineage_id=1, species="predator")
+        prey = Creature(x=120.0, y=100.0, genome=Genome(aggression=0.1), energy=0.4, lineage_id=2, species="prey")
+        simulation.creatures = [predator, prey]
+        simulation._ensure_predator_life(predator)
+        simulation._record_predator_memory_chase(predator, prey)
+        simulation._record_predator_kill(
+            predator,
+            pre_kill_energy=0.2,
+            post_kill_energy=0.5,
+            repro_threshold=0.8,
+            prey=prey,
+            prey_energy_at_kill=0.4,
+            refuge_modifiers=simulation._get_predator_hunt_modifiers(predator, simulation._build_creature_bucket()).refuge,
+            rarity_modifiers=simulation._get_predator_hunt_modifiers(predator, simulation._build_creature_bucket()).rarity,
+        )
+        life = simulation.export_predator_diagnostics()["active_lives"][0]
+        self.assertEqual(life["kills_after_memory_chase"], 1)
+
 if __name__ == "__main__":
     unittest.main()

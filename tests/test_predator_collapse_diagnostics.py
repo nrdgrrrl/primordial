@@ -69,6 +69,12 @@ def _make_life(
     sustained_chase_frames=0,
     max_sustained_chase_frames=0,
     kills_after_sustained_chase=0,
+    memory_chase_frames=0,
+    memory_target_reacquisitions=0,
+    memory_target_dropped_frames=0,
+    memory_target_expired_drops=0,
+    target_switches=0,
+    kills_after_memory_chase=0,
     killed_prey_age_fractions=None,
     killed_prey_energies=None,
     killed_prey_condition_buckets=None,
@@ -159,6 +165,12 @@ def _make_life(
         "sustained_chase_frames": sustained_chase_frames,
         "max_sustained_chase_frames": max_sustained_chase_frames,
         "kills_after_sustained_chase": kills_after_sustained_chase,
+        "memory_chase_frames": memory_chase_frames,
+        "memory_target_reacquisitions": memory_target_reacquisitions,
+        "memory_target_dropped_frames": memory_target_dropped_frames,
+        "memory_target_expired_drops": memory_target_expired_drops,
+        "target_switches": target_switches,
+        "kills_after_memory_chase": kills_after_memory_chase,
         "killed_prey_age_fractions": killed_prey_age_fractions or [],
         "killed_prey_energies": killed_prey_energies or [],
         "killed_prey_condition_buckets": killed_prey_condition_buckets or [],
@@ -277,7 +289,7 @@ def _make_run(
             "active_lives": active_lives,
             "events": {"births": [], "cosmic_flips_to_predator": [], "cosmic_flips_from_predator": []},
         },
-        "stability": {},
+        "stability": {"extinction_grace_ticks": 7200},
         "epistasis_summary": {
             "enabled": True,
             "strength": 1.0,
@@ -583,6 +595,97 @@ class TestBuildAndRenderReport(unittest.TestCase):
         report = build_report([run])
         md = render_markdown(report)
         self.assertIn("Median usable prey-sighting share:** 37.0%", md)
+
+    def test_render_markdown_warns_when_memory_chase_has_zero_memory_kills(self):
+        run = _make_run(
+            completed_lives=[
+                _make_life(memory_chase_frames=18),
+            ]
+        )
+        md = render_markdown(build_report([run]))
+        self.assertIn(
+            "high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.",
+            md,
+        )
+
+    def test_render_markdown_reports_memory_contribution_when_memory_kills_nonzero(self):
+        run = _make_run(
+            completed_lives=[
+                _make_life(
+                    memory_chase_frames=18,
+                    kills_after_memory_chase=2,
+                    killed_prey_condition_buckets=["young_healthy", "old"],
+                ),
+            ],
+            total_kills=2,
+        )
+        md = render_markdown(build_report([run]))
+        self.assertNotIn(
+            "high memory frames with zero kills-after-memory may indicate broken memory-kill instrumentation.",
+            md,
+        )
+        self.assertIn(
+            "Memory-assisted chase is contributing to kills; nonzero kills_after_memory_chase indicates quarry memory is participating in successful same-target chase episodes.",
+            md,
+        )
+
+    def test_render_markdown_warns_when_target_switches_per_life_is_high(self):
+        run = _make_run(
+            completed_lives=[
+                _make_life(target_switches=11),
+            ]
+        )
+        md = render_markdown(build_report([run]))
+        self.assertIn(
+            "target switches per completed life are high (>10.0), which can indicate twitchy target selection.",
+            md,
+        )
+
+    def test_render_markdown_does_not_warn_when_target_switches_per_life_is_low(self):
+        run = _make_run(
+            completed_lives=[
+                _make_life(target_switches=4),
+            ]
+        )
+        md = render_markdown(build_report([run]))
+        self.assertNotIn(
+            "target switches per completed life are high (>10.0), which can indicate twitchy target selection.",
+            md,
+        )
+
+    def test_render_markdown_clarifies_temporary_predator_zero_reporting(self):
+        run = _make_run(
+            game_over=False,
+            final_predator_count=5,
+            tick_of_first_predator_zero=4000,
+            predator_zero_ticks=0,
+        )
+        md = render_markdown(build_report([run]))
+        self.assertIn("First Pred 0 Tick", md)
+        self.assertIn("Sustained Pred0 Ticks", md)
+        self.assertIn(
+            "Formal game over only occurs after predator count stays at 0 for the full extinction grace window (7200 ticks).",
+            md,
+        )
+        self.assertIn('"Pred Count" is the final predator count.', md)
+
+    def test_changelog_begins_with_header_and_single_quarry_memory_entry(self):
+        changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        lines = changelog.splitlines()
+        self.assertGreaterEqual(len(lines), 5)
+        self.assertEqual(lines[0], "# Changelog")
+        self.assertEqual(
+            lines[2],
+            "All notable changes to Primordial are documented in this file.",
+        )
+        self.assertEqual(
+            lines[4],
+            "## [2026-05-23] — feat: add predator quarry memory",
+        )
+        self.assertEqual(
+            changelog.count("## [2026-05-23] — feat: add predator quarry memory"),
+            1,
+        )
 
 
 if __name__ == "__main__":
