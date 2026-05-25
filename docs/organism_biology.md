@@ -511,7 +511,7 @@ appearance:
 | **Death cause** | Death animations are the same regardless of cause (starvation, predation, old age) |
 | **Reproductive readiness** | Not shown. A creature at 0.79 energy looks the same as one at 0.81 |
 | **Species role** | In energy mode, aggression tiers are not marked. In predator_prey mode, the warm tint is the primary cue but can become less reliable after many generations of hue mutation |
-| **Trait distributions over time** | No historical trait graphs. The HUD shows current snapshots; Inspect Mode shows one creature at a time |
+| **Trait distributions over time** | Inspect Mode now adds lightweight history for the selected organism and its lineage, but it is still a focused observability strip rather than a full population dashboard |
 | **Zone cost modifiers** | Not per-creature. Only visible as aggregate zone backgrounds |
 | **Predator recent animal energy** | Not visible. Predators must have recent kills to reproduce, but this state is internal |
 | **Gene flow between species** | When a prey offspring is born a predator (or vice versa) due to an aggression mutation, this is not signaled visually beyond the tint |

@@ -680,10 +680,10 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-24] — feat: make predator kills visibly bloom",
+            "## [2026-05-25] — feat: add inspect follow modes and lineage graphs",
         )
         self.assertEqual(
-            changelog.count("## [2026-05-24] — feat: make predator kills visibly bloom"),
+            changelog.count("## [2026-05-25] — feat: add inspect follow modes and lineage graphs"),
             1,
         )
 

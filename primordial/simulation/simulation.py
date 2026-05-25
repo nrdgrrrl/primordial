@@ -325,6 +325,8 @@ class Simulation:
         self._next_lineage_id: int = 1
         self._lineage_first_seen_tick: dict[int, int] = {}
         self._run_baseline_traits: dict[str, float] = {}
+        self._lineage_observability_cache_frame: int = -1
+        self._lineage_observability_cache: dict[int, dict[str, object]] = {}
 
         # Event queues read by renderer each frame (renderer clears them)
         self.death_events: list[dict] = []
@@ -4133,6 +4135,7 @@ class Simulation:
                 "species": creature.species,
                 "glyph_surface": creature.glyph_surface,
                 "lineage_id": creature.lineage_id,
+                "creature_id": id(creature),
                 "cause": cause,
             })
             if cause == "predation" and predation_context is not None:
@@ -4151,6 +4154,56 @@ class Simulation:
         for c in self.creatures:
             counts[c.lineage_id] = counts.get(c.lineage_id, 0) + 1
         return counts
+
+    def get_lineage_observability(
+        self,
+        lineage_id: int,
+        *,
+        traits: tuple[str, ...] = (),
+    ) -> dict[str, object]:
+        """Return cached count and average trait values for one living lineage."""
+        if self._lineage_observability_cache_frame != self._frame:
+            tracked = (
+                "speed",
+                "sense_radius",
+                "efficiency",
+                "aggression",
+                "depth_preference",
+                "conformity",
+            )
+            cache: dict[int, dict[str, object]] = {}
+            for creature in self.creatures:
+                key = int(creature.lineage_id)
+                entry = cache.setdefault(
+                    key,
+                    {
+                        "count": 0,
+                        "trait_sums": {trait: 0.0 for trait in tracked},
+                    },
+                )
+                entry["count"] = int(entry["count"]) + 1
+                trait_sums = entry["trait_sums"]
+                for trait in tracked:
+                    trait_sums[trait] += float(getattr(creature.genome, trait, 0.0))
+            self._lineage_observability_cache_frame = self._frame
+            self._lineage_observability_cache = cache
+
+        cached = self._lineage_observability_cache.get(int(lineage_id))
+        if cached is None:
+            return {
+                "count": 0,
+                "trait_averages": {trait: 0.0 for trait in traits},
+            }
+        count = max(0, int(cached["count"]))
+        sums = cached["trait_sums"]
+        averages = {
+            trait: (float(sums.get(trait, 0.0)) / count) if count > 0 else 0.0
+            for trait in traits
+        }
+        return {
+            "count": count,
+            "trait_averages": averages,
+        }
 
     def get_hunter_grazer_counts(self) -> tuple[int, int, int]:
         """Count hunters (aggression > 0.6), grazers (< 0.4), opportunists."""
@@ -5085,7 +5138,9 @@ class Simulation:
         if creature not in self.creatures:
             return {}
         pop_traits = obs_average_traits(self.creatures, ("speed", "size", "sense_radius", "aggression", "efficiency", "depth_preference"))
-        lineage_size = sum(1 for c in self.creatures if c.lineage_id == creature.lineage_id)
+        lineage_size = int(
+            self.get_lineage_observability(int(creature.lineage_id)).get("count", 0)
+        )
         first_seen = self._lineage_first_seen_tick.get(creature.lineage_id, max(0, self._frame - creature.age))
         species_ages = [c.age for c in self.creatures if c.species == creature.species] or [creature.age]
         younger_or_equal = sum(1 for age in species_ages if age <= creature.age)

@@ -668,7 +668,7 @@ appearance:
 | **Death cause** | Partly visible now: predation gets a sharper tether/bloom/ripple pass, but starvation and old age are still not separately labeled |
 | **Reproductive readiness** | Not shown. A creature at 0.79 energy looks the same as one at 0.81 |
 | **Species role** | In energy mode, aggression tiers are not marked. In predator_prey mode, the warm tint is the primary cue but can become less reliable after many generations of hue mutation |
-| **Trait distributions over time** | No historical trait graphs. The HUD shows current snapshots; Inspect Mode shows one creature at a time |
+| **Trait distributions over time** | Inspect Mode now adds lightweight history for the selected organism and its lineage, but it is still a focused observability strip rather than a full population dashboard |
 | **Zone cost modifiers** | Not per-creature. Only visible as aggregate zone backgrounds |
 | **Predator recent animal energy** | Not visible. Predators must have recent kills to reproduce, but this state is internal |
 | **Gene flow between species** | When a prey offspring is born a predator (or vice versa) due to an aggression mutation, this is not signaled visually beyond the tint |
@@ -871,6 +871,7 @@ unless an interactive overlay or Inspect Mode is active.
 | `S` | Open or close settings |
 | `I` | Toggle Inspect Mode (shows body plan, key effect, and in detail mode, all effective phenotype modifiers) |
 | `M` | In Inspect Mode, switch between pause and slow motion |
+| `N` | In Inspect Mode, switch to normal-speed follow |
 | `D` | In Inspect Mode, toggle compact/detailed card (detail adds raw genome values and effective phenotype modifiers) |
 | mouse click | In Inspect Mode, select a creature |
 | hold `P` | Highlight predators |

@@ -15,6 +15,7 @@ Move the mouse during normal playback to reveal a temporary bottom action bar wi
 | `R` | Reset the current simulation run |
 | `I` | Toggle Inspect Mode (see body plan, key effect, and effective phenotype) |
 | `M` | In Inspect Mode, switch between pause and slow motion |
+| `N` | In Inspect Mode, switch to normal-speed follow |
 | `D` | In Inspect Mode, toggle compact/detailed card (detail shows effective phenotype modifiers) |
 | mouse click | In Inspect Mode, select a creature |
 | hold `P` | Highlight predators |
@@ -106,6 +107,8 @@ Many visual systems, such as glyphs, trails, zones, aging, cosmic rays, and the 
 **Lineage**: An ancestry identifier used for visual family structure. Branches when a hue mutation exceeds 0.15.
 
 **Lineage branch**: A speciation event where an offspring gets a new lineage ID because its hue mutation was large enough to trigger a branch.
+
+**Inspect graphs**: The translucent graph strip shown in Inspect Mode. It keeps the selected organism's moment-to-moment state separate from lineage population and lineage trait drift so the UI does not imply that a single organism evolves over time.
 
 **Longevity-fecundity tradeoff**: The evolutionary tension between living a long time and reproducing quickly.
 

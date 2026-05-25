@@ -660,6 +660,9 @@ class PredatorPreyGpuRenderer:
         current_time = time.time()
         anim_time = current_time - self.start_time
         self._update_fps(current_time)
+        observe_inspect = getattr(self.inspect_mode, "observe_simulation", None)
+        if callable(observe_inspect):
+            observe_inspect(simulation)
         resolve_death_color = lambda event: self.theme.resolve_color_for_species(
             str(event.get("species", "none")),
             float(event["genome"].hue),
@@ -1172,7 +1175,11 @@ class PredatorPreyGpuRenderer:
         """Build line sprites for the inspect selection ring and attention target."""
         if not self.inspect_mode.enabled:
             return []
-        creature = self.inspect_mode.get_selected_creature(simulation)
+        get_focus_creature = getattr(self.inspect_mode, "get_focus_creature", None)
+        if callable(get_focus_creature):
+            creature = get_focus_creature(simulation)
+        else:
+            creature = self.inspect_mode.get_selected_creature(simulation)
         if creature is None:
             return []
         pulse = 0.5 + 0.5 * math.sin(anim_time * 4.0)

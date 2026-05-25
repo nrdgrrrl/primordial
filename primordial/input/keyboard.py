@@ -41,13 +41,13 @@ def handle_keydown(
         renderer.show_cursor = True
     elif key == pygame.K_i:
         if inspect_mode is not None:
+            restore_paused = inspect_mode.was_paused_before if inspect_mode.enabled else None
             inspect_mode.toggle(simulation_paused=simulation.paused)
             if inspect_mode.enabled:
                 simulation.paused = True
                 show_interactive_cursor()
                 renderer.show_cursor = True
             else:
-                restore_paused = inspect_mode.was_paused_before
                 if restore_paused is not None:
                     simulation.paused = restore_paused
                 else:
@@ -73,6 +73,11 @@ def handle_keydown(
                 simulation.paused = False
             inspect_mode._slow_accumulator = 0.0
             runtime_loop.reset_timing_debt()
+    elif key == pygame.K_n:
+        if inspect_mode is not None and inspect_mode.enabled:
+            inspect_mode.set_normal_follow()
+            simulation.paused = False
+            runtime_loop.reset_timing_debt()
     elif key == pygame.K_d:
         if inspect_mode is not None and inspect_mode.enabled:
             inspect_mode.toggle_detail_level()
@@ -82,6 +87,9 @@ def handle_keydown(
         if simulation.predator_prey_game_over_active:
             simulation.restart_predator_prey_run()
             renderer.reset_runtime_state()
+            runtime_loop.reset_timing_debt()
+            return True
+        if inspect_mode is not None and inspect_mode.enabled:
             runtime_loop.reset_timing_debt()
             return True
         simulation.paused = not simulation.paused

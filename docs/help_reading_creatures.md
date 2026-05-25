@@ -43,12 +43,14 @@ Creature visuals are not hand-drawn sprites. Each creature's glyph is procedural
 
 ### Over seconds
 Watch individual creatures move, eat, and avoid each other. Notice their motion styles: gliders leave long smooth trails, swimmers undulate, darters sit still and then burst. Notice the food cycle bar in the HUD. A white ring briefly expanding around a creature is a cosmic ray mutation.
+In Inspect Mode, the bottom graph strip helps here: the selected organism's energy is tracked separately from its lineage history so you can watch an individual life without confusing it for evolution.
 
 ### Over minutes (10-30 minutes)
 Look for glyph family divergence. After 5-10 minutes, distinct visual clans emerge that share symmetry type, stroke style, and general glyph shape. In predator_prey mode, watch the population counts oscillate in the HUD. Watch territory shimmer centroids drift toward favorable zones.
 
 ### Over long runs (hours)
 Population-level trait averages shift directionally. Lineages spread and disappear. Extinction events in predator_prey mode can reset the system, but not immediately. If a species hits zero, the simulation enters a grace window where recovery through mutation-driven species switching is still possible. Only if the zero state persists for the full grace window does the run end. In drift mode, all traits drift without direction — pure neutral evolution.
+Inspect Mode's lineage population and lineage trait sparklines are useful here because they show lineage-level change directly, rather than implying that one tracked organism evolves.
 
 ### Why the HUD helps
 The simulation hides energy levels, sensing ranges, reproductive readiness, death causes, and trait distributions inside its internal state. The HUD exposes key aggregates. For understanding what is actually happening, the HUD is essential. The visual field is atmospheric and meaningful, but it is incomplete.

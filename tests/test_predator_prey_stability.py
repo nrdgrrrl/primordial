@@ -933,6 +933,31 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertTrue(keep_running)
         self.assertEqual(renderer.inspect_mode.detail_mode, "detail")
 
+    def test_n_sets_inspect_normal_follow_without_clearing_selection(self) -> None:
+        simulation = self._build_simulation()
+        selected = self._creature("prey", x=100.0, y=120.0)
+        simulation.creatures = [selected]
+        renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
+        runtime_loop = create_fixed_step_loop_state()
+        renderer.inspect_mode.toggle(simulation_paused=False)
+        renderer.inspect_mode.select_at_world_pos(selected.x, selected.y, simulation)
+
+        keep_running = handle_keydown(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_n),
+            simulation,
+            renderer,
+            simulation.settings,
+            renderer.screen,
+            "normal",
+            runtime_loop,
+            inspect_mode=renderer.inspect_mode,
+        )
+
+        self.assertTrue(keep_running)
+        self.assertEqual(renderer.inspect_mode.pause_mode, "normal")
+        self.assertEqual(renderer.inspect_mode.selected_creature_id, id(selected))
+        self.assertFalse(simulation.paused)
+
     def test_predator_prey_tuning_state_persists_across_launches(self) -> None:
         simulation = self._build_simulation()
         simulation._predator_prey_state.run_history.extend([25, 50, 75])

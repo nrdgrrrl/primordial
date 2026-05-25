@@ -15,6 +15,7 @@ from primordial.rendering.inspect_mode import (
     build_inspect_panel_lines,
     compute_inspect_panel_placement,
     display_to_world,
+    draw_inspect_overlay,
     find_nearest_creature_at_display_pos,
     friendly_inspect_label,
     _format_age_value,
@@ -120,8 +121,16 @@ def _make_simulation(
     width: int = 800,
     height: int = 600,
     epistasis_enabled: bool = True,
+    sim_mode: str = "energy",
 ) -> SimpleNamespace:
-    sim = SimpleNamespace(creatures=creatures or [], width=width, height=height)
+    sim = SimpleNamespace(
+        creatures=creatures or [],
+        width=width,
+        height=height,
+        _frame=0,
+        death_events=[],
+        settings=SimpleNamespace(sim_mode=sim_mode),
+    )
     sim._epistasis_enabled = lambda: epistasis_enabled
     sim._get_epistasis_strength = lambda: 1.0
 
@@ -140,6 +149,23 @@ def _make_simulation(
         return sim._get_effective_phenotype(creature)
 
     sim.get_creature_effective_phenotype = _get_creature_effective_phenotype
+
+    def _get_lineage_observability(lineage_id: int, *, traits: tuple[str, ...] = ()) -> dict[str, object]:
+        lineage_members = [c for c in sim.creatures if int(c.lineage_id) == int(lineage_id)]
+        count = len(lineage_members)
+        return {
+            "count": count,
+            "trait_averages": {
+                trait: (
+                    sum(float(getattr(c.genome, trait, 0.0)) for c in lineage_members) / count
+                    if count > 0
+                    else 0.0
+                )
+                for trait in traits
+            },
+        }
+
+    sim.get_lineage_observability = _get_lineage_observability
     return sim
 
 
@@ -209,6 +235,30 @@ class TestTogglePauseSlow(unittest.TestCase):
         mode._slow_accumulator = 99.0
         mode.toggle_pause_slow()
         self.assertAlmostEqual(mode._slow_accumulator, 0.0)
+
+    def test_switches_normal_to_slow(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.set_normal_follow()
+        mode.toggle_pause_slow()
+        self.assertEqual(mode.pause_mode, "slow")
+
+
+class TestNormalFollow(unittest.TestCase):
+    def test_set_normal_follow_updates_mode(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.set_normal_follow()
+        self.assertEqual(mode.pause_mode, "normal")
+
+    def test_normal_follow_keeps_selection(self):
+        creature = _make_creature()
+        sim = _make_simulation([creature])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(creature.x, creature.y, sim)
+        mode.set_normal_follow()
+        self.assertEqual(mode.selected_creature_id, id(creature))
+        self.assertEqual(mode.pause_mode, "normal")
 
 
 class TestToggleDetailLevel(unittest.TestCase):
@@ -362,14 +412,14 @@ class TestGetSelectedCreature(unittest.TestCase):
         mode = InspectMode()
         self.assertIsNone(mode.get_selected_creature(sim))
 
-    def test_clears_stale_selection(self):
+    def test_keeps_stale_selection_anchor(self):
         c1 = _make_creature()
         sim = _make_simulation([])
         mode = InspectMode()
         mode.selected_creature_id = id(c1)
         result = mode.get_selected_creature(sim)
         self.assertIsNone(result)
-        self.assertIsNone(mode.selected_creature_id)
+        self.assertEqual(mode.selected_creature_id, id(c1))
 
     def test_returns_none_after_creature_removed(self):
         c1 = _make_creature()
@@ -389,6 +439,90 @@ class TestClearSelection(unittest.TestCase):
         mode.clear_selection()
         self.assertTrue(mode.enabled)
         self.assertIsNone(mode.selected_creature_id)
+
+
+class TestInspectHistoryAndDeathHandling(unittest.TestCase):
+    def test_history_buffers_remain_bounded(self):
+        creature = _make_creature(energy=0.2)
+        sim = _make_simulation([creature])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(creature.x, creature.y, sim)
+
+        for tick in range(0, 4000, 8):
+            sim._frame = tick
+            creature.energy = ((tick // 8) % 100) / 100.0
+            mode.observe_simulation(sim)
+
+        self.assertLessEqual(len(mode._energy_history), 180)
+        self.assertLessEqual(len(mode._lineage_population_history), 180)
+        self.assertLessEqual(len(mode._lineage_trait_history), 180)
+
+    def test_selected_creature_death_keeps_lineage_context(self):
+        selected = _make_creature(x=100.0, y=100.0, lineage_id=9)
+        sibling = _make_creature(x=106.0, y=102.0, lineage_id=9)
+        sim = _make_simulation([selected, sibling], sim_mode="predator_prey")
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(selected.x, selected.y, sim)
+        sim._frame = 8
+        mode.observe_simulation(sim)
+
+        sim.creatures = [sibling]
+        sim.death_events = [{
+            "creature_id": id(selected),
+            "cause": "predation",
+            "x": selected.x,
+            "y": selected.y,
+        }]
+        sim._frame = 16
+        mode.observe_simulation(sim)
+
+        self.assertTrue(mode.selected_dead)
+        self.assertEqual(mode.selected_death_cause, "predation")
+        self.assertIs(mode.get_focus_creature(sim), sibling)
+
+    def test_lineage_history_handles_extinction_cleanly(self):
+        selected = _make_creature(x=100.0, y=100.0, lineage_id=4)
+        sim = _make_simulation([selected])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(selected.x, selected.y, sim)
+        sim._frame = 8
+        mode.observe_simulation(sim)
+
+        sim.creatures = []
+        sim.death_events = [{
+            "creature_id": id(selected),
+            "cause": "old_age",
+            "x": selected.x,
+            "y": selected.y,
+        }]
+        sim._frame = 16
+        mode.observe_simulation(sim)
+
+        self.assertEqual(mode._lineage_population_history[-1][1], 0)
+        self.assertIsNone(mode.get_focus_creature(sim))
+
+    def test_dead_selection_draws_without_crashing(self):
+        selected = _make_creature(x=100.0, y=100.0, lineage_id=2)
+        sim = _make_simulation([selected])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(selected.x, selected.y, sim)
+        sim._frame = 8
+        mode.observe_simulation(sim)
+        sim.creatures = []
+        sim.death_events = [{
+            "creature_id": id(selected),
+            "cause": "energy",
+            "x": selected.x,
+            "y": selected.y,
+        }]
+        sim._frame = 16
+        mode.observe_simulation(sim)
+
+        pygame.font.init()
+        surface = pygame.Surface((960, 540), pygame.SRCALPHA)
+        draw_inspect_overlay(surface, mode, sim)
+
+        self.assertGreater(surface.get_bounding_rect(min_alpha=1).width, 0)
 
 
 class TestBuildCreatureCard(unittest.TestCase):
@@ -797,7 +931,12 @@ class TestInspectPanelPresentation(unittest.TestCase):
     def test_status_line_uses_readable_separators(self):
         mode = InspectMode(enabled=True, pause_mode="pause", detail_mode="compact")
         lines = build_inspect_panel_lines(None, mode)
-        self.assertEqual(lines[1].text, "Paused · M: slow · D: details")
+        self.assertEqual(lines[1].text, "Paused · M: slow · N: normal · D: details")
+
+    def test_status_line_mentions_normal_follow(self):
+        mode = InspectMode(enabled=True, pause_mode="normal", detail_mode="compact")
+        lines = build_inspect_panel_lines(None, mode)
+        self.assertEqual(lines[1].text, "Normal follow · M: slow · D: details")
 
     def test_interpreted_labels_put_meaning_before_raw_values(self):
         self.assertEqual(_format_energy_value("0.90"), "Full (90%)")

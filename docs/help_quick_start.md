@@ -33,6 +33,7 @@ Predators have a warm species tint in predator-prey mode, while prey generally r
 | `R` | Reset the current simulation run |
 | `I` | Toggle Inspect Mode |
 | `M` | In Inspect Mode, switch between pause and slow motion |
+| `N` | In Inspect Mode, switch to normal-speed follow |
 | `D` | In Inspect Mode, toggle compact/detailed card |
 | mouse click | In Inspect Mode, select a creature |
 | hold `P` | Highlight predators |

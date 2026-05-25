@@ -169,7 +169,10 @@ class SettingsActionTests(unittest.TestCase):
         self.assertEqual(renderer.settings_overlay.sync_calls, 1)
         self.assertEqual(
             renderer.settings_overlay.statuses[-1],
-            ("Reset settings to defaults.", False),
+            (
+                "Settings reset to defaults. Reset simulation to fully apply runtime changes.",
+                False,
+            ),
         )
 
     def test_reset_action_invokes_display_change_path_when_fullscreen_changes(self) -> None:

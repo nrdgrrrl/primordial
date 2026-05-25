@@ -104,6 +104,7 @@ remains hidden during normal simulation playback.
 | Hold `P` | Add a stronger locator highlight to predators while held in `predator_prey` mode |
 | `I` | Toggle Inspect Mode (read-only creature observability; see below) |
 | `M` | While in Inspect Mode, toggle between pause and slow-motion (2 Hz) sub-modes |
+| `N` | While in Inspect Mode, run the selected organism at normal follow speed |
 | Mouse click | While in Inspect Mode, select a creature; while settings are open, click categories, rows, value controls, and action buttons |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
@@ -114,8 +115,11 @@ Press **I** to toggle Inspect Mode, a read-only observability overlay that does 
 
 - **Pause sub-mode** (default): simulation is frozen; you can click creatures at leisure.
 - **Slow sub-mode** (press **M** to switch): simulation advances at 2 ticks/second so you can watch behaviour unfold slowly.
+- **Normal follow** (press **N**): simulation runs at normal speed while Inspect Mode stays locked to the selected organism and lineage.
 - **Mouse click**: selects the nearest creature and displays a polished top-right microscope card with the creature title, a short behavior summary, state, focus, and temperament.
+- **Bottom graph strip**: lightweight sparklines show the selected organism's energy, the selected lineage's living population, and a small mode-aware lineage trait drift view. These graphs are meant to separate individual organism state from lineage-level evolution.
 - **Detail toggle** (press **D**): switches the inspect card between compact and detailed layouts. Detail mode adds raw genome values, exact age, position, and predator-only satiety / recent prey energy.
+- If the selected organism dies, Inspect Mode marks that organism as dead and keeps lineage context visible. When possible, it keeps following a living same-lineage organism so lineage-level change remains visible without implying that the dead individual is still evolving.
 - Exiting Inspect Mode (press **I** again) restores the prior paused/running state.
 
 ### Tutorial

@@ -410,6 +410,9 @@ class Renderer:
         dt_real = self._update_fps(current_time)
         self._fps_history.append(self.fps)
         self._population_history.append(simulation.population)
+        observe_inspect = getattr(self.inspect_mode, "observe_simulation", None)
+        if callable(observe_inspect):
+            observe_inspect(simulation)
         is_frozen_world = simulation.paused or simulation.predator_prey_game_over_active
         if not is_frozen_world:
             self._frozen_link_surf_cached = None
@@ -507,7 +510,11 @@ class Renderer:
         t0 = time.perf_counter()
         selected_creature = None
         if self.inspect_mode.enabled:
-            selected_creature = self.inspect_mode.get_selected_creature(simulation)
+            get_focus_creature = getattr(self.inspect_mode, "get_focus_creature", None)
+            if callable(get_focus_creature):
+                selected_creature = get_focus_creature(simulation)
+            else:
+                selected_creature = self.inspect_mode.get_selected_creature(simulation)
         for creature in simulation.creatures:
             render_state = creature_render_states[id(creature)]
             if isinstance(self.theme, OceanTheme):

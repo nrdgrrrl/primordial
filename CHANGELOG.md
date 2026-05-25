@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — feat: add inspect follow modes and lineage graphs
+
+- Expanded Inspect Mode playback into three explicit sub-modes: `Paused`, `Slow follow`, and `Normal follow`, with `M` preserving pause/slow behavior and `N` adding normal-speed follow without dropping the selected organism.
+- Reworked inspect selection state so a dead selected organism is marked as dead instead of silently disappearing; when possible, Inspect Mode keeps following a living same-lineage organism while preserving the distinction between selected-organism state and lineage state.
+- Added a lightweight translucent bottom graph strip in Inspect Mode with bounded sampled history for selected-organism energy, selected-lineage living population, and a small mode-aware lineage trait drift sparkline.
+- Added cached lineage observability helpers, render-only death event IDs, updated action-bar/help/control documentation, and focused test coverage for playback transitions, bounded history, normal follow retention, and death/extinction handling.
+
 ## [2026-05-24] — feat: make predator kills visibly bloom
 
 - Added a renderer-only predator-prey kill visibility pass: lingering luminous strike tethers, a localized kill bloom, a soft water-ripple pulse, and subtle predator feedback on successful kills.

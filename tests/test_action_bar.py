@@ -74,8 +74,8 @@ class ActionBarTests(unittest.TestCase):
         items = bar.command_items(self._context(inspect_enabled=True))
 
         self.assertEqual(
-            [(item.key_label, item.action_label) for item in items[:3]],
-            [("I", "Exit inspect"), ("M", "Pause/Slow"), ("D", "Details")],
+            [(item.key_label, item.action_label) for item in items[:4]],
+            [("I", "Exit inspect"), ("M", "Pause/Slow"), ("N", "Normal follow"), ("D", "Details")],
         )
 
     def test_game_over_context_prioritizes_skip_countdown(self) -> None:
