@@ -455,6 +455,7 @@ class Renderer:
         frame_t0 = time.perf_counter()
         timings: dict[str, float] = {}
         target, direct_to_screen = self._select_frame_target()
+        timings["inspect_shortcuts_ms"] = 0.0
 
         layout = self.layout
         gutter_mode = layout.is_gutter_layout
@@ -526,6 +527,12 @@ class Renderer:
         simulation.birth_events.clear()
         timings["events_ms"] = (time.perf_counter() - t0) * 1000.0
 
+        # Performance mode reduction for non-essential layers
+        _inspect_perf = (
+            self.inspect_mode.enabled
+            and str(getattr(self.settings, "inspect_visual_quality", "balanced")) == "performance"
+        )
+
         # --- Static background ---
         t0 = time.perf_counter()
         if isinstance(self.theme, OceanTheme):
@@ -534,16 +541,20 @@ class Renderer:
             sim_target.fill(self.theme.background_color)
         timings["clear_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        # --- Ambient particles ---
+        # --- Ambient particles (reduced in perf mode) ---
         t0 = time.perf_counter()
-        self.theme.render_ambient(sim_target, self.ambient_particles, anim_time)
+        if _inspect_perf:
+            ambient_count = min(12, len(self.ambient_particles))
+        else:
+            ambient_count = len(self.ambient_particles)
+        self.theme.render_ambient(sim_target, self.ambient_particles[:ambient_count], anim_time)
         timings["ambient_ms"] = (time.perf_counter() - t0) * 1000.0
 
         timings["zones_ms"] = 0.0
 
-        # --- Territory shimmer (beneath creatures) ---
+        # --- Territory shimmer (beneath creatures, skipped in perf mode) ---
         t0 = time.perf_counter()
-        if isinstance(self.theme, OceanTheme):
+        if isinstance(self.theme, OceanTheme) and not _inspect_perf:
             self._draw_territory_shimmer(simulation, anim_time, dt_real)
         timings["territory_ms"] = (time.perf_counter() - t0) * 1000.0
 
@@ -739,6 +750,13 @@ class Renderer:
                         (cx, cy + ch),
                         1,
                     )
+                    # Inspect shortcut cell in the corner
+                    shortcuts_t0 = time.perf_counter()
+                    from .inspect_mode import build_inspect_shortcuts_surface
+                    shortcut_surf = build_inspect_shortcuts_surface(cw, ch, self.inspect_mode)
+                    if shortcut_surf is not None:
+                        self.screen.blit(shortcut_surf, (cx, cy))
+                    timings["inspect_shortcuts_ms"] = (time.perf_counter() - shortcuts_t0) * 1000.0
 
                 # HUD in gutter (docked only — skip the normal render path)
                 hud_x, hud_y, hud_w, hud_h = layout.hud_rect
@@ -746,7 +764,7 @@ class Renderer:
                     debug_lines = self._build_debug_lines(timings) if self.debug_enabled else None
                     current_tick = int(getattr(simulation, "_frame", 0))
                     quality = str(getattr(self.settings, "inspect_visual_quality", "balanced"))
-                    interval = 8 if quality == "performance" else 5 if quality == "balanced" else 3
+                    interval = 14 if quality == "performance" else 10 if quality == "balanced" else 6
                     hud_refresh_bucket = current_tick // max(1, interval)
                     docked_surface, _ = self.hud.build_panel_surface(
                         (hud_w, hud_h),
@@ -809,6 +827,7 @@ class Renderer:
                 self._target_surface = self.screen
                 self._draw_debug_graph_overlay(simulation)
 
+            timings.setdefault("inspect_shortcuts_ms", 0.0)
             timings["hud_ms"] = (time.perf_counter() - t0_gutter) * 1000.0
             timings["overlay_ms"] = 0.0
             timings["render_core_ms"] = (time.perf_counter() - frame_t0) * 1000.0
@@ -825,7 +844,7 @@ class Renderer:
             hud_refresh_bucket = current_tick
         elif self.inspect_mode.enabled:
             quality = str(getattr(self.settings, "inspect_visual_quality", "balanced"))
-            interval = 8 if quality == "performance" else 5 if quality == "balanced" else 3
+            interval = 14 if quality == "performance" else 10 if quality == "balanced" else 6
             hud_refresh_bucket = current_tick // max(1, interval)
         else:
             hud_refresh_bucket = current_tick // 4
@@ -1848,12 +1867,13 @@ class Renderer:
                 hud_focus=timings.get("hud_focus_ms", 0.0),
             ),
             "Dbg ui: inspect {inspect:.2f}  panel {panel:.2f}  graph {graph:.2f}  "
-            "sample {sample:.2f}  bar {bar:.2f}".format(
+            "sample {sample:.2f}  bar {bar:.2f}  sc {sc:.2f}".format(
                 inspect=timings.get("inspect_ms", 0.0),
                 panel=timings.get("inspect_panel_ms", 0.0),
                 graph=timings.get("inspect_graph_ms", 0.0),
                 sample=timings.get("inspect_lineage_sample_ms", 0.0),
                 bar=timings.get("action_bar_ms", 0.0),
+                sc=timings.get("inspect_shortcuts_ms", 0.0),
             ),
         ]
 

@@ -918,6 +918,8 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
         runtime_loop = create_fixed_step_loop_state()
         renderer.inspect_mode.toggle(simulation_paused=False)
+        # Default is detail, so first press goes to compact
+        self.assertEqual(renderer.inspect_mode.detail_mode, "detail")
 
         keep_running = handle_keydown(
             pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d),
@@ -931,7 +933,7 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         )
 
         self.assertTrue(keep_running)
-        self.assertEqual(renderer.inspect_mode.detail_mode, "detail")
+        self.assertEqual(renderer.inspect_mode.detail_mode, "compact")
 
     def test_n_sets_inspect_normal_follow_without_clearing_selection(self) -> None:
         simulation = self._build_simulation()
@@ -957,6 +959,99 @@ class PredatorPreyStabilityTests(unittest.TestCase):
         self.assertEqual(renderer.inspect_mode.pause_mode, "normal")
         self.assertEqual(renderer.inspect_mode.selected_creature_id, id(selected))
         self.assertFalse(simulation.paused)
+
+    def test_inspect_space_paused_goes_to_normal(self) -> None:
+        simulation = self._build_simulation()
+        renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
+        runtime_loop = create_fixed_step_loop_state()
+        renderer.inspect_mode.toggle(simulation_paused=False)
+        simulation.paused = True  # keyboard handler would set this
+        self.assertEqual(renderer.inspect_mode.pause_mode, "pause")
+
+        keep_running = handle_keydown(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE),
+            simulation,
+            renderer,
+            simulation.settings,
+            renderer.screen,
+            "normal",
+            runtime_loop,
+            inspect_mode=renderer.inspect_mode,
+        )
+
+        self.assertTrue(keep_running)
+        self.assertEqual(renderer.inspect_mode.pause_mode, "normal")
+        self.assertFalse(simulation.paused)
+
+    def test_inspect_space_normal_goes_to_paused(self) -> None:
+        simulation = self._build_simulation()
+        renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
+        runtime_loop = create_fixed_step_loop_state()
+        renderer.inspect_mode.toggle(simulation_paused=False)
+        renderer.inspect_mode.set_normal_follow()
+        simulation.paused = False
+        self.assertEqual(renderer.inspect_mode.pause_mode, "normal")
+        self.assertFalse(simulation.paused)
+
+        keep_running = handle_keydown(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE),
+            simulation,
+            renderer,
+            simulation.settings,
+            renderer.screen,
+            "normal",
+            runtime_loop,
+            inspect_mode=renderer.inspect_mode,
+        )
+
+        self.assertTrue(keep_running)
+        self.assertEqual(renderer.inspect_mode.pause_mode, "pause")
+        self.assertTrue(simulation.paused)
+
+    def test_inspect_space_slow_goes_to_normal(self) -> None:
+        simulation = self._build_simulation()
+        renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
+        runtime_loop = create_fixed_step_loop_state()
+        renderer.inspect_mode.toggle(simulation_paused=False)
+        renderer.inspect_mode.toggle_pause_slow()
+        simulation.paused = False
+        self.assertEqual(renderer.inspect_mode.pause_mode, "slow")
+        self.assertFalse(simulation.paused)
+
+        keep_running = handle_keydown(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE),
+            simulation,
+            renderer,
+            simulation.settings,
+            renderer.screen,
+            "normal",
+            runtime_loop,
+            inspect_mode=renderer.inspect_mode,
+        )
+
+        self.assertTrue(keep_running)
+        self.assertEqual(renderer.inspect_mode.pause_mode, "normal")
+        self.assertFalse(simulation.paused)
+
+    def test_inspect_space_global_pause_unaffected_outside_inspect(self) -> None:
+        simulation = self._build_simulation()
+        renderer = Renderer(pygame.display.set_mode((640, 360)), simulation.settings)
+        runtime_loop = create_fixed_step_loop_state()
+        simulation.paused = False
+
+        keep_running = handle_keydown(
+            pygame.event.Event(pygame.KEYDOWN, key=pygame.K_SPACE),
+            simulation,
+            renderer,
+            simulation.settings,
+            renderer.screen,
+            "normal",
+            runtime_loop,
+            inspect_mode=renderer.inspect_mode,
+        )
+
+        self.assertTrue(keep_running)
+        self.assertTrue(simulation.paused)
 
     def test_predator_prey_tuning_state_persists_across_launches(self) -> None:
         simulation = self._build_simulation()

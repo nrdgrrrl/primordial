@@ -13,9 +13,11 @@ from primordial.rendering.inspect_mode import (
     InspectMode,
     _build_graph_strip_surface,
     _build_inspect_panel_surface,
+    _inspect_status_line,
     build_creature_card,
     build_creature_summary,
     build_inspect_panel_lines,
+    build_inspect_shortcuts_surface,
     compute_inspect_panel_placement,
     display_to_world,
     draw_inspect_overlay,
@@ -299,23 +301,27 @@ class TestNormalFollow(unittest.TestCase):
 
 
 class TestToggleDetailLevel(unittest.TestCase):
-    def test_switches_compact_to_detail(self):
+    def test_default_is_detail(self):
         mode = InspectMode()
-        mode.toggle(simulation_paused=False)
-        mode.toggle_detail_level()
         self.assertEqual(mode.detail_mode, "detail")
 
     def test_switches_detail_to_compact(self):
         mode = InspectMode()
         mode.toggle(simulation_paused=False)
         mode.toggle_detail_level()
-        mode.toggle_detail_level()
         self.assertEqual(mode.detail_mode, "compact")
+
+    def test_switches_compact_to_detail(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.toggle_detail_level()
+        mode.toggle_detail_level()
+        self.assertEqual(mode.detail_mode, "detail")
 
     def test_no_op_when_not_enabled(self):
         mode = InspectMode()
         mode.toggle_detail_level()
-        self.assertEqual(mode.detail_mode, "compact")
+        self.assertEqual(mode.detail_mode, "detail")
 
 
 class TestShouldSuppressSim(unittest.TestCase):
@@ -532,7 +538,7 @@ class TestInspectHistoryAndDeathHandling(unittest.TestCase):
             "x": selected.x,
             "y": selected.y,
         }]
-        sim._frame = 16
+        sim._frame = 24  # must be ≥16 ticks after last sample (new halved interval)
         mode.observe_simulation(sim)
 
         self.assertEqual(mode._lineage_population_history[-1][1], 0)
@@ -1060,12 +1066,12 @@ class TestInspectPanelPresentation(unittest.TestCase):
     def test_status_line_uses_readable_separators(self):
         mode = InspectMode(enabled=True, pause_mode="pause", detail_mode="compact")
         lines = build_inspect_panel_lines(None, mode)
-        self.assertEqual(lines[1].text, "Paused · M: slow · N: normal · D: details")
+        self.assertEqual(lines[1].text, "Paused")
 
     def test_status_line_mentions_normal_follow(self):
         mode = InspectMode(enabled=True, pause_mode="normal", detail_mode="compact")
         lines = build_inspect_panel_lines(None, mode)
-        self.assertEqual(lines[1].text, "Normal follow · M: slow · D: details")
+        self.assertEqual(lines[1].text, "Normal follow")
 
     def test_interpreted_labels_put_meaning_before_raw_values(self):
         self.assertEqual(_format_energy_value("0.90"), "Full (90%)")
@@ -1435,6 +1441,177 @@ class TestDescribePhenotypeEffect(unittest.TestCase):
         mods = format_phenotype_modifiers(phenotype)
         for key, value in mods.items():
             self.assertEqual(value, "×1.00", f"{key} expected ×1.00, got {value}")
+
+
+class TestInspectDefaults(unittest.TestCase):
+    def test_detail_mode_defaults_to_detail(self):
+        mode = InspectMode()
+        self.assertEqual(mode.detail_mode, "detail")
+
+    def test_detail_mode_persists_after_toggle(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        self.assertEqual(mode.detail_mode, "detail")
+
+    def test_hud_tracking_initial_none(self):
+        mode = InspectMode()
+        self.assertIsNone(mode._hud_was_visible_before)
+
+    def test_hud_tracking_sets_on_enter(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        self.assertIsNone(mode._hud_was_visible_before)
+
+    def test_hud_toggle_marks_as_explicit(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode._hud_was_visible_before = True
+        mode.note_hud_toggle_during_inspect()
+        self.assertIsNone(mode._hud_was_visible_before)
+
+    def test_hud_toggle_no_op_when_disabled(self):
+        mode = InspectMode()
+        mode.note_hud_toggle_during_inspect()
+        self.assertIsNone(mode._hud_was_visible_before)
+
+
+class TestInspectSpaceBehavior(unittest.TestCase):
+    def test_paused_space_goes_to_normal(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        self.assertEqual(mode.pause_mode, "pause")
+        if mode.pause_mode == "pause":
+            mode.set_normal_follow()
+        self.assertEqual(mode.pause_mode, "normal")
+
+    def test_normal_space_goes_to_pause(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.set_normal_follow()
+        self.assertEqual(mode.pause_mode, "normal")
+        mode.pause_mode = "pause"
+        mode._invalidate_panel_cache()
+        self.assertEqual(mode.pause_mode, "pause")
+
+    def test_slow_space_goes_to_normal(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.toggle_pause_slow()
+        self.assertEqual(mode.pause_mode, "slow")
+        mode.set_normal_follow()
+        self.assertEqual(mode.pause_mode, "normal")
+
+    def test_space_does_not_affect_global_pause_outside_inspect(self):
+        mode = InspectMode()
+        self.assertFalse(mode.enabled)
+        self.assertEqual(mode.pause_mode, "pause")
+
+
+class TestGraphSamplingIntervals(unittest.TestCase):
+    def test_history_sample_interval_high(self):
+        from primordial.rendering.inspect_mode import inspect_history_sample_interval_ticks
+        sim = SimpleNamespace(settings=SimpleNamespace(inspect_visual_quality="high"))
+        self.assertEqual(inspect_history_sample_interval_ticks(sim), 16)
+
+    def test_history_sample_interval_performance(self):
+        from primordial.rendering.inspect_mode import inspect_history_sample_interval_ticks
+        sim = SimpleNamespace(settings=SimpleNamespace(inspect_visual_quality="performance"))
+        self.assertEqual(inspect_history_sample_interval_ticks(sim), 28)
+
+    def test_history_sample_interval_balanced(self):
+        from primordial.rendering.inspect_mode import inspect_history_sample_interval_ticks
+        sim = SimpleNamespace(settings=SimpleNamespace(inspect_visual_quality="balanced"))
+        self.assertEqual(inspect_history_sample_interval_ticks(sim), 20)
+
+    def test_panel_refresh_interval_high(self):
+        from primordial.rendering.inspect_mode import inspect_panel_refresh_interval_ticks
+        sim = SimpleNamespace(settings=SimpleNamespace(inspect_visual_quality="high"))
+        self.assertEqual(inspect_panel_refresh_interval_ticks(sim), 8)
+
+    def test_panel_refresh_interval_performance(self):
+        from primordial.rendering.inspect_mode import inspect_panel_refresh_interval_ticks
+        sim = SimpleNamespace(settings=SimpleNamespace(inspect_visual_quality="performance"))
+        self.assertEqual(inspect_panel_refresh_interval_ticks(sim), 14)
+
+    def test_attention_refresh_interval_high(self):
+        from primordial.rendering.inspect_mode import inspect_attention_refresh_interval_ticks
+        sim = SimpleNamespace(settings=SimpleNamespace(inspect_visual_quality="high"))
+        self.assertEqual(inspect_attention_refresh_interval_ticks(sim), 2)
+
+
+class TestInspectStatusLine(unittest.TestCase):
+    def test_pause_line(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        line = _inspect_status_line(mode)
+        self.assertEqual(line, "Paused")
+
+    def test_normal_line(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.set_normal_follow()
+        line = _inspect_status_line(mode)
+        self.assertEqual(line, "Normal follow")
+
+    def test_slow_line(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode.toggle_pause_slow()
+        line = _inspect_status_line(mode)
+        self.assertEqual(line, "Slow follow 2 Hz")
+
+
+class TestShortcutCell(unittest.TestCase):
+    def test_shortcut_cell_returns_surface_at_reasonable_size(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        surf = build_inspect_shortcuts_surface(300, 100, mode)
+        self.assertIsNotNone(surf)
+        self.assertEqual(surf.get_width(), 300)
+        self.assertEqual(surf.get_height(), 100)
+
+    def test_shortcut_cell_returns_none_at_small_size(self):
+        mode = InspectMode()
+        surf = build_inspect_shortcuts_surface(100, 40, mode)
+        self.assertIsNone(surf)
+
+    def test_shortcut_cell_caches(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        surf1 = build_inspect_shortcuts_surface(300, 100, mode)
+        surf2 = build_inspect_shortcuts_surface(300, 100, mode)
+        self.assertIs(surf1, surf2)
+        self.assertIsNotNone(mode._shortcut_cell_cache)
+
+    def test_shortcut_cell_invalidates_on_pause_change(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        surf1 = build_inspect_shortcuts_surface(300, 100, mode)
+        mode.pause_mode = "normal"
+        surf2 = build_inspect_shortcuts_surface(300, 100, mode)
+        self.assertIsNot(surf1, surf2)
+
+    def test_shortcut_cell_reduced_at_smaller_width(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        surf = build_inspect_shortcuts_surface(200, 100, mode)
+        self.assertIsNotNone(surf)
+
+
+class TestInspectHUDTracking(unittest.TestCase):
+    def test_entering_inspect_clears_hud_tracked_state(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode._hud_was_visible_before = True
+        mode.toggle(simulation_paused=True)
+        self.assertIsNone(mode._hud_was_visible_before)
+
+    def test_explicit_hud_toggle_nullifies_restore(self):
+        mode = InspectMode()
+        mode.toggle(simulation_paused=False)
+        mode._hud_was_visible_before = True
+        mode.note_hud_toggle_during_inspect()
+        self.assertIsNone(mode._hud_was_visible_before)
 
 
 if __name__ == "__main__":

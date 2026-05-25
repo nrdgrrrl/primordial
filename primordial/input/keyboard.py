@@ -35,6 +35,8 @@ def handle_keydown(
         return False
     elif key == pygame.K_u:
         renderer.toggle_hud()
+        if inspect_mode is not None and inspect_mode.enabled:
+            inspect_mode.note_hud_toggle_during_inspect()
         if renderer.hud.visible and not renderer.inspect_mode.enabled:
             show_interactive_cursor()
             renderer.show_cursor = True
@@ -59,8 +61,14 @@ def handle_keydown(
     elif key == pygame.K_i:
         if inspect_mode is not None:
             restore_paused = inspect_mode.was_paused_before if inspect_mode.enabled else None
+            hud_state_for_restore = inspect_mode._hud_was_visible_before
             inspect_mode.toggle(simulation_paused=simulation.paused)
             if inspect_mode.enabled:
+                inspect_mode._hud_was_visible_before = renderer.hud.visible
+                if not renderer.hud.visible:
+                    renderer.hud.visible = True
+                    renderer.settings.show_hud = True
+                    renderer.hud.invalidate_cache()
                 renderer.hud_focus.clear_selection()
                 simulation.paused = True
                 show_interactive_cursor()
@@ -70,6 +78,11 @@ def handle_keydown(
                     simulation.paused = restore_paused
                 else:
                     simulation.paused = False
+                if hud_state_for_restore is not None and inspect_mode._hud_was_visible_before is None:
+                    if renderer.hud.visible != hud_state_for_restore:
+                        renderer.hud.visible = hud_state_for_restore
+                        renderer.settings.show_hud = hud_state_for_restore
+                        renderer.hud.invalidate_cache()
                 if renderer.hud.visible:
                     show_interactive_cursor()
                     renderer.show_cursor = True
@@ -112,6 +125,16 @@ def handle_keydown(
             runtime_loop.reset_timing_debt()
             return True
         if inspect_mode is not None and inspect_mode.enabled:
+            if inspect_mode.pause_mode == "pause":
+                inspect_mode.set_normal_follow()
+                simulation.paused = False
+            elif inspect_mode.pause_mode == "normal":
+                inspect_mode.pause_mode = "pause"
+                simulation.paused = True
+                inspect_mode._invalidate_panel_cache()
+            else:  # slow
+                inspect_mode.set_normal_follow()
+                simulation.paused = False
             runtime_loop.reset_timing_debt()
             return True
         simulation.paused = not simulation.paused

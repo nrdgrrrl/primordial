@@ -680,7 +680,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-25] — refine: polish docked HUD and move action bar to top",
+            "## [2026-05-25] — refine: improve inspect shortcuts, playback defaults, and graph cadence",
         )
         self.assertEqual(
             changelog.count("## [2026-05-25] — feat: add inspect follow modes and lineage graphs"),

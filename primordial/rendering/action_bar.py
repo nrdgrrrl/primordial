@@ -88,10 +88,12 @@ _PREDATOR_PREY_EXTRA: tuple[ShortcutHint, ...] = (
 )
 
 _INSPECT_SHORTCUTS: tuple[ShortcutHint, ...] = (
-    ShortcutHint("I", "Exit inspect"),
-    ShortcutHint("M", "Pause/Slow"),
-    ShortcutHint("N", "Normal follow"),
+    ShortcutHint("Space", "Pause/Normal"),
+    ShortcutHint("M", "Slow"),
+    ShortcutHint("N", "Normal"),
     ShortcutHint("D", "Details"),
+    ShortcutHint("U", "HUD"),
+    ShortcutHint("I", "Exit inspect"),
     ShortcutHint("S", "Settings"),
     ShortcutHint("F", "Fullscreen"),
     ShortcutHint("Esc/Q", "Quit"),

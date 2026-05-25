@@ -40,9 +40,9 @@ _PLAYBACK_NORMAL = "normal"
 _INSPECT_QUALITY_HIGH = "high"
 _INSPECT_QUALITY_BALANCED = "balanced"
 _INSPECT_QUALITY_PERFORMANCE = "performance"
-_INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS = 8
+_INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS = 16
 _INSPECT_HISTORY_MAX_SAMPLES = 180
-_INSPECT_PANEL_REFRESH_INTERVAL_TICKS = 6
+_INSPECT_PANEL_REFRESH_INTERVAL_TICKS = 8
 
 
 def _inspect_visual_quality(simulation: Simulation | None) -> str:
@@ -62,8 +62,8 @@ def inspect_history_sample_interval_ticks(simulation: Simulation | None) -> int:
     if quality == _INSPECT_QUALITY_HIGH:
         return _INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS
     if quality == _INSPECT_QUALITY_PERFORMANCE:
-        return 12
-    return 10
+        return 28
+    return 20
 
 
 def inspect_panel_refresh_interval_ticks(simulation: Simulation | None) -> int:
@@ -71,17 +71,17 @@ def inspect_panel_refresh_interval_ticks(simulation: Simulation | None) -> int:
     if quality == _INSPECT_QUALITY_HIGH:
         return _INSPECT_PANEL_REFRESH_INTERVAL_TICKS
     if quality == _INSPECT_QUALITY_PERFORMANCE:
-        return 10
-    return 8
+        return 14
+    return 10
 
 
 def inspect_attention_refresh_interval_ticks(simulation: Simulation | None) -> int:
     quality = _inspect_visual_quality(simulation)
     if quality == _INSPECT_QUALITY_HIGH:
-        return 1
+        return 2
     if quality == _INSPECT_QUALITY_PERFORMANCE:
-        return 10
-    return 5
+        return 12
+    return 6
 
 
 @dataclass
@@ -95,7 +95,7 @@ class InspectMode:
     enabled: bool = False
     pause_mode: str = _PLAYBACK_PAUSE  # "pause", "slow", or "normal"
     slow_hz: float = 2.0               # sim ticks per second in slow mode
-    detail_mode: str = "compact"       # "compact" or "detail"
+    detail_mode: str = "detail"        # "compact" or "detail" (default detail)
     selected_creature_id: int | None = None
     selected_lineage_id: int | None = None
     selected_species: str | None = None
@@ -110,6 +110,7 @@ class InspectMode:
     selected_graph_trait_key: str | None = None
     selected_graph_trait_initial_value: float | None = None
     was_paused_before: bool | None = None     # paused state before entering inspect
+    _hud_was_visible_before: bool | None = None  # HUD state before entering inspect
 
     _slow_accumulator: float = field(default=0.0, repr=False)
     _last_history_sample_tick: int | None = field(default=None, repr=False)
@@ -146,6 +147,10 @@ class InspectMode:
     _latest_lineage_count: int = field(default=0, repr=False)
     _latest_lineage_trait_value: float | None = field(default=None, repr=False)
 
+    # Shortcut cell cache
+    _shortcut_cell_cache: object | None = field(default=None, repr=False)
+    _shortcut_cell_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
+
     # ── toggle ───────────────────────────────────────────────────────
 
     def toggle(self, simulation_paused: bool) -> None:
@@ -165,8 +170,14 @@ class InspectMode:
         else:
             self.enabled = False
             self.was_paused_before = None
+            self._hud_was_visible_before = None
             self._slow_accumulator = 0.0
             self.clear_selection()
+
+    def note_hud_toggle_during_inspect(self) -> None:
+        """Record that the user explicitly toggled HUD while inspect was active."""
+        if self.enabled:
+            self._hud_was_visible_before = None  # null means "don't restore"
 
     def toggle_pause_slow(self) -> None:
         """Switch between pause and slow sub-modes while inspect is active."""
@@ -230,6 +241,11 @@ class InspectMode:
         """Drop all cached inspect UI surfaces."""
         self._invalidate_panel_cache()
         self._invalidate_graph_cache()
+        self._invalidate_shortcut_cell_cache()
+
+    def _invalidate_shortcut_cell_cache(self) -> None:
+        self._shortcut_cell_cache = None
+        self._shortcut_cell_cache_key = None
 
     def _invalidate_panel_cache(self) -> None:
         self._panel_surface_cache = None
@@ -1772,22 +1788,109 @@ def find_nearest_creature_at_display_pos(
 def _inspect_status_line(inspect_mode: InspectMode) -> str:
     if inspect_mode.pause_mode == _PLAYBACK_PAUSE:
         pace = "Paused"
-        next_pace = "M: slow"
-        normal_hint = "N: normal"
     elif inspect_mode.pause_mode == _PLAYBACK_SLOW:
         pace = f"Slow follow {inspect_mode.slow_hz:.0f} Hz"
-        next_pace = "M: pause"
-        normal_hint = "N: normal"
     else:
         pace = "Normal follow"
-        next_pace = "M: slow"
-        normal_hint = ""
-    next_detail = "D: details" if inspect_mode.detail_mode == "compact" else "D: compact"
-    parts = [pace, next_pace]
-    if normal_hint:
-        parts.append(normal_hint)
-    parts.append(next_detail)
-    return " · ".join(parts)
+    return pace
+
+
+def build_inspect_shortcuts_surface(
+    cell_width: int,
+    cell_height: int,
+    inspect_mode: InspectMode,
+) -> object | None:
+    """Build a cached surface showing Inspect-mode shortcut hints.
+
+    Returns a pygame Surface (or None if too small).  The surface is
+    cached on the InspectMode object and invalidated when mode state changes.
+    """
+    import pygame
+
+    _SHORTCUT_FG = (174, 200, 218)
+    _SHORTCUT_BADGE = (90, 150, 180, 120)
+    _SHORTCUT_BADGE_BORDER = (110, 172, 196, 80)
+
+    if cell_width < 160 or cell_height < 60:
+        return None
+
+    key = (
+        cell_width,
+        cell_height,
+        inspect_mode.pause_mode,
+        inspect_mode.detail_mode,
+    )
+    if key == inspect_mode._shortcut_cell_cache_key and inspect_mode._shortcut_cell_cache is not None:
+        return inspect_mode._shortcut_cell_cache
+
+    pair_font = pygame.font.Font(None, 16)
+    badge_font = pygame.font.Font(None, 16)
+    action_font = pygame.font.Font(None, 14)
+
+    shortcuts = [
+        ("Space", "Pause/Normal"),
+        ("M", "Slow"),
+        ("N", "Normal"),
+        ("D", "Details" if inspect_mode.detail_mode == "compact" else "Compact"),
+        ("U", "HUD"),
+        ("I", "Exit"),
+    ]
+    if cell_width < 240:
+        shortcuts = shortcuts[:4]
+
+    BADGE_PAD = 4
+    GAP = 10
+    LINE_GAP = 4
+    MARGIN = 6
+
+    line1 = shortcuts[:3]
+    line2 = shortcuts[3:]
+
+    def render_pair(badge_text: str, action_text: str) -> pygame.Surface:
+        badge = badge_font.render(badge_text, True, (222, 250, 255))
+        action = action_font.render(action_text, True, _SHORTCUT_FG)
+        bw = badge.get_width() + BADGE_PAD * 2
+        bh = badge.get_height() + BADGE_PAD * 2
+        ah = action.get_height()
+        total_w = bw + 4 + action.get_width()
+        total_h = max(bh, ah)
+        surf = pygame.Surface((total_w, total_h), pygame.SRCALPHA)
+        badge_rect = pygame.Rect(0, (total_h - bh) // 2, bw, bh)
+        pygame.draw.rect(surf, _SHORTCUT_BADGE, badge_rect, border_radius=6)
+        pygame.draw.rect(surf, _SHORTCUT_BADGE_BORDER, badge_rect, width=1, border_radius=6)
+        surf.blit(badge, (BADGE_PAD, badge_rect.y + BADGE_PAD))
+        surf.blit(action, (bw + 4, (total_h - ah) // 2))
+        return surf
+
+    pairs1 = [render_pair(k, a) for k, a in line1]
+    pairs2 = [render_pair(k, a) for k, a in line2]
+
+    line1_h = max(s.get_height() for s in pairs1) if pairs1 else 0
+    line2_h = max(s.get_height() for s in pairs2) if pairs2 else 0
+    total_h = line1_h + (LINE_GAP if line2_h > 0 else 0) + line2_h
+
+    if total_h > cell_height - MARGIN * 2:
+        return None
+
+    surface = pygame.Surface((cell_width, cell_height), pygame.SRCALPHA)
+
+    def blit_line(pairs: list[pygame.Surface], y: int):
+        x = MARGIN
+        for ps in pairs:
+            if x + ps.get_width() > cell_width - MARGIN:
+                break
+            surface.blit(ps, (x, y))
+            x += ps.get_width() + GAP
+
+    if pairs1:
+        y1 = max(MARGIN, (cell_height - total_h) // 2)
+        blit_line(pairs1, y1)
+        if pairs2:
+            blit_line(pairs2, y1 + line1_h + LINE_GAP)
+
+    inspect_mode._shortcut_cell_cache = surface
+    inspect_mode._shortcut_cell_cache_key = key
+    return surface
 
 
 def _build_row(

@@ -2,6 +2,54 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — refine: improve inspect shortcuts, playback defaults, and graph cadence
+
+### Inspect mode defaults
+- Inspect now opens with Details enabled by default (`detail_mode = "detail"`)
+- Inspect now opens with HUD visible by default (forces show on enter, restores prior state on exit unless user toggled HUD manually during inspect)
+- Exiting Inspect restores the prior HUD state unless the user explicitly toggled HUD while inspecting
+
+### Spacebar playback control
+- In Inspect mode, Space now toggles between pause and normal follow as the main play/pause control:
+  - Paused + Space → Normal follow (simulation unpaused)
+  - Normal follow + Space → Paused (simulation paused)
+  - Slow follow + Space → Normal follow (simulation unpaused; slow is a secondary mode excluded from the Space toggle loop)
+- Outside Inspect, Space retains existing global pause/unpause behavior
+
+### Corner gutter shortcut cell
+- Inspect shortcut hints moved from the top-of-panel status line to a dedicated bottom-right corner gutter cell
+- Shows: Space Pause/Normal, M Slow, N Normal, D Details, U HUD, I Exit — with compact badge-style rendering
+- Font is larger and more visible than the previous tiny top-gutter hint
+- Cached surface invalidated on state changes; cheap when nothing changes
+- Falls back gracefully at small window sizes (≤160px wide or ≤60px tall)
+- Timing tracked as `inspect_shortcuts_ms`
+- Old top-panel shortcut hints removed from the status line (replaced by simple pace label: "Paused" / "Normal follow" / "Slow follow")
+- Action bar Inspect shortcuts updated: Space and U added; reordered for priority
+
+### Graph and panel refresh cadence (halved)
+- Base graph history sampling interval increased from 8 to 16 ticks (high quality), 20 (balanced), 28 (performance)
+- Panel refresh interval increased from 6 to 8 ticks (high), 10 (balanced), 14 (performance)
+- Attention refresh interval increased from 1 to 2 (high), 5→6 (balanced), 10→12 (performance)
+- HUD refresh interval in Inspect mode: 3→6 (high), 5→10 (balanced), 8→14 (performance)
+- All intervals now quality-configurable via `inspect_visual_quality`
+
+### Performance optimization
+- Added quality-based reduction for Inspect performance mode: ambient particles reduced from 30→12, territory shimmer skipped entirely
+- Non-essential render layers (territory shimmer) skipped when `inspect_visual_quality = "performance"` and Inspect is active
+- These are explicit settings-driven decisions, not hidden magic numbers
+
+### Tests
+- 30 new tests (713 total, was 683 + 6 subtests)
+- New `TestInspectDefaults` class: detail_mode default, HUD tracking, explicit toggle marking
+- New `TestInspectSpaceBehavior` class: pause→normal, normal→pause, slow→normal, global pause preserved
+- New `TestGraphSamplingIntervals` class: verifies all quality levels for history/panel/attention intervals
+- New `TestInspectStatusLine` class: pause/normal/slow status line labels
+- New `TestShortcutCell` class: surface returns, small-size fallback, caching, invalidation, width reduction
+- New `TestInspectHUDTracking` class: enter/exit HUD restore, explicit toggle nullifies restore
+- New keyboard integration tests in `test_predator_prey_stability.py`: Space toggle behaviors in Inspect, global space unaffected
+- Updated existing tests for new defaults (detail_mode, status line format, sampling intervals)
+- Updated action bar test for new inspect shortcut set (Space + U)
+
 ## [2026-05-25] — refine: polish docked HUD and move action bar to top
 
 ### Performance fixes

@@ -10,13 +10,14 @@ Move the mouse during normal playback to reveal a temporary top action bar with 
 | `H` | Open in-app Help |
 | `U` | Toggle HUD |
 | `S` | Open or close Settings |
-| `Space` | Pause/unpause, or skip predator-prey game-over countdown |
+| `Space` | Pause/unpause, or skip predator-prey game-over countdown; in Inspect Mode, toggle between paused and normal follow (slow → normal) |
 | `F` | Toggle fullscreen/windowed |
 | `R` | Reset the current simulation run |
-| `I` | Toggle Inspect Mode (see body plan, key effect, and effective phenotype) |
+| `I` | Toggle Inspect Mode (details and HUD on by default; bottom-right corner shows shortcuts) |
 | `M` | In Inspect Mode, switch between pause and slow motion |
 | `N` | In Inspect Mode, switch to normal-speed follow |
 | `D` | In Inspect Mode, toggle compact/detailed card (detail shows effective phenotype modifiers) |
+| `U` | Toggle HUD; exiting Inspect restores the prior HUD state unless toggled while inspecting |
 | mouse click | In Inspect Mode, select a creature; with HUD visible, select an organism for HUD focus |
 | `C` | Clear HUD focus selection (when HUD is visible and Inspect is not active) |
 | hold `P` | Highlight predators |

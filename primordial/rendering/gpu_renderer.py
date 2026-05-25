@@ -1494,10 +1494,17 @@ class PredatorPreyGpuRenderer:
 
         cx, cy, cw, ch = layout.corner_gutter_rect
         if cw > 0 and ch > 0:
+            from .inspect_mode import build_inspect_shortcuts_surface
+            shortcuts_t0 = time.perf_counter()
+            shortcut_surf = build_inspect_shortcuts_surface(cw, ch, self.inspect_mode)
             corner_panel = pygame.Surface((cw, ch), pygame.SRCALPHA)
-            corner_panel.fill((10, 18, 28, 240))
-            self._upload_overlay_surface("gutter_corner", corner_panel, content_key=("gutter_corner", cw, ch))
+            if shortcut_surf is not None:
+                corner_panel.blit(shortcut_surf, (0, 0))
+            else:
+                corner_panel.fill((10, 18, 28, 240))
+            self._upload_overlay_surface("gutter_corner", corner_panel, content_key=("gutter_corner", cw, ch, id(shortcut_surf)))
             self._draw_overlay_texture("gutter_corner", pygame.Rect(cx, cy, cw, ch), viewport=(self.display_width, self.display_height))
+            timings["inspect_shortcuts_ms"] = (time.perf_counter() - shortcuts_t0) * 1000.0
 
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
             t0 = time.perf_counter()
