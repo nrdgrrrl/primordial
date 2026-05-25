@@ -28,6 +28,7 @@ from .creature_observation import (
     infer_attention_target,
     AttentionTarget,
 )
+from .presentation_layout import PresentationLayout, compute_layout
 
 __all__ = [
     "Renderer", "Theme", "OceanTheme", "StubTheme", "get_theme",
@@ -39,4 +40,5 @@ __all__ = [
     "temperament_tags", "format_tags",
     "motion_style_label", "depth_preference_label",
     "infer_behavior_mode", "infer_attention_target", "AttentionTarget",
+    "PresentationLayout", "compute_layout",
 ]

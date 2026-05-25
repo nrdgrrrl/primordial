@@ -2,6 +2,18 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — feat: add PresentationLayout gutter rendering to software renderer
+
+- Added `PresentationLayout` integration to the software renderer (`renderer.py`). When Inspect mode is active and `layout.is_gutter_layout` is True, the draw method now:
+  - Renders all simulation content (background, zones, food, trails, creatures, animations) onto an intermediate `_play_surface` at world dimensions
+  - Composites the play surface into the play viewport rect on screen with aspect-ratio–preserving scaling
+  - Draws opaque gutter backgrounds for the right gutter (inspect panel) and bottom gutter (HUD, graphs)
+  - Draws the inspect panel in the right gutter, HUD in the bottom-left gutter, and a graph placeholder in the bottom-center/right gutter
+  - Draws the action bar and fullscreen overlays (settings, help, tutorial) directly on screen
+- The normal (non-gutter) rendering path is preserved exactly as before — no behavior change when Inspect is off
+- Added `layout` cached property to `Renderer` that recomputes when screen size, world size, or inspect state changes
+- Simulation world size is not modified — the layout is purely presentational
+
 ## [2026-05-25] — feat: add HUD focus selection and attention line
 
 - Added lightweight organism focus selection for the basic HUD mode, separate from full Inspect Mode.

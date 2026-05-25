@@ -16,6 +16,7 @@ from .help_overlay import HelpOverlay
 from .hud import HUD
 from .hud_focus import HUDFocus
 from .inspect_mode import InspectMode
+from .presentation_layout import PresentationLayout, compute_layout
 from .predation_effects import PredationEffectManager
 from .settings_overlay import SettingsOverlay
 from .themes import AmbientParticle, OceanTheme, Theme, get_theme
@@ -277,6 +278,30 @@ class Renderer:
         self.help_overlay = HelpOverlay()
         self.tutorial_overlay = TutorialOverlay()
 
+        self._layout_cache_key: tuple | None = None
+        self._layout: PresentationLayout | None = None
+        self._play_surface = pygame.Surface((self.width, self.height))
+
+    @property
+    def layout(self) -> PresentationLayout:
+        cache_key = (
+            self.display_width,
+            self.display_height,
+            self.width,
+            self.height,
+            self.inspect_mode.enabled,
+        )
+        if cache_key != self._layout_cache_key:
+            self._layout = compute_layout(
+                self.display_width,
+                self.display_height,
+                self.width,
+                self.height,
+                inspect_active=self.inspect_mode.enabled,
+            )
+            self._layout_cache_key = cache_key
+        return self._layout
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -358,6 +383,9 @@ class Renderer:
             self.theme.invalidate_runtime_caches()
             self.theme._trail_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
+        self._layout_cache_key = None
+        self._play_surface = pygame.Surface((self.width, self.height))
+
     def set_runtime_mode(self, mode: str) -> None:
         """Update renderer-owned UI state that depends on the top-level runtime mode."""
         self.action_bar.set_runtime_mode(mode)
@@ -415,6 +443,21 @@ class Renderer:
         frame_t0 = time.perf_counter()
         timings: dict[str, float] = {}
         target, direct_to_screen = self._select_frame_target()
+
+        layout = self.layout
+        gutter_mode = layout.is_gutter_layout
+
+        if gutter_mode:
+            if (
+                self._play_surface is None
+                or self._play_surface.get_size() != (self.width, self.height)
+            ):
+                self._play_surface = pygame.Surface((self.width, self.height))
+            sim_target = self._play_surface
+            sim_target.fill((0, 0, 0))
+            self._target_surface = sim_target
+        else:
+            sim_target = target
 
         current_time = time.time()
         anim_time = current_time - self.start_time
@@ -476,12 +519,12 @@ class Renderer:
         if isinstance(self.theme, OceanTheme):
             self._draw_static_background(simulation)
         else:
-            target.fill(self.theme.background_color)
+            sim_target.fill(self.theme.background_color)
         timings["clear_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Ambient particles ---
         t0 = time.perf_counter()
-        self.theme.render_ambient(target, self.ambient_particles, anim_time)
+        self.theme.render_ambient(sim_target, self.ambient_particles, anim_time)
         timings["ambient_ms"] = (time.perf_counter() - t0) * 1000.0
 
         timings["zones_ms"] = 0.0
@@ -495,7 +538,7 @@ class Renderer:
         # --- Food particles ---
         t0 = time.perf_counter()
         for food in simulation.food_manager:
-            self.theme.render_food(target, food, anim_time)
+            self.theme.render_food(sim_target, food, anim_time)
         timings["food_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Kin/flock connection lines (beneath creatures) ---
@@ -542,7 +585,7 @@ class Renderer:
             render_state = creature_render_states[id(creature)]
             if isinstance(self.theme, OceanTheme):
                 self.theme.render_creature_from_state(
-                    target,
+                    sim_target,
                     creature,
                     color=render_state.color,
                     radius=render_state.radius,
@@ -552,17 +595,17 @@ class Renderer:
                 )
             else:
                 self.theme.render_creature(
-                    target,
+                    sim_target,
                     creature,
                     anim_time,
                     scale=render_state.birth_scale,
                 )
             if selected_creature is not None and creature is selected_creature:
-                self._draw_selection_ring(target, creature, anim_time)
-                self._draw_attention_line(target, creature, simulation, anim_time)
+                self._draw_selection_ring(sim_target, creature, anim_time)
+                self._draw_attention_line(sim_target, creature, simulation, anim_time)
             elif hud_focus_creature is not None and creature is hud_focus_creature:
-                self._draw_hud_focus_ring(target, creature, anim_time)
-                self._draw_hud_focus_attention_line(target, creature, simulation, anim_time)
+                self._draw_hud_focus_ring(sim_target, creature, anim_time)
+                self._draw_hud_focus_attention_line(sim_target, creature, simulation, anim_time)
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Predator locator highlight (hold P) ---
@@ -582,7 +625,7 @@ class Renderer:
 
         # --- Animation effects (death bursts, kill blooms, cosmic pulses) ---
         t0 = time.perf_counter()
-        self.animation_manager.tick_and_draw(target)
+        self.animation_manager.tick_and_draw(sim_target)
         if self.predation_effect_manager.enabled and self.predation_effect_manager.active_count > 0:
             self._attack_surf.fill((0, 0, 0, 0))
             self.predation_effect_manager.draw_pygame(self._attack_surf, current_time)
@@ -594,6 +637,128 @@ class Renderer:
         self._draw_stub_overlay(simulation)
         timings["stub_ms"] = (time.perf_counter() - t0) * 1000.0
 
+        # ── Gutter-mode composition ──────────────────────────────────────
+        if gutter_mode:
+            t0_gutter = time.perf_counter()
+
+            # Game-over overlay draws on sim_target (world-space) before compositing
+            self._draw_predator_prey_game_over_overlay(simulation)
+
+            # Composite: clear screen with gutter bg, blit scaled play viewport
+            self.screen.fill((6, 10, 18))
+            vx, vy, vw, vh = layout.play_viewport_rect
+            scaled_play = pygame.transform.scale(sim_target, (vw, vh))
+            self.screen.blit(scaled_play, (vx, vy))
+
+            # Right gutter: background + inspect panel
+            right_gx, right_gy, right_gw, right_gh = layout.right_gutter_rect
+            if right_gw > 0 and right_gh > 0:
+                gutter_panel = pygame.Surface((right_gw, right_gh), pygame.SRCALPHA)
+                gutter_panel.fill((10, 18, 28, 240))
+                self.screen.blit(gutter_panel, (right_gx, right_gy))
+                pygame.draw.line(
+                    self.screen,
+                    (30, 60, 80),
+                    (right_gx, right_gy),
+                    (right_gx, right_gy + right_gh),
+                    1,
+                )
+
+                from .inspect_mode import draw_inspect_overlay
+                inspect_target = pygame.Surface((right_gw, right_gh), pygame.SRCALPHA)
+                inspect_target.fill((0, 0, 0, 0))
+                inspect_result = draw_inspect_overlay(
+                    inspect_target, self.inspect_mode, simulation,
+                )
+                timings.update(inspect_result or {})
+                self.screen.blit(inspect_target, (right_gx, right_gy))
+            else:
+                timings.update(self._draw_inspect_overlay(simulation, self.screen) or {})
+
+            # Bottom gutter: background + HUD + graph placeholder
+            bot_gx, bot_gy, bot_gw, bot_gh = layout.bottom_gutter_rect
+            if bot_gw > 0 and bot_gh > 0:
+                gutter_panel = pygame.Surface((bot_gw, bot_gh), pygame.SRCALPHA)
+                gutter_panel.fill((10, 18, 28, 240))
+                self.screen.blit(gutter_panel, (bot_gx, bot_gy))
+                pygame.draw.line(
+                    self.screen,
+                    (30, 60, 80),
+                    (bot_gx, bot_gy),
+                    (bot_gx + bot_gw, bot_gy),
+                    1,
+                )
+
+                # HUD in gutter
+                hud_x, hud_y, hud_w, hud_h = layout.hud_rect
+                if hud_w > 0 and hud_h > 0:
+                    hud_target = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
+                    hud_target.fill((0, 0, 0, 0))
+                    debug_lines = self._build_debug_lines(timings) if self.debug_enabled else None
+                    current_tick = int(getattr(simulation, "_frame", 0))
+                    quality = str(getattr(self.settings, "inspect_visual_quality", "balanced"))
+                    interval = 8 if quality == "performance" else 5 if quality == "balanced" else 3
+                    hud_refresh_bucket = current_tick // max(1, interval)
+                    self.hud.render(
+                        hud_target,
+                        simulation,
+                        self.fps,
+                        debug_lines=debug_lines,
+                        refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
+                    )
+                    self.screen.blit(hud_target, (hud_x, hud_y))
+
+                # Graph placeholder in gutter
+                graph_x, graph_y, graph_w, graph_h = layout.graph_rect
+                if graph_w > 0 and graph_h > 0:
+                    graph_target = pygame.Surface((graph_w, graph_h), pygame.SRCALPHA)
+                    graph_target.fill((0, 0, 0, 0))
+                    self.screen.blit(graph_target, (graph_x, graph_y))
+
+            # Action bar
+            t0_action = time.perf_counter()
+            action_bar_context = self.action_bar.build_context(
+                simulation,
+                inspect_enabled=self.inspect_mode.enabled,
+                settings_visible=self.settings_overlay.visible,
+                help_visible=self.help_overlay.visible,
+                tutorial_visible=self.tutorial_overlay.visible,
+                hud_visible=self.hud.visible,
+                hud_focus_active=self.hud_focus.has_selection,
+            )
+            self.action_bar.draw(self.screen, action_bar_context)
+            timings["action_bar_ms"] = (time.perf_counter() - t0_action) * 1000.0
+
+            # Fullscreen overlays draw directly to screen
+            if self.settings_overlay.visible or self.settings_overlay.fade > 0:
+                self.settings_overlay.update()
+                self.settings_overlay.draw(self.screen)
+            if self.help_overlay.visible or self.help_overlay.fade > 0:
+                self.help_overlay.update()
+                self.help_overlay.draw(self.screen)
+            if self.tutorial_overlay.visible or self.tutorial_overlay.fade > 0:
+                self.tutorial_overlay.set_runtime_context(
+                    hud_visible=self.hud.visible,
+                    settings_visible=self.settings_overlay.visible,
+                    help_visible=self.help_overlay.visible,
+                    game_over_visible=simulation.predator_prey_game_over_active,
+                )
+                self.tutorial_overlay.update()
+                self.tutorial_overlay.draw(self.screen)
+
+            if self.debug_enabled:
+                self._debug_timing = timings
+                self._target_surface = self.screen
+                self._draw_debug_graph_overlay(simulation)
+
+            timings["hud_ms"] = (time.perf_counter() - t0_gutter) * 1000.0
+            timings["overlay_ms"] = 0.0
+            timings["render_core_ms"] = (time.perf_counter() - frame_t0) * 1000.0
+            timings["presentation_copy_ms"] = 0.0
+            timings["draw_total_ms"] = (time.perf_counter() - frame_t0) * 1000.0
+            return dict(timings)
+
+        # ── Normal-mode rendering (non-gutter) ────────────────────────────
         # --- HUD ---
         t0 = time.perf_counter()
         debug_lines = self._build_debug_lines(timings) if self.debug_enabled else None
