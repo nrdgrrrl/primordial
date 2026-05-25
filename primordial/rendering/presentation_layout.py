@@ -62,7 +62,7 @@ class PresentationLayout:
     # Bottom-right corner where right and bottom gutters meet.
     corner_gutter_rect: tuple[int, int, int, int]  # (x, y, w, h)
 
-    # Action bar area — sits above the bottom gutter or at screen bottom.
+    # Action bar area — sits at the top of the screen.
     action_bar_rect: tuple[int, int, int, int]  # (x, y, w, h)
 
     # Scale factor: world units → screen pixels inside the play viewport.
@@ -267,11 +267,13 @@ def compute_layout(
     else:
         graph_rect = (0, 0, 0, 0)
 
-    # Action bar — sits at the bottom of the play viewport or above the bottom gutter.
-    ab_w = max(340, min(int(sw * 0.60), sw - 40))
+    # Action bar — sits at the top of the play viewport.
+    _ACTION_BAR_MARGIN_TOP = 12
+    ab_max_w = play_w - 20 if right_gutter_w > 0 else sw - 40
+    ab_w = max(340, min(int(sw * 0.60), ab_max_w))
     ab_h = 0  # Action bar height is dynamic, position is all we need.
-    ab_y = sh - bottom_gutter_h - pad if bottom_gutter_h > 0 else sh - 20
-    ab_x = max(0, (sw - ab_w) // 2)
+    ab_y = _ACTION_BAR_MARGIN_TOP
+    ab_x = max(play_x, min((play_x + play_w - ab_w) // 2, play_x + (play_w - ab_w) // 2))
     action_bar_rect = (ab_x, ab_y, ab_w, ab_h)
 
     return PresentationLayout(

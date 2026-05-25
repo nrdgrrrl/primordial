@@ -172,6 +172,27 @@ class ActionBarTests(unittest.TestCase):
         self.assertTrue(context.inspect_enabled)
         self.assertTrue(context.game_over_visible)
 
+    def test_layout_anchors_to_top_of_screen(self) -> None:
+        bar = ActionBar()
+        items = bar.command_items(self._context())
+        layout = bar.calculate_layout((1920, 1080), items)
+        self.assertLessEqual(layout.panel_rect.top, 20)
+        self.assertGreaterEqual(layout.panel_rect.top, 0)
+
+    def test_layout_constrained_to_play_viewport_width(self) -> None:
+        bar = ActionBar()
+        items = bar.command_items(self._context())
+        layout = bar.calculate_layout((1920, 1080), items, play_viewport_width=1520)
+        self.assertLessEqual(layout.panel_rect.width, 1520)
+        self.assertGreater(layout.panel_rect.width, 0)
+
+    def test_layout_unconstrained_when_play_viewport_is_none(self) -> None:
+        bar = ActionBar()
+        items = bar.command_items(self._context())
+        layout_unconstrained = bar.calculate_layout((1920, 1080), items)
+        layout_constrained = bar.calculate_layout((1920, 1080), items, play_viewport_width=None)
+        self.assertEqual(layout_unconstrained.panel_rect, layout_constrained.panel_rect)
+
 
 if __name__ == "__main__":
     unittest.main()

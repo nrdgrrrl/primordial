@@ -1,4 +1,4 @@
-"""Mouse-activated runtime action bar shown during normal playback."""
+"""Mouse-activated runtime action bar shown at the top of the screen during normal playback."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ FADE_DURATION_SECONDS = 10.0
 MAX_OPACITY = 0.80
 MIN_MOUSE_MOVEMENT_PIXELS = 2
 
-_BAR_MARGIN_BOTTOM = 20
+_BAR_MARGIN_TOP = 12
 _BAR_MIN_WIDTH = 340
 _BAR_MAX_WIDTH_RATIO = 0.94
 _BAR_PADDING_X = 18
@@ -107,7 +107,7 @@ _GAME_OVER_SHORTCUTS: tuple[ShortcutHint, ...] = (
 
 
 class ActionBar:
-    """Transient, informational bottom action bar."""
+    """Transient, informational top action bar."""
 
     def __init__(self) -> None:
         pygame.font.init()
@@ -202,16 +202,21 @@ class ActionBar:
         self,
         screen_size: tuple[int, int],
         items: tuple[ShortcutHint, ...],
+        *,
+        play_viewport_width: int | None = None,
     ) -> ActionBarLayout:
         """Compute the panel and row geometry for the current command set."""
         cache_key = (
             screen_size,
             tuple((item.key_label, item.action_label) for item in items),
+            play_viewport_width,
         )
         if cache_key == self._layout_cache_key and self._layout_cache is not None:
             return self._layout_cache
         screen_width, screen_height = screen_size
         max_width = max(_BAR_MIN_WIDTH, int(screen_width * _BAR_MAX_WIDTH_RATIO))
+        if play_viewport_width is not None and play_viewport_width > 0:
+            max_width = min(max_width, play_viewport_width - 20)
         available_width = max(_BAR_MIN_WIDTH, max_width - (_BAR_PADDING_X * 2))
 
         row_height = max(
@@ -244,9 +249,9 @@ class ActionBar:
             + max(0, len(rows) - 1) * _ROW_GAP
         )
         panel_rect = pygame.Rect(0, 0, panel_width, panel_height)
-        panel_rect.midbottom = (
+        panel_rect.midtop = (
             screen_width // 2,
-            max(panel_height + 8, screen_height - _BAR_MARGIN_BOTTOM),
+            _BAR_MARGIN_TOP,
         )
 
         row_rects: list[pygame.Rect] = []
@@ -273,6 +278,7 @@ class ActionBar:
         context: ActionBarContext,
         *,
         now: float | None = None,
+        play_viewport_width: int | None = None,
     ) -> None:
         """Draw the action bar if it is currently visible."""
         alpha = self.opacity(context, now=now)
@@ -280,7 +286,7 @@ class ActionBar:
         if alpha <= 0.0 or not items:
             return
 
-        layout = self.calculate_layout(surface.get_size(), items)
+        layout = self.calculate_layout(surface.get_size(), items, play_viewport_width=play_viewport_width)
         panel_surface = self._get_panel_surface(layout, items)
         panel_surface.set_alpha(int(round(255 * alpha)))
         surface.blit(panel_surface, layout.panel_rect.topleft)
@@ -291,12 +297,13 @@ class ActionBar:
         context: ActionBarContext,
         *,
         now: float | None = None,
+        play_viewport_width: int | None = None,
     ) -> tuple[pygame.Surface | None, pygame.Rect | None, float]:
         alpha = self.opacity(context, now=now)
         items = self.command_items(context)
         if alpha <= 0.0 or not items:
             return None, None, 0.0
-        layout = self.calculate_layout(screen_size, items)
+        layout = self.calculate_layout(screen_size, items, play_viewport_width=play_viewport_width)
         panel_surface = self._get_panel_surface(layout, items)
         return panel_surface, layout.panel_rect, alpha
 
@@ -341,6 +348,14 @@ class ActionBar:
             (16, 1),
             (max(16, surface.get_width() - 16), 1),
             2,
+        )
+        bottom_y = surface.get_height() - 2
+        pygame.draw.line(
+            surface,
+            (56, 126, 142, 60),
+            (16, bottom_y),
+            (max(16, surface.get_width() - 16), bottom_y),
+            1,
         )
 
         row_index = 0

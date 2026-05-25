@@ -516,3 +516,55 @@ class TestGraphStripRefined:
         gx, gy, gw, gh = compute_graph_strip_rect((100, 900, 800, 120))
         assert gx >= 100 + 6
         assert gy >= 900 + 6
+
+
+class TestActionBarTopPlacement:
+    """Action bar now sits at the top of the screen."""
+
+    def test_action_bar_top_position_gutter_layout(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        ab_x, ab_y, ab_w, ab_h = layout.action_bar_rect
+        assert ab_y >= 0
+        assert ab_y <= 20
+
+    def test_action_bar_does_not_overlap_right_gutter(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        ab_x, ab_y, ab_w, ab_h = layout.action_bar_rect
+        rx, ry, rw, rh = layout.right_gutter_rect
+        if ab_w > 0 and rw > 0:
+            assert ab_x + ab_w <= layout.play_viewport_rect[2]
+
+    def test_action_bar_does_not_overlap_bottom_gutter(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        ab_y = layout.action_bar_rect[1]
+        by = layout.bottom_gutter_rect[1]
+        assert ab_y < by
+
+    @pytest.mark.parametrize("sw,sh", [(1280, 720), (1920, 1080), (1366, 768)])
+    def test_action_bar_top_at_common_resolutions(self, sw, sh):
+        layout = compute_layout(sw, sh, sw, sh, inspect_active=True)
+        ab_y = layout.action_bar_rect[1]
+        assert ab_y >= 0
+        assert ab_y <= 20
+
+    def test_action_bar_constrained_to_play_viewport_in_gutter(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        ab_w = layout.action_bar_rect[2]
+        if ab_w > 0:
+            vw = layout.play_viewport_rect[2]
+            assert ab_w <= vw
+
+    def test_screen_to_world_unaffected_by_action_bar(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=False)
+        wx, wy = 500.0, 300.0
+        sx, sy = layout.world_to_screen(wx, wy)
+        wx2, wy2 = layout.screen_to_world(sx, sy)
+        assert wx2 == pytest.approx(wx, abs=0.5)
+        assert wy2 == pytest.approx(wy, abs=0.5)
+
+    @pytest.mark.parametrize("sw,sh", [(1920, 1080), (1280, 720), (1366, 768)])
+    def test_layout_valid_fullscreen_and_windowed(self, sw, sh):
+        layout = compute_layout(sw, sh, sw, sh, inspect_active=True)
+        vx, vy, vw, vh = layout.play_viewport_rect
+        assert vw > 0
+        assert vh > 0

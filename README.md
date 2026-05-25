@@ -88,7 +88,7 @@ make clean     # remove build/dist and __pycache__ dirs
 
 ## Keyboard Controls
 
-Move the mouse during normal playback to reveal a transient bottom action bar
+Move the mouse during normal playback to reveal a transient top action bar
 with the current runtime commands. It stays fully visible for 5 seconds after
 the last meaningful movement, then fades out over 10 seconds. The cursor still
 remains hidden during normal simulation playback.

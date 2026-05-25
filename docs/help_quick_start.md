@@ -40,7 +40,7 @@ Predators have a warm species tint in predator-prey mode, while prey generally r
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |
 
-Move the mouse during normal playback to reveal a temporary bottom action bar with the current runtime shortcuts.
+Move the mouse during normal playback to reveal a temporary top action bar with the current runtime shortcuts.
 
 ## How to Read the HUD
 

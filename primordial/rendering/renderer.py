@@ -281,6 +281,7 @@ class Renderer:
         self._layout_cache_key: tuple | None = None
         self._layout: PresentationLayout | None = None
         self._play_surface = pygame.Surface((self.width, self.height))
+        self._gutter_bg_cache: dict[tuple[int, int, int, int], pygame.Surface] = {}
 
     @property
     def layout(self) -> PresentationLayout:
@@ -403,6 +404,17 @@ class Renderer:
         self._frozen_link_surf_cached = None
         self._game_over_overlay_cache_key = None
         self._game_over_overlay_cache = None
+        self._gutter_bg_cache.clear()
+
+    def _get_gutter_bg(self, w: int, h: int, color: tuple[int, int, int, int]) -> pygame.Surface:
+        key = (w, h, color)
+        cached = self._gutter_bg_cache.get(key)
+        if cached is not None:
+            return cached
+        surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        surf.fill(color)
+        self._gutter_bg_cache[key] = surf
+        return surf
 
     def _can_render_direct_to_screen(self) -> bool:
         """Return whether the logical render target exactly matches presentation."""
@@ -654,11 +666,15 @@ class Renderer:
             border_color = (24, 48, 68)
             pygame.draw.rect(self.screen, border_color, (vx, vy, vw, vh), 1)
 
-            # Right gutter: background + inspect panel
+            from .inspect_mode import build_inspect_overlay_surfaces
+            from .presentation_layout import compute_inspect_panel_placement as _compute_panel_place
+
             right_gx, right_gy, right_gw, right_gh = layout.right_gutter_rect
+            creature = self.inspect_mode.get_focus_creature(simulation)
+
+            # Right gutter: background + inspect panel
             if right_gw > 0 and right_gh > 0:
-                gutter_panel = pygame.Surface((right_gw, right_gh), pygame.SRCALPHA)
-                gutter_panel.fill((10, 18, 28, 240))
+                gutter_panel = self._get_gutter_bg(right_gw, right_gh, (10, 18, 28, 240))
                 self.screen.blit(gutter_panel, (right_gx, right_gy))
                 pygame.draw.line(
                     self.screen,
@@ -668,19 +684,16 @@ class Renderer:
                     2,
                 )
 
-                from .inspect_mode import build_inspect_overlay_surfaces
-                from .presentation_layout import compute_inspect_panel_placement as _compute_panel_place
-
-                creature = self.inspect_mode.get_focus_creature(simulation)
-                inspect_panel_t0 = time.perf_counter()
-                panel_overlay = build_inspect_overlay_surfaces(
+                inspect_panel_overlay = build_inspect_overlay_surfaces(
                     target_width=right_gw,
                     target_height=right_gh,
                     inspect_mode=self.inspect_mode,
                     simulation=simulation,
                     focus_creature=creature,
                 )
-                panel_surface = panel_overlay.get("panel_surface")
+
+                inspect_panel_t0 = time.perf_counter()
+                panel_surface = inspect_panel_overlay.get("panel_surface")
                 if panel_surface is not None:
                     placement = _compute_panel_place(
                         right_gw, right_gh,
@@ -697,8 +710,7 @@ class Renderer:
             # Bottom gutter: background + HUD + graph placeholder
             bot_gx, bot_gy, bot_gw, bot_gh = layout.bottom_gutter_rect
             if bot_gw > 0 and bot_gh > 0:
-                gutter_panel = pygame.Surface((bot_gw, bot_gh), pygame.SRCALPHA)
-                gutter_panel.fill((10, 18, 28, 240))
+                gutter_panel = self._get_gutter_bg(bot_gw, bot_gh, (10, 18, 28, 240))
                 self.screen.blit(gutter_panel, (bot_gx, bot_gy))
                 pygame.draw.line(
                     self.screen,
@@ -711,8 +723,7 @@ class Renderer:
                 # Corner gutter where right and bottom meet
                 cx, cy, cw, ch = layout.corner_gutter_rect
                 if cw > 0 and ch > 0:
-                    corner_panel = pygame.Surface((cw, ch), pygame.SRCALPHA)
-                    corner_panel.fill((10, 18, 28, 240))
+                    corner_panel = self._get_gutter_bg(cw, ch, (10, 18, 28, 240))
                     self.screen.blit(corner_panel, (cx, cy))
                     pygame.draw.line(
                         self.screen,
@@ -729,23 +740,14 @@ class Renderer:
                         1,
                     )
 
-                # HUD in gutter
+                # HUD in gutter (docked only — skip the normal render path)
                 hud_x, hud_y, hud_w, hud_h = layout.hud_rect
                 if hud_w > 0 and hud_h > 0:
-                    hud_target = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
-                    hud_target.fill((0, 0, 0, 0))
                     debug_lines = self._build_debug_lines(timings) if self.debug_enabled else None
                     current_tick = int(getattr(simulation, "_frame", 0))
                     quality = str(getattr(self.settings, "inspect_visual_quality", "balanced"))
                     interval = 8 if quality == "performance" else 5 if quality == "balanced" else 3
                     hud_refresh_bucket = current_tick // max(1, interval)
-                    self.hud.render(
-                        hud_target,
-                        simulation,
-                        self.fps,
-                        debug_lines=debug_lines,
-                        refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
-                    )
                     docked_surface, _ = self.hud.build_panel_surface(
                         (hud_w, hud_h),
                         simulation,
@@ -758,13 +760,12 @@ class Renderer:
 
                 graph_x, graph_y, graph_w, graph_h = layout.graph_rect
                 if graph_w > 0 and graph_h > 0 and self.inspect_mode.enabled:
-                    from .inspect_mode import build_inspect_overlay_surfaces as _build_inspect_graphs
-                    graph_overlay = _build_inspect_graphs(
+                    graph_overlay = build_inspect_overlay_surfaces(
                         target_width=graph_w,
                         target_height=graph_h,
                         inspect_mode=self.inspect_mode,
                         simulation=simulation,
-                        focus_creature=creature if 'creature' in dir() else None,
+                        focus_creature=creature,
                     )
                     graph_surface = graph_overlay.get("graph_surface")
                     if graph_surface is not None:
@@ -782,7 +783,8 @@ class Renderer:
                 hud_visible=self.hud.visible,
                 hud_focus_active=self.hud_focus.has_selection,
             )
-            self.action_bar.draw(self.screen, action_bar_context)
+            pvw = layout.play_viewport_rect[2] if gutter_mode else None
+            self.action_bar.draw(self.screen, action_bar_context, play_viewport_width=pvw)
             timings["action_bar_ms"] = (time.perf_counter() - t0_action) * 1000.0
 
             # Fullscreen overlays draw directly to screen

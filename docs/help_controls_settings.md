@@ -2,7 +2,7 @@
 
 ## Runtime Controls
 
-Move the mouse during normal playback to reveal a temporary bottom action bar with the current runtime shortcuts. It stays fully visible for 5 seconds after movement stops, then fades out over 10 seconds.
+Move the mouse during normal playback to reveal a temporary top action bar with the current runtime shortcuts. It stays fully visible for 5 seconds after movement stops, then fades out over 10 seconds.
 
 | Key | Action |
 | --- | --- |

@@ -1457,9 +1457,12 @@ class PredatorPreyGpuRenderer:
                             timings["ui_overlay_count"] += 1.0
 
         t0 = time.perf_counter()
+        layout_ot = self.layout
+        pvw = layout_ot.play_viewport_rect[2] if layout_ot.is_gutter_layout else None
         action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
             (self.display_width, self.display_height),
             action_bar_context,
+            play_viewport_width=pvw,
         )
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
         if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
@@ -1528,9 +1531,11 @@ class PredatorPreyGpuRenderer:
             timings["tutorial_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
+        pvw_gf = layout.play_viewport_rect[2] if layout.is_gutter_layout else None
         action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
             (self.display_width, self.display_height),
             action_bar_context,
+            play_viewport_width=pvw_gf,
         )
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
         if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
@@ -1610,9 +1615,12 @@ class PredatorPreyGpuRenderer:
                 self._draw_overlay_texture("inspect_graph", graph_rect)
                 timings["ui_overlay_count"] += 1.0
         t0 = time.perf_counter()
+        layout_ot = self.layout
+        pvw_ot = layout_ot.play_viewport_rect[2] if layout_ot.is_gutter_layout else None
         action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
-            (self.width, self.height),
+            (self.display_width, self.display_height),
             action_bar_context,
+            play_viewport_width=pvw_ot,
         )
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
         if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
@@ -1662,7 +1670,10 @@ class PredatorPreyGpuRenderer:
             self.tutorial_overlay.draw(self._ui_surface)
             timings["tutorial_ms"] = (time.perf_counter() - t0) * 1000.0
         t0 = time.perf_counter()
-        self.action_bar.draw(self._ui_surface, action_bar_context)
+        layout_fb = self.layout
+        gutter_fb = layout_fb.is_gutter_layout
+        pvw_fb = layout_fb.play_viewport_rect[2] if gutter_fb else None
+        self.action_bar.draw(self._ui_surface, action_bar_context, play_viewport_width=pvw_fb)
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
         upload_t0 = time.perf_counter()
         self._draw_surface_texture(self._ui_surface)

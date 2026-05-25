@@ -60,7 +60,7 @@ Runtime package:
    - help browser events are handled before settings events;
    - settings overlay events are passed to
      `runtime/settings_actions.py`;
-   - normal-mode mouse motion refreshes the transient bottom action bar;
+   - normal-mode mouse motion refreshes the transient top action bar;
    - inspect clicks use display window-to-world conversion;
    - normal keyboard input goes through `input/keyboard.py`.
 5. Advance the simulation through `runtime/fixed_step.py` unless paused,
@@ -184,13 +184,13 @@ fallback infrastructure, but it is no longer the primary Guide action path.
 
 ## Action Bar
 
-`rendering/action_bar.py` owns the mouse-activated bottom action bar shown
+`rendering/action_bar.py` owns the mouse-activated top action bar shown
 during normal playback. It contains:
 
 - declarative shortcut display metadata;
 - monotonic-timer visibility and fade state;
 - context filtering for normal, inspect, predator-prey, and game-over states;
-- bottom-bar layout and drawing.
+- top-bar layout and drawing.
 
 The action bar is informational only. Actual keyboard behavior still lives in
 `input/keyboard.py` plus the small `K_p` hold path in `primordial/main.py`.
@@ -264,7 +264,7 @@ The in-app settings overlay is renderer-owned but split across focused modules:
   mouse event interpretation, value formatting, hover state, and hit-region
   registration from the same rectangles that are drawn.
 - `rendering/action_bar.py`: runtime shortcut metadata, transient visibility
-  timing, context filtering, and bottom-bar drawing.
+  timing, context filtering, and top-bar drawing.
 - `runtime/settings_actions.py`: applies overlay actions to the live runtime:
   apply/save, discard, reset defaults, save/load snapshot, in-app guide launch,
   display and backend changes, and predator-prey dial reset.

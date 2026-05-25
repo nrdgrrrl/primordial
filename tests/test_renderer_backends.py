@@ -169,7 +169,7 @@ class RendererBackendTests(unittest.TestCase):
         renderer.action_bar = SimpleNamespace(
             build_context=lambda *args, **kwargs: None,
             opacity=lambda context: 0.0,
-            draw=lambda surface, context: None,
+            draw=lambda surface, context, play_viewport_width=None: None,
         )
         renderer.hud_focus = SimpleNamespace(has_selection=False)
         renderer.debug_enabled = False
@@ -190,6 +190,8 @@ class RendererBackendTests(unittest.TestCase):
         renderer = PredatorPreyGpuRenderer.__new__(PredatorPreyGpuRenderer)
         renderer.width = 320
         renderer.height = 180
+        renderer.display_width = 320
+        renderer.display_height = 180
         renderer.fps = 0.0
         renderer.settings = SimpleNamespace(inspect_visual_quality="balanced")
         renderer.debug_enabled = False
@@ -216,14 +218,16 @@ class RendererBackendTests(unittest.TestCase):
         renderer.help_overlay = SimpleNamespace(visible=False, fade=0.0)
         renderer.tutorial_overlay = SimpleNamespace(visible=False, fade=0.0)
         renderer.inspect_mode = SimpleNamespace(enabled=False)
+        renderer._layout_cache_key = None
+        renderer._layout = None
         action_bar_surface = pygame.Surface((120, 32), pygame.SRCALPHA)
         alpha_state = {"value": 0.8}
         renderer.action_bar = SimpleNamespace(
             build_context=lambda *args, **kwargs: "ctx",
             opacity=lambda context: alpha_state["value"],
-            overlay_state=lambda screen_size, context: (
+            overlay_state=lambda screen_size, context, play_viewport_width=None: (
                 action_bar_surface,
-                pygame.Rect(10, 20, 120, 32),
+                pygame.Rect(10, 12, 120, 32),
                 alpha_state["value"],
             ),
         )

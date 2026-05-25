@@ -855,7 +855,7 @@ keyboard shortcuts. Destructive reset actions require confirmation.
 
 Normal runtime controls:
 
-Move the mouse during normal playback to reveal a temporary bottom action bar
+Move the mouse during normal playback to reveal a temporary top action bar
 with the current runtime shortcuts. It stays fully visible for 5 seconds after
 movement stops, then fades out over 10 seconds. The cursor still stays hidden
 unless an interactive overlay or Inspect Mode is active.

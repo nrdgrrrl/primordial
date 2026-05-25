@@ -276,12 +276,13 @@ class HUD:
             lines = ["[PAUSED]"] + lines
         fps_display = f"{fps:.0f}"
         self._last_fps_display = fps_display
-        lines.append(f"FPS: {fps_display}")
+        fps_line = f"FPS: {fps_display}"
+        lines.append(fps_line)
         if debug_lines:
             lines.extend(debug_lines)
 
         if docked:
-            return self._build_docked_panel(target_size, lines, show_food_bar, simulation)
+            return self._build_docked_panel(target_size, lines, fps_line, show_food_bar, simulation)
 
         max_panel_width = max(220, target_size[0] - 20)
         lines = self._fit_lines(lines, max_panel_width - self.padding * 2)
@@ -346,10 +347,58 @@ class HUD:
         pos = (10, screen_height - panel_height - 10)
         return panel, pos
 
+    _PRIORITY_CRITICAL = 0
+    _PRIORITY_HIGH = 1
+    _PRIORITY_MEDIUM = 2
+    _PRIORITY_LOW = 3
+
+    _PREDATOR_PREY_PREFIXES_CRITICAL = (
+        "Predators:", "Prey:", "Kills", "Danger:", "Survival:",
+    )
+    _PREDATOR_PREY_PREFIXES_HIGH = (
+        "Actual speed", "sim_ticks:", "Seed:", "Trial:",
+    )
+    _GENERAL_PREFIXES_HIGH = (
+        "Generation:", "Population:", "Food:",
+    )
+
+    @classmethod
+    def _line_priority(cls, line: str) -> int:
+        if line.startswith("[PAUSED]") or line.startswith("FPS:"):
+            return cls._PRIORITY_CRITICAL
+        if line.startswith("Dbg "):
+            return cls._PRIORITY_LOW
+        for prefix in cls._PREDATOR_PREY_PREFIXES_CRITICAL:
+            if line.startswith(prefix):
+                return cls._PRIORITY_CRITICAL
+        for prefix in cls._PREDATOR_PREY_PREFIXES_HIGH:
+            if line.startswith(prefix):
+                return cls._PRIORITY_HIGH
+        for prefix in cls._GENERAL_PREFIXES_HIGH:
+            if line.startswith(prefix):
+                return cls._PRIORITY_HIGH
+        if line.startswith("Zone:") or line.startswith("Mode:") or line.startswith("Theme:"):
+            return cls._PRIORITY_LOW
+        if line.startswith("Age ") or line.startswith("Evo ") or line.startswith("Body ") or line.startswith("Mods "):
+            return cls._PRIORITY_MEDIUM
+        return cls._PRIORITY_MEDIUM
+
+    @classmethod
+    def _classify_column(cls, line: str) -> int:
+        for prefix in (
+            "Predators:", "Prey:", "Kills", "Survival:", "Danger:",
+            "Actual speed", "sim_ticks:", "Seed:", "Trial:",
+            "Generation:", "Population:", "Food:", "[PAUSED]",
+        ):
+            if line.startswith(prefix):
+                return 0
+        return 1
+
     def _build_docked_panel(
         self,
         target_size: tuple[int, int],
         lines: list[str],
+        fps_line: str,
         show_food_bar: bool,
         simulation: "Simulation",
     ) -> tuple[pygame.Surface, tuple[int, int]]:
@@ -358,48 +407,104 @@ class HUD:
             empty = pygame.Surface((1, 1), pygame.SRCALPHA)
             return empty, (0, 0)
 
-        col_width = max(80, (avail_w - self.padding * 2 - 8) // 2)
+        col_gap = 8
+        col_width = max(80, (avail_w - self.padding * 2 - col_gap) // 2)
         max_text_width = col_width - 8
         fitted = self._fit_lines(lines, max_text_width)
 
+        header_lines = [l for l in fitted if l.startswith("FPS:") or l.startswith("[PAUSED]")]
+        body_lines = [l for l in fitted if l not in header_lines]
+
+        body_with_priority = [(l, self._line_priority(l)) for l in body_lines]
+        body_with_priority.sort(key=lambda t: t[1])
+
         col_lines: list[list[str]] = [[], []]
-        for i, line in enumerate(fitted):
-            col_lines[i % 2].append(line)
+        for line, _ in body_with_priority:
+            col_idx = len(col_lines[0]) <= len(col_lines[1]) and 0 or 1
+            col_idx = self._classify_column(line)
+            col_lines[col_idx].append(line)
 
         row_height = self.line_height
-        max_rows = max(len(col_lines[0]), len(col_lines[1]))
-        panel_height = max_rows * row_height + self.padding * 2
-        if show_food_bar:
-            panel_height += 12 + 6
+        header_rows = len(header_lines)
+        header_height = header_rows * row_height
+
+        food_bar_h = 14
+        food_bar_gap = 4
+        food_bar_total = food_bar_h + food_bar_gap if show_food_bar else 0
+
+        body_avail_h = avail_h - self.padding * 2 - header_height - food_bar_total
+
+        col0_dropped = 0
+        while col0_dropped < len(col_lines[0]):
+            needed = (len(col_lines[0]) - col0_dropped) * row_height
+            if needed <= body_avail_h:
+                break
+            col0_dropped += 1
+        col1_dropped = 0
+        while col1_dropped < len(col_lines[1]):
+            needed = (len(col_lines[1]) - col1_dropped) * row_height
+            if needed <= body_avail_h:
+                break
+            col1_dropped += 1
+
+        if col0_dropped > 0 or col1_dropped > 0:
+            for i in range(len(col_lines[0]) - 1, -1, -1):
+                if col0_dropped <= 0:
+                    break
+                pri = self._line_priority(col_lines[0][i])
+                if pri >= self._PRIORITY_LOW:
+                    col_lines[0].pop(i)
+                    col0_dropped -= 1
+            for i in range(len(col_lines[1]) - 1, -1, -1):
+                if col1_dropped <= 0:
+                    break
+                pri = self._line_priority(col_lines[1][i])
+                if pri >= self._PRIORITY_LOW:
+                    col_lines[1].pop(i)
+                    col1_dropped -= 1
+
+        max_rows = max(len(col_lines[0]), len(col_lines[1]), 0)
+        panel_height = self.padding + header_height + max_rows * row_height + food_bar_total + self.padding
         panel_height = min(panel_height, avail_h)
 
         panel = pygame.Surface((avail_w, panel_height), pygame.SRCALPHA)
         panel.fill((0, 0, 0, 80))
 
         y = self.padding
+        for line in header_lines:
+            text_surface = self.font.render(line, True, (200, 230, 255))
+            panel.blit(text_surface, (self.padding, y))
+            y += row_height
+
+        body_y = y
         for col_idx, col in enumerate(col_lines):
-            x = self.padding + col_idx * (col_width + 8)
-            row_y = y
+            x = self.padding + col_idx * (col_width + col_gap)
+            row_y = body_y
             for line in col:
-                if row_y + row_height > panel_height - self.padding:
+                if row_y + row_height > panel_height - self.padding - food_bar_total:
                     break
                 text_surface = self.font.render(line, True, (255, 255, 255))
                 panel.blit(text_surface, (x, row_y))
                 row_y += row_height
 
         if show_food_bar:
-            bar_y = panel_height - 18
+            bar_y = panel_height - self.padding - food_bar_h
             phase = simulation.food_cycle_phase
             bar_x = self.padding
-            bar_w = avail_w - self.padding * 2
+            bar_w = min(col_width, avail_w - self.padding * 2)
             pygame.draw.rect(panel, (60, 60, 80, 180),
-                             (bar_x, bar_y, bar_w, 12), border_radius=3)
+                             (bar_x, bar_y, bar_w, food_bar_h), border_radius=3)
             fill_w = max(2, int(bar_w * phase))
             fill_r = int(180 * (1 - phase) + 40 * phase)
             fill_g = int(60 * (1 - phase) + 180 * phase)
             fill_b = int(40 * (1 - phase) + 80 * phase)
             pygame.draw.rect(panel, (fill_r, fill_g, fill_b, 220),
-                             (bar_x, bar_y, fill_w, 12), border_radius=3)
+                             (bar_x, bar_y, fill_w, food_bar_h), border_radius=3)
+            famine_surf = self.font.render("F", True, (160, 120, 80))
+            feast_surf = self.font.render("E", True, (120, 220, 140))
+            label_y = bar_y + (food_bar_h - famine_surf.get_height()) // 2
+            panel.blit(famine_surf, (bar_x + 2, label_y))
+            panel.blit(feast_surf, (bar_x + bar_w - feast_surf.get_width() - 2, label_y))
 
         return panel, (0, 0)
 

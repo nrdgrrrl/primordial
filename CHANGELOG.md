@@ -2,6 +2,40 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — refine: polish docked HUD and move action bar to top
+
+### Performance fixes
+- Removed double HUD render in gutter mode (was building both normal and docked surfaces each frame)
+- Cached gutter background surfaces instead of allocating new pygame.Surface per frame
+- Fixed `'creature' in dir()` scoping bug in graph overlay rendering
+
+### Docked HUD improvements
+- FPS now always visible via pinned header row — never dropped even at constrained heights
+- Two-column layout uses semantic grouping: col 1 = ecosystem/current run, col 2 = evolution/zone/theme
+- Priority system: critical (FPS, predators/prey, kills, survival) > high (speed, ticks, generation) > medium (observability) > low (zone, mode, theme, debug)
+- Low-priority lines drop first when height is constrained
+- Feast/famine bar now occupies one column width only instead of spanning full panel
+- Food bar uses compact F/E labels instead of Feast/Famine text
+
+### Action bar move to top
+- Action bar moved from bottom to top of screen for all modes
+- In gutter/Inspect mode, action bar width constrained to play viewport — does not overlap right panel or bottom graphs
+- `calculate_layout()` accepts `play_viewport_width` parameter for gutter-mode width constraint
+- `draw()` and `overlay_state()` accept `play_viewport_width` kwarg
+- Adds subtle bottom accent line to complement existing top accent line
+
+### Layout updates
+- `PresentationLayout.action_bar_rect` now reflects top placement (y near 12px)
+- In gutter mode, action bar width capped to play viewport width minus 20px
+- Action bar horizontally centered within the play viewport
+
+### Tests
+- 23 new tests (652 total, was 629)
+- New `test_hud_docked.py` with 9 tests for docked panel: FPS visibility, priority, food bar, column classification
+- New `TestActionBarTopPlacement` class with 8 tests: top position, no gutter overlap, viewport constraint
+- 3 new action bar tests: top anchoring, viewport width constraint, unconstrained fallback
+- Updated `test_renderer_backends.py` stub signatures for `play_viewport_width`
+
 ## [2026-05-25] — refine: tighten inspect dashboard gutter layout
 
 ### Gutter proportion refinements
