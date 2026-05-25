@@ -37,6 +37,7 @@ from predator_collapse_diagnostics import (
     _section_g_near_contact_dance,
     _section_g_scarcity,
     _section_rarity_advantage,
+    _section_k_predator_kill_energy_transfer,
     _section_k_recommendations,
 )
 
@@ -75,6 +76,8 @@ def _make_life(
     memory_target_expired_drops=0,
     target_switches=0,
     kills_after_memory_chase=0,
+    kill_energy_events=None,
+    kill_energy_summary=None,
     killed_prey_age_fractions=None,
     killed_prey_energies=None,
     killed_prey_condition_buckets=None,
@@ -171,6 +174,30 @@ def _make_life(
         "memory_target_expired_drops": memory_target_expired_drops,
         "target_switches": target_switches,
         "kills_after_memory_chase": kills_after_memory_chase,
+        "kill_energy_events": kill_energy_events or [],
+        "kill_energy_summary": kill_energy_summary or {
+            "kill_count": 0,
+            "total_prey_energy_at_kill": 0.0,
+            "kill_energy_nominal_total": 0.0,
+            "kill_energy_actual_total": 0.0,
+            "kill_energy_wasted_to_full_cap_total": 0.0,
+            "kill_energy_unconverted_due_to_kill_cap_total": 0.0,
+            "kill_energy_efficiency_actual_vs_nominal": 0.0,
+            "kill_energy_conversion_from_prey": 0.0,
+            "average_prey_energy_at_kill": None,
+            "median_prey_energy_at_kill": None,
+            "p90_prey_energy_at_kill": None,
+            "average_nominal_kill_energy_gain": None,
+            "median_nominal_kill_energy_gain": None,
+            "p90_nominal_kill_energy_gain": None,
+            "average_actual_kill_energy_gain": None,
+            "median_actual_kill_energy_gain": None,
+            "p90_actual_kill_energy_gain": None,
+            "share_of_kills_cap_limited": 0.0,
+            "share_of_kills_predator_full_limited": 0.0,
+            "share_of_kills_crossed_reproduction_threshold": 0.0,
+            "share_of_kills_already_reproduction_ready": 0.0,
+        },
         "killed_prey_age_fractions": killed_prey_age_fractions or [],
         "killed_prey_energies": killed_prey_energies or [],
         "killed_prey_condition_buckets": killed_prey_condition_buckets or [],
@@ -285,6 +312,14 @@ def _make_run(
             "prey_flee_low_energy_min_mult": 0.75,
             "predator_near_contact_diagnostic_scale": 1.25,
             "predator_sustained_chase_min_frames": 20,
+            "predator_kill_energy_transfer": {
+                "kill_count": sum(int(l.get("kill_energy_summary", {}).get("kill_count", 0)) for l in completed_lives + active_lives),
+                "total_prey_energy_at_kill": sum(float(l.get("kill_energy_summary", {}).get("total_prey_energy_at_kill", 0.0)) for l in completed_lives + active_lives),
+                "kill_energy_nominal_total": sum(float(l.get("kill_energy_summary", {}).get("kill_energy_nominal_total", 0.0)) for l in completed_lives + active_lives),
+                "kill_energy_actual_total": sum(float(l.get("kill_energy_summary", {}).get("kill_energy_actual_total", 0.0)) for l in completed_lives + active_lives),
+                "kill_energy_wasted_to_full_cap_total": sum(float(l.get("kill_energy_summary", {}).get("kill_energy_wasted_to_full_cap_total", 0.0)) for l in completed_lives + active_lives),
+                "kill_energy_unconverted_due_to_kill_cap_total": sum(float(l.get("kill_energy_summary", {}).get("kill_energy_unconverted_due_to_kill_cap_total", 0.0)) for l in completed_lives + active_lives),
+            },
             "completed_lives": completed_lives,
             "active_lives": active_lives,
             "events": {"births": [], "cosmic_flips_to_predator": [], "cosmic_flips_from_predator": []},
@@ -506,6 +541,50 @@ class TestReportSections(unittest.TestCase):
         self.assertEqual(result["kills_after_sustained_chase"], 0)
         self.assertIsNone(result["average_killed_prey_age_fraction"])
 
+    def test_section_k_predator_kill_energy_transfer(self):
+        event_one = {
+            "prey_energy_at_kill": 0.9,
+            "nominal_kill_energy_gain": 0.3,
+            "actual_kill_energy_gain": 0.3,
+            "kill_gain_was_cap_limited": True,
+            "kill_gain_was_predator_full_limited": False,
+            "predator_crossed_reproduction_threshold_on_kill": True,
+            "predator_was_already_reproduction_ready_before_kill": False,
+        }
+        event_two = {
+            "prey_energy_at_kill": 0.12,
+            "nominal_kill_energy_gain": 0.12,
+            "actual_kill_energy_gain": 0.1,
+            "kill_gain_was_cap_limited": False,
+            "kill_gain_was_predator_full_limited": True,
+            "predator_crossed_reproduction_threshold_on_kill": False,
+            "predator_was_already_reproduction_ready_before_kill": True,
+        }
+        kill_energy_summary = {
+            "kill_count": 2,
+            "total_prey_energy_at_kill": 1.02,
+            "kill_energy_nominal_total": 0.42,
+            "kill_energy_actual_total": 0.4,
+            "kill_energy_wasted_to_full_cap_total": 0.02,
+            "kill_energy_unconverted_due_to_kill_cap_total": 0.6,
+        }
+        run = _make_run(
+            completed_lives=[
+                _make_life(
+                    kills=2,
+                    kill_energy_events=[event_one, event_two],
+                    kill_energy_summary=kill_energy_summary,
+                )
+            ]
+        )
+        result = _section_k_predator_kill_energy_transfer([run])
+        self.assertEqual(result["kill_count"], 2)
+        self.assertAlmostEqual(result["kill_energy_actual_total"], 0.4)
+        self.assertAlmostEqual(result["share_of_kills_cap_limited"], 0.5)
+        self.assertAlmostEqual(result["share_of_kills_predator_full_limited"], 0.5)
+        self.assertAlmostEqual(result["share_of_kills_crossed_reproduction_threshold"], 0.5)
+        self.assertAlmostEqual(result["share_of_kills_already_reproduction_ready"], 0.5)
+
     def test_section_k_recommendations_long_scarcity(self):
         # More than 40% long_scarcity should trigger a recommendation
         section_c = {"contexts": {"long_scarcity": 8, "old_age": 2}, "total": 10}
@@ -526,6 +605,7 @@ class TestReportSections(unittest.TestCase):
             section_e,
             section_d,
             {"note": "n/a"},
+            {"interpretation": []},
         )
         self.assertTrue(any("LONG SCARCITY" in r for r in recommendations))
 
@@ -573,6 +653,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         self.assertIn("section_h_scarcity", report)
         self.assertIn("section_i_rarity_advantage_analysis", report)
         self.assertIn("section_j_epistasis_body_plan", report)
+        self.assertIn("section_k_predator_kill_energy_transfer", report)
         self.assertIn("section_k_recommendations", report)
 
         # Verify markdown renders
@@ -580,6 +661,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         self.assertIn("# Predator Collapse Diagnostics Report", md)
         self.assertIn("## A. Run Summary", md)
         self.assertIn("## G. Near-Contact / Dance Analysis", md)
+        self.assertIn("## Predator Kill Energy Transfer", md)
         self.assertIn("## I. Rarity Advantage Analysis", md)
         self.assertIn("## K. Recommendations", md)
         self.assertLess(md.index("## G. Near-Contact / Dance Analysis"), md.index("## H. Scarcity Analysis"))
@@ -680,7 +762,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-25] — perf: eliminate selected inspect overlay frame drop",
+            "## [2026-05-25] — chore: instrument predator kill energy transfer",
         )
         self.assertEqual(
             changelog.count("## [2026-05-25] — feat: add inspect follow modes and lineage graphs"),

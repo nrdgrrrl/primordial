@@ -348,6 +348,135 @@ class EcologySensingTests(unittest.TestCase):
         self.assertGreaterEqual(pred_actual_speed, 0.0)
         self.assertEqual(prey_actual_speed, 0.0)
 
+    def test_predator_kill_energy_transfer_records_nominal_and_actual_gain(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = 0.30
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.10,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=102.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.90,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+
+        with patch("random.gauss", return_value=0.0), patch("random.random", return_value=0.0):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        diagnostics = simulation.export_predator_diagnostics()
+        life = diagnostics["active_lives"][0]
+        event = life["kill_energy_events"][0]
+        self.assertAlmostEqual(event["nominal_kill_energy_gain"], 0.30)
+        self.assertAlmostEqual(event["actual_kill_energy_gain"], 0.30)
+        self.assertAlmostEqual(predator.energy, 0.40)
+        self.assertAlmostEqual(predator.recent_animal_energy, 0.30)
+        self.assertEqual(prey.energy, 0.0)
+        self.assertEqual(simulation.predation_kill_count, 1)
+
+    def test_predator_kill_energy_transfer_records_waste_when_predator_hits_full(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = 0.30
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.90,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=102.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.90,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+
+        with patch("random.gauss", return_value=0.0), patch("random.random", return_value=0.0):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        event = simulation.export_predator_diagnostics()["active_lives"][0]["kill_energy_events"][0]
+        self.assertAlmostEqual(event["nominal_kill_energy_gain"], 0.30)
+        self.assertAlmostEqual(event["actual_kill_energy_gain"], 0.10)
+        self.assertAlmostEqual(event["wasted_kill_energy_to_predator_full_cap"], 0.20)
+        self.assertAlmostEqual(predator.energy, 1.0)
+        self.assertAlmostEqual(predator.recent_animal_energy, 0.30)
+        self.assertEqual(prey.energy, 0.0)
+        self.assertEqual(simulation.predation_kill_count, 1)
+
+    def test_predator_kill_energy_transfer_records_prey_energy_limited_gain(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = 0.30
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.10,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=102.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.12,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+
+        with patch("random.gauss", return_value=0.0), patch("random.random", return_value=0.0):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        event = simulation.export_predator_diagnostics()["active_lives"][0]["kill_energy_events"][0]
+        self.assertAlmostEqual(event["nominal_kill_energy_gain"], 0.12)
+        self.assertFalse(event["kill_gain_was_cap_limited"])
+        self.assertAlmostEqual(predator.energy, 0.22)
+        self.assertAlmostEqual(predator.recent_animal_energy, 0.12)
+        self.assertEqual(prey.energy, 0.0)
+        self.assertEqual(simulation.predation_kill_count, 1)
+
+    def test_predator_kill_energy_transfer_records_threshold_crossing(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(aggression=0.9),
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=102.0,
+            y=100.0,
+            genome=Genome(aggression=0.1),
+            lineage_id=2,
+            species="prey",
+        )
+        simulation._record_predator_kill(
+            predator,
+            pre_kill_energy=0.10,
+            post_kill_energy=0.35,
+            repro_threshold=0.30,
+            prey=prey,
+            prey_energy_at_kill=0.90,
+            refuge_modifiers=simulation._get_predator_hunt_modifiers(predator, simulation._build_creature_bucket()).refuge,
+            rarity_modifiers=simulation._get_predator_hunt_modifiers(predator, simulation._build_creature_bucket()).rarity,
+        )
+
+        event = simulation.export_predator_diagnostics()["active_lives"][0]["kill_energy_events"][0]
+        self.assertTrue(event["predator_crossed_reproduction_threshold_on_kill"])
+
     def test_predator_hunt_sense_multiplier_expands_live_detection_range(self) -> None:
         simulation = self._build_simulation("predator_prey")
         predator = Creature(

@@ -224,6 +224,20 @@ def _pct(numerator: int, denominator: int) -> float:
     return 100.0 * numerator / denominator
 
 
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    if denominator <= 0.0:
+        return 0.0
+    return numerator / denominator
+
+
+def _safe_p90(values: list[float | int]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(float(value) for value in values)
+    index = min(len(ordered) - 1, int(len(ordered) * 0.9 + 0.999999) - 1)
+    return ordered[index]
+
+
 def _classify_death_context(context: str | None) -> str:
     """Normalize death context to one of the four canonical labels."""
     if context is None:
@@ -922,6 +936,136 @@ def _section_h_epistasis(
     }
 
 
+def _section_k_predator_kill_energy_transfer(
+    runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not runs:
+        return {"kill_count": 0, "interpretation": []}
+
+    prey_energy_at_kill: list[float] = []
+    nominal_gains: list[float] = []
+    actual_gains: list[float] = []
+    kill_count = 0
+    total_prey_energy_at_kill = 0.0
+    nominal_total = 0.0
+    actual_total = 0.0
+    wasted_total = 0.0
+    unconverted_total = 0.0
+    cap_limited_count = 0
+    predator_full_limited_count = 0
+    crossed_threshold_count = 0
+    already_ready_count = 0
+
+    for run in runs:
+        summary = run.get("diagnostics", {}).get("predator_kill_energy_transfer", {})
+        kill_count += int(summary.get("kill_count", 0))
+        total_prey_energy_at_kill += float(summary.get("total_prey_energy_at_kill", 0.0))
+        nominal_total += float(summary.get("kill_energy_nominal_total", 0.0))
+        actual_total += float(summary.get("kill_energy_actual_total", 0.0))
+        wasted_total += float(summary.get("kill_energy_wasted_to_full_cap_total", 0.0))
+        unconverted_total += float(summary.get("kill_energy_unconverted_due_to_kill_cap_total", 0.0))
+
+        for life in run.get("diagnostics", {}).get("completed_lives", []):
+            for event in life.get("kill_energy_events", []):
+                prey_energy = float(event.get("prey_energy_at_kill", 0.0))
+                nominal_gain = float(event.get("nominal_kill_energy_gain", 0.0))
+                actual_gain = float(event.get("actual_kill_energy_gain", 0.0))
+                prey_energy_at_kill.append(prey_energy)
+                nominal_gains.append(nominal_gain)
+                actual_gains.append(actual_gain)
+                if event.get("kill_gain_was_cap_limited"):
+                    cap_limited_count += 1
+                if event.get("kill_gain_was_predator_full_limited"):
+                    predator_full_limited_count += 1
+                if event.get("predator_crossed_reproduction_threshold_on_kill"):
+                    crossed_threshold_count += 1
+                if event.get("predator_was_already_reproduction_ready_before_kill"):
+                    already_ready_count += 1
+            life_summary = life.get("kill_energy_summary", {})
+            if not life.get("kill_energy_events"):
+                cap_limited_count += int(life_summary.get("share_of_kills_cap_limited", 0.0) * int(life_summary.get("kill_count", 0)))
+                predator_full_limited_count += int(life_summary.get("share_of_kills_predator_full_limited", 0.0) * int(life_summary.get("kill_count", 0)))
+                crossed_threshold_count += int(life_summary.get("share_of_kills_crossed_reproduction_threshold", 0.0) * int(life_summary.get("kill_count", 0)))
+                already_ready_count += int(life_summary.get("share_of_kills_already_reproduction_ready", 0.0) * int(life_summary.get("kill_count", 0)))
+        for life in run.get("diagnostics", {}).get("active_lives", []):
+            for event in life.get("kill_energy_events", []):
+                prey_energy = float(event.get("prey_energy_at_kill", 0.0))
+                nominal_gain = float(event.get("nominal_kill_energy_gain", 0.0))
+                actual_gain = float(event.get("actual_kill_energy_gain", 0.0))
+                prey_energy_at_kill.append(prey_energy)
+                nominal_gains.append(nominal_gain)
+                actual_gains.append(actual_gain)
+                if event.get("kill_gain_was_cap_limited"):
+                    cap_limited_count += 1
+                if event.get("kill_gain_was_predator_full_limited"):
+                    predator_full_limited_count += 1
+                if event.get("predator_crossed_reproduction_threshold_on_kill"):
+                    crossed_threshold_count += 1
+                if event.get("predator_was_already_reproduction_ready_before_kill"):
+                    already_ready_count += 1
+
+    if kill_count <= 0:
+        return {"kill_count": 0, "interpretation": ["No predator kills were recorded."]}
+
+    share_cap_limited = _safe_ratio(cap_limited_count, kill_count)
+    share_predator_full_limited = _safe_ratio(predator_full_limited_count, kill_count)
+    share_crossed_threshold = _safe_ratio(crossed_threshold_count, kill_count)
+    share_already_ready = _safe_ratio(already_ready_count, kill_count)
+    efficiency = _safe_ratio(actual_total, nominal_total)
+    conversion = _safe_ratio(actual_total, total_prey_energy_at_kill)
+    wasted_share_of_nominal = _safe_ratio(wasted_total, nominal_total)
+
+    interpretation: list[str] = []
+    if share_cap_limited >= 0.6:
+        interpretation.append("Most kills are cap-limited.")
+    if wasted_share_of_nominal >= 0.4 and share_predator_full_limited >= 0.5:
+        interpretation.append(
+            "Most potential gain is wasted because predators are already near full."
+        )
+    if (
+        efficiency >= 0.8
+        and share_predator_full_limited <= 0.25
+        and share_crossed_threshold >= 0.2
+        and share_cap_limited >= 0.5
+    ):
+        interpretation.append(
+            "Lowering predator_kill_energy_gain_cap may reduce predator reproduction pressure."
+        )
+    if share_predator_full_limited >= 0.5 or share_cap_limited <= 0.25:
+        interpretation.append(
+            "Changing predator_kill_energy_gain_cap may have little effect."
+        )
+    if not interpretation:
+        interpretation.append(
+            "Kill energy transfer is mixed; inspect cap limits, full-cap waste, and threshold crossings together before retuning."
+        )
+
+    return {
+        "kill_count": kill_count,
+        "total_prey_energy_at_kill": total_prey_energy_at_kill,
+        "kill_energy_nominal_total": nominal_total,
+        "kill_energy_actual_total": actual_total,
+        "kill_energy_wasted_to_full_cap_total": wasted_total,
+        "kill_energy_unconverted_due_to_kill_cap_total": unconverted_total,
+        "kill_energy_efficiency_actual_vs_nominal": efficiency,
+        "kill_energy_conversion_from_prey": conversion,
+        "average_prey_energy_at_kill": _safe_mean(prey_energy_at_kill),
+        "median_prey_energy_at_kill": _safe_median(prey_energy_at_kill),
+        "p90_prey_energy_at_kill": _safe_p90(prey_energy_at_kill),
+        "average_nominal_kill_energy_gain": _safe_mean(nominal_gains),
+        "median_nominal_kill_energy_gain": _safe_median(nominal_gains),
+        "p90_nominal_kill_energy_gain": _safe_p90(nominal_gains),
+        "average_actual_kill_energy_gain": _safe_mean(actual_gains),
+        "median_actual_kill_energy_gain": _safe_median(actual_gains),
+        "p90_actual_kill_energy_gain": _safe_p90(actual_gains),
+        "share_of_kills_cap_limited": share_cap_limited,
+        "share_of_kills_predator_full_limited": share_predator_full_limited,
+        "share_of_kills_crossed_reproduction_threshold": share_crossed_threshold,
+        "share_of_kills_already_reproduction_ready": share_already_ready,
+        "interpretation": interpretation,
+    }
+
+
 def _section_k_recommendations(
     runs: list[dict[str, Any]],
     section_c: dict[str, Any],
@@ -932,6 +1076,7 @@ def _section_k_recommendations(
     section_e: dict[str, Any],
     section_d: list[dict[str, Any]],
     section_j: dict[str, Any],
+    section_kill_energy: dict[str, Any],
 ) -> list[str]:
     """K. Data-driven plain-language intervention recommendations."""
     recommendations: list[str] = []
@@ -991,6 +1136,9 @@ def _section_k_recommendations(
             f"had kills but never reproduced. Energy decay, threshold height, or "
             f"kill-cap may be the bottleneck."
         )
+
+    for line in section_kill_energy.get("interpretation", []):
+        recommendations.append(line)
 
     # Check cross-band misses
     cross_band_per_kill = section_f.get("cross_band_misses_per_kill")
@@ -1143,6 +1291,7 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
     section_h = _section_g_scarcity(runs)
     section_i = _section_rarity_advantage(runs)
     section_j = _section_h_epistasis(runs)
+    section_kill_energy = _section_k_predator_kill_energy_transfer(runs)
     section_k = _section_k_recommendations(
         runs,
         section_c,
@@ -1153,6 +1302,7 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
         section_e,
         section_d,
         section_j,
+        section_kill_energy,
     )
 
     return {
@@ -1170,6 +1320,7 @@ def build_report(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "section_h_scarcity": section_h,
         "section_i_rarity_advantage_analysis": section_i,
         "section_j_epistasis_body_plan": section_j,
+        "section_k_predator_kill_energy_transfer": section_kill_energy,
         "section_k_recommendations": section_k,
     }
 
@@ -1464,6 +1615,32 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(f"  - Epistasis enabled: {epi.get('enabled')}")
             lines.append(f"  - Epistasis strength: {epi.get('strength')}")
             lines.append(f"  - Top strategy: {epi.get('top_strategy')} ({_share_fmt(epi.get('top_strategy_share'))})")
+    lines.append("")
+
+    # K. Recommendations
+    lines.append("## Predator Kill Energy Transfer")
+    lines.append("")
+    ke = report["section_k_predator_kill_energy_transfer"]
+    if ke.get("kill_count", 0) == 0:
+        lines.append("No predator kills were recorded.")
+    else:
+        lines.append(f"- **Kills sampled:** {ke.get('kill_count', 0)}")
+        lines.append(f"- **Total prey energy at kill:** {_fmt(ke.get('total_prey_energy_at_kill'))}")
+        lines.append(f"- **Nominal kill energy total:** {_fmt(ke.get('kill_energy_nominal_total'))}")
+        lines.append(f"- **Actual kill energy total:** {_fmt(ke.get('kill_energy_actual_total'))}")
+        lines.append(f"- **Wasted to predator full cap total:** {_fmt(ke.get('kill_energy_wasted_to_full_cap_total'))}")
+        lines.append(f"- **Unconverted due to kill cap total:** {_fmt(ke.get('kill_energy_unconverted_due_to_kill_cap_total'))}")
+        lines.append(f"- **Actual vs nominal efficiency:** {_share_fmt(ke.get('kill_energy_efficiency_actual_vs_nominal'))}")
+        lines.append(f"- **Actual conversion from prey energy:** {_share_fmt(ke.get('kill_energy_conversion_from_prey'))}")
+        lines.append(f"- **Prey energy at kill (avg / median / p90):** {_fmt(ke.get('average_prey_energy_at_kill'))} / {_fmt(ke.get('median_prey_energy_at_kill'))} / {_fmt(ke.get('p90_prey_energy_at_kill'))}")
+        lines.append(f"- **Nominal gain (avg / median / p90):** {_fmt(ke.get('average_nominal_kill_energy_gain'))} / {_fmt(ke.get('median_nominal_kill_energy_gain'))} / {_fmt(ke.get('p90_nominal_kill_energy_gain'))}")
+        lines.append(f"- **Actual gain (avg / median / p90):** {_fmt(ke.get('average_actual_kill_energy_gain'))} / {_fmt(ke.get('median_actual_kill_energy_gain'))} / {_fmt(ke.get('p90_actual_kill_energy_gain'))}")
+        lines.append(f"- **Share of kills cap-limited:** {_pct_fmt(100.0 * ke.get('share_of_kills_cap_limited', 0.0))}")
+        lines.append(f"- **Share of kills predator-full-limited:** {_pct_fmt(100.0 * ke.get('share_of_kills_predator_full_limited', 0.0))}")
+        lines.append(f"- **Share of kills crossing reproduction threshold:** {_pct_fmt(100.0 * ke.get('share_of_kills_crossed_reproduction_threshold', 0.0))}")
+        lines.append(f"- **Share of kills already reproduction-ready:** {_pct_fmt(100.0 * ke.get('share_of_kills_already_reproduction_ready', 0.0))}")
+        for line in ke.get("interpretation", []):
+            lines.append(f"- **Interpretation:** {line}")
     lines.append("")
 
     # K. Recommendations

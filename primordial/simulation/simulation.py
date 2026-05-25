@@ -96,6 +96,20 @@ _BOIDS_MIN_NEIGHBORS = 2.0
 _BOIDS_SOFT_MAX_NEIGHBORS = 9.0
 
 
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    if denominator <= 0.0:
+        return 0.0
+    return numerator / denominator
+
+
+def _p90(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, math.ceil(len(ordered) * 0.9) - 1)
+    return float(ordered[index])
+
+
 @dataclass(frozen=True)
 class AdaptiveDialSpec:
     key: str
@@ -359,6 +373,7 @@ class Simulation:
         self._predator_diag_next_life_id = 1
         self._predator_diag_active: dict[int, dict[str, Any]] = {}
         self._predator_diag_completed: list[dict[str, Any]] = []
+        self._predator_diag_kill_energy_summary = self._new_predator_kill_energy_summary()
         self._predator_diag_events: dict[str, list[dict[str, Any]]] = {
             "births": [],
             "cosmic_flips_to_predator": [],
@@ -4912,6 +4927,9 @@ class Simulation:
             "predator_refuge_density_hard_cap": (
                 self._get_predator_refuge_density_hard_cap()
             ),
+            "predator_kill_energy_transfer": self._copy_predator_kill_energy_summary(
+                self._predator_diag_kill_energy_summary
+            ),
             "completed_lives": [self._copy_predator_life(life) for life in self._predator_diag_completed],
             "active_lives": [
                 self._copy_predator_life(life)
@@ -5353,8 +5371,180 @@ class Simulation:
         self._predator_diag_next_life_id = 1
         self._predator_diag_active.clear()
         self._predator_diag_completed.clear()
+        self._predator_diag_kill_energy_summary = self._new_predator_kill_energy_summary()
         for events in self._predator_diag_events.values():
             events.clear()
+
+    def _new_predator_kill_energy_summary(self) -> dict[str, Any]:
+        return {
+            "kill_count": 0,
+            "total_prey_energy_at_kill": 0.0,
+            "kill_energy_nominal_total": 0.0,
+            "kill_energy_actual_total": 0.0,
+            "kill_energy_wasted_to_full_cap_total": 0.0,
+            "kill_energy_unconverted_due_to_kill_cap_total": 0.0,
+            "cap_limited_kill_count": 0,
+            "predator_full_limited_kill_count": 0,
+            "crossed_reproduction_threshold_kill_count": 0,
+            "already_reproduction_ready_kill_count": 0,
+            "prey_energy_at_kill_values": [],
+            "nominal_kill_energy_gain_values": [],
+            "actual_kill_energy_gain_values": [],
+        }
+
+    def _build_predator_kill_energy_record(
+        self,
+        *,
+        predator_kill_energy_cap: float,
+        predator_pre_kill_energy: float,
+        predator_post_kill_energy: float,
+        prey_energy_at_kill: float,
+        repro_threshold: float,
+    ) -> dict[str, Any]:
+        nominal_kill_energy_gain = min(predator_kill_energy_cap, prey_energy_at_kill)
+        actual_kill_energy_gain = max(
+            0.0,
+            predator_post_kill_energy - predator_pre_kill_energy,
+        )
+        wasted_kill_energy_to_predator_full_cap = max(
+            0.0,
+            nominal_kill_energy_gain - actual_kill_energy_gain,
+        )
+        prey_energy_unconverted_due_to_kill_cap = max(
+            0.0,
+            prey_energy_at_kill - nominal_kill_energy_gain,
+        )
+        return {
+            "predator_kill_energy_cap": predator_kill_energy_cap,
+            "predator_pre_kill_energy": predator_pre_kill_energy,
+            "predator_post_kill_energy": predator_post_kill_energy,
+            "prey_energy_at_kill": prey_energy_at_kill,
+            "nominal_kill_energy_gain": nominal_kill_energy_gain,
+            "actual_kill_energy_gain": actual_kill_energy_gain,
+            "wasted_kill_energy_to_predator_full_cap": (
+                wasted_kill_energy_to_predator_full_cap
+            ),
+            "prey_energy_unconverted_due_to_kill_cap": (
+                prey_energy_unconverted_due_to_kill_cap
+            ),
+            "kill_gain_was_cap_limited": prey_energy_at_kill > predator_kill_energy_cap,
+            "kill_gain_was_predator_full_limited": (
+                actual_kill_energy_gain < nominal_kill_energy_gain
+            ),
+            "predator_crossed_reproduction_threshold_on_kill": (
+                predator_pre_kill_energy < repro_threshold <= predator_post_kill_energy
+            ),
+            "predator_was_already_reproduction_ready_before_kill": (
+                predator_pre_kill_energy >= repro_threshold
+            ),
+            "predator_reproduction_energy_surplus_after_kill": max(
+                0.0,
+                predator_post_kill_energy - repro_threshold,
+            ),
+        }
+
+    def _record_predator_kill_energy_summary(
+        self,
+        summary: dict[str, Any],
+        record: dict[str, Any],
+    ) -> None:
+        summary["kill_count"] += 1
+        summary["total_prey_energy_at_kill"] += record["prey_energy_at_kill"]
+        summary["kill_energy_nominal_total"] += record["nominal_kill_energy_gain"]
+        summary["kill_energy_actual_total"] += record["actual_kill_energy_gain"]
+        summary["kill_energy_wasted_to_full_cap_total"] += record[
+            "wasted_kill_energy_to_predator_full_cap"
+        ]
+        summary["kill_energy_unconverted_due_to_kill_cap_total"] += record[
+            "prey_energy_unconverted_due_to_kill_cap"
+        ]
+        if record["kill_gain_was_cap_limited"]:
+            summary["cap_limited_kill_count"] += 1
+        if record["kill_gain_was_predator_full_limited"]:
+            summary["predator_full_limited_kill_count"] += 1
+        if record["predator_crossed_reproduction_threshold_on_kill"]:
+            summary["crossed_reproduction_threshold_kill_count"] += 1
+        if record["predator_was_already_reproduction_ready_before_kill"]:
+            summary["already_reproduction_ready_kill_count"] += 1
+        summary["prey_energy_at_kill_values"].append(record["prey_energy_at_kill"])
+        summary["nominal_kill_energy_gain_values"].append(
+            record["nominal_kill_energy_gain"]
+        )
+        summary["actual_kill_energy_gain_values"].append(
+            record["actual_kill_energy_gain"]
+        )
+
+    def _copy_predator_kill_energy_summary(self, summary: dict[str, Any]) -> dict[str, Any]:
+        kill_count = int(summary["kill_count"])
+        total_prey_energy_at_kill = float(summary["total_prey_energy_at_kill"])
+        nominal_total = float(summary["kill_energy_nominal_total"])
+        actual_total = float(summary["kill_energy_actual_total"])
+        prey_energy_values = [
+            float(value) for value in summary["prey_energy_at_kill_values"]
+        ]
+        nominal_values = [
+            float(value) for value in summary["nominal_kill_energy_gain_values"]
+        ]
+        actual_values = [
+            float(value) for value in summary["actual_kill_energy_gain_values"]
+        ]
+        return {
+            "kill_count": kill_count,
+            "total_prey_energy_at_kill": total_prey_energy_at_kill,
+            "kill_energy_nominal_total": nominal_total,
+            "kill_energy_actual_total": actual_total,
+            "kill_energy_wasted_to_full_cap_total": float(
+                summary["kill_energy_wasted_to_full_cap_total"]
+            ),
+            "kill_energy_unconverted_due_to_kill_cap_total": float(
+                summary["kill_energy_unconverted_due_to_kill_cap_total"]
+            ),
+            "kill_energy_efficiency_actual_vs_nominal": _safe_ratio(
+                actual_total,
+                nominal_total,
+            ),
+            "kill_energy_conversion_from_prey": _safe_ratio(
+                actual_total,
+                total_prey_energy_at_kill,
+            ),
+            "average_prey_energy_at_kill": (
+                total_prey_energy_at_kill / kill_count if kill_count > 0 else None
+            ),
+            "median_prey_energy_at_kill": (
+                float(median(prey_energy_values)) if prey_energy_values else None
+            ),
+            "p90_prey_energy_at_kill": _p90(prey_energy_values),
+            "average_nominal_kill_energy_gain": (
+                nominal_total / kill_count if kill_count > 0 else None
+            ),
+            "median_nominal_kill_energy_gain": (
+                float(median(nominal_values)) if nominal_values else None
+            ),
+            "p90_nominal_kill_energy_gain": _p90(nominal_values),
+            "average_actual_kill_energy_gain": (
+                actual_total / kill_count if kill_count > 0 else None
+            ),
+            "median_actual_kill_energy_gain": (
+                float(median(actual_values)) if actual_values else None
+            ),
+            "p90_actual_kill_energy_gain": _p90(actual_values),
+            "share_of_kills_cap_limited": _safe_ratio(
+                float(summary["cap_limited_kill_count"]),
+                float(kill_count),
+            ),
+            "share_of_kills_predator_full_limited": _safe_ratio(
+                float(summary["predator_full_limited_kill_count"]),
+                float(kill_count),
+            ),
+            "share_of_kills_crossed_reproduction_threshold": _safe_ratio(
+                float(summary["crossed_reproduction_threshold_kill_count"]),
+                float(kill_count),
+            ),
+            "share_of_kills_already_reproduction_ready": _safe_ratio(
+                float(summary["already_reproduction_ready_kill_count"]),
+                float(kill_count),
+            ),
+        }
 
     def _register_predator_life(self, creature: Creature, *, origin: str) -> dict[str, Any]:
         phenotype = self._get_effective_phenotype(creature)
@@ -5394,6 +5584,8 @@ class Simulation:
             "memory_target_expired_drops": 0,
             "target_switches": 0,
             "kills_after_memory_chase": 0,
+            "kill_energy_events": [],
+            "kill_energy_summary": self._new_predator_kill_energy_summary(),
             "killed_prey_age_fractions": [],
             "killed_prey_energies": [],
             "killed_prey_condition_buckets": [],
@@ -5653,6 +5845,13 @@ class Simulation:
         rarity_modifiers: PredatorRarityModifiers,
     ) -> None:
         life = self._ensure_predator_life(predator)
+        kill_energy_record = self._build_predator_kill_energy_record(
+            predator_kill_energy_cap=self._get_predator_kill_energy_gain_cap(),
+            predator_pre_kill_energy=pre_kill_energy,
+            predator_post_kill_energy=post_kill_energy,
+            prey_energy_at_kill=prey_energy_at_kill,
+            repro_threshold=repro_threshold,
+        )
         life["kills"] += 1
         if refuge_modifiers.active:
             life["kills_inside_refuge"] += 1
@@ -5662,6 +5861,15 @@ class Simulation:
         life["highest_energy"] = max(life["highest_energy"], post_kill_energy)
         life["kill_pre_energies"].append(pre_kill_energy)
         life["kill_post_energies"].append(post_kill_energy)
+        life["kill_energy_events"].append(kill_energy_record)
+        self._record_predator_kill_energy_summary(
+            life["kill_energy_summary"],
+            kill_energy_record,
+        )
+        self._record_predator_kill_energy_summary(
+            self._predator_diag_kill_energy_summary,
+            kill_energy_record,
+        )
         life["killed_prey_age_fractions"].append(prey.get_age_fraction())
         life["killed_prey_energies"].append(prey_energy_at_kill)
         life["killed_prey_condition_buckets"].append(
@@ -5824,6 +6032,12 @@ class Simulation:
         clone = dict(life)
         clone["kill_pre_energies"] = list(life["kill_pre_energies"])
         clone["kill_post_energies"] = list(life["kill_post_energies"])
+        clone["kill_energy_events"] = [
+            dict(event) for event in life.get("kill_energy_events", [])
+        ]
+        clone["kill_energy_summary"] = self._copy_predator_kill_energy_summary(
+            life.get("kill_energy_summary", self._new_predator_kill_energy_summary())
+        )
         clone["killed_prey_age_fractions"] = list(life["killed_prey_age_fractions"])
         clone["killed_prey_energies"] = list(life["killed_prey_energies"])
         clone["killed_prey_condition_buckets"] = list(

@@ -2,6 +2,16 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — chore: instrument predator kill energy transfer
+
+### Predator kill energy diagnostics
+- Added shared predator kill energy transfer instrumentation at the predator kill recording layer without changing predator-prey behavior, balance, tuning, reproduction, or energy transfer rules
+- Recorded per-kill, per-predator-life, and run-level metrics for cap-limited gain, predator-full waste, prey-energy conversion, and reproduction-threshold crossings
+- Exposed the new kill energy transfer summary through predator diagnostics exports and the `tools/predator_collapse_diagnostics.py` JSON and Markdown report, including a dedicated human-readable interpretation section
+
+### Tests
+- Added focused ecology-sensing and predator-collapse diagnostics tests covering nominal gain, predator-full waste, prey-energy-limited kills, threshold crossings, and unchanged kill behavior outputs
+
 ## [2026-05-25] — perf: eliminate selected inspect overlay frame drop
 
 ### Selected Inspect performance fixes
