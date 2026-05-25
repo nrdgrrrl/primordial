@@ -2,7 +2,7 @@
 
 All notable changes to Primordial are documented in this file.
 
-## [2026-05-25] — feat: GPU renderer presentation layout support
+## [2026-05-25] — feat: add HUD focus selection and attention line
 
 - Added `PresentationLayout` integration to `PredatorPreyGpuRenderer` for Inspect-mode gutter layout
 - Added `layout` property with caching based on display size, world size, and inspect state
