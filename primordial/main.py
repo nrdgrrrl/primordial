@@ -182,6 +182,14 @@ def main(
     )
     renderer.settings_overlay.set_snapshot_path(str(active_snapshot_path))
 
+    if (
+        scr_args.mode == "normal"
+        and renderer.hud.visible
+        and not renderer.inspect_mode.enabled
+    ):
+        show_interactive_cursor()
+        renderer.show_cursor = True
+
     def _apply_tutorial_pause_policy() -> None:
         if not renderer.tutorial_overlay.visible:
             return
