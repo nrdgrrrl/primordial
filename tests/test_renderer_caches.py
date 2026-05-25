@@ -93,6 +93,23 @@ class RendererCacheTests(unittest.TestCase):
         self.assertIsNone(renderer.inspect_mode._graph_surface_cache)
         self.assertIsNone(renderer.inspect_mode._graph_cache_key)
 
+    def test_renderer_resize_and_mode_change_clear_hud_cache(self) -> None:
+        settings = self._build_settings()
+        screen = pygame.display.set_mode((320, 180))
+        simulation = Simulation(320, 180, settings, seed=12345)
+        renderer = Renderer(screen, settings)
+        renderer.hud.build_panel_surface((320, 180), simulation, fps=30.0, refresh_token=("hud", 1))
+
+        self.assertIsNotNone(renderer.hud._panel_surface_cache)
+
+        renderer.set_mode("predator_prey")
+        self.assertIsNone(renderer.hud._panel_surface_cache)
+
+        renderer.hud.build_panel_surface((320, 180), simulation, fps=30.0, refresh_token=("hud", 2))
+        resized_screen = pygame.display.set_mode((400, 240))
+        renderer.resize(400, 240, screen=resized_screen)
+        self.assertIsNone(renderer.hud._panel_surface_cache)
+
     def test_rotated_glyph_cache_reuses_steady_state_rotation(self) -> None:
         theme = OceanTheme()
         creature = Creature(x=80.0, y=60.0, genome=Genome.random())

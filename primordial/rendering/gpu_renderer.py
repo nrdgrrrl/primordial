@@ -7,6 +7,7 @@ import logging
 import math
 import time
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -89,7 +90,11 @@ from .action_bar import ActionBar
 from .glyphs import build_glyph_surface
 from .help_overlay import HelpOverlay
 from .hud import HUD
-from .inspect_mode import InspectMode
+from .inspect_mode import (
+    InspectMode,
+    build_inspect_overlay_surfaces,
+    inspect_attention_refresh_interval_ticks,
+)
 from .predation_effects import PredationEffectManager
 from .renderer import _ZONE_BG_COLORS, _blit_zone_labels
 from .settings_overlay import SettingsOverlay
@@ -284,6 +289,52 @@ void main() {
 """
 
 
+_OVERLAY_TEXTURE_VERTEX_SHADER = """
+#version 330 core
+layout (location = 0) in vec2 in_pos;
+uniform vec2 u_viewport;
+uniform vec4 u_rect;
+out vec2 v_uv;
+
+void main() {
+    vec2 local_uv = in_pos * 0.5 + 0.5;
+    vec2 pixel = vec2(
+        u_rect.x + (local_uv.x * u_rect.z),
+        u_rect.y + (local_uv.y * u_rect.w)
+    );
+    vec2 ndc = vec2((pixel.x / u_viewport.x) * 2.0 - 1.0,
+                    1.0 - (pixel.y / u_viewport.y) * 2.0);
+    gl_Position = vec4(ndc, 0.0, 1.0);
+    v_uv = local_uv;
+}
+"""
+
+
+_OVERLAY_TEXTURE_FRAGMENT_SHADER = """
+#version 330 core
+uniform sampler2D u_texture;
+uniform float u_alpha;
+in vec2 v_uv;
+out vec4 frag_color;
+
+void main() {
+    vec4 sample_color = texture(u_texture, v_uv);
+    float alpha = sample_color.a * u_alpha;
+    if (alpha < 0.001) {
+        discard;
+    }
+    frag_color = vec4(sample_color.rgb * alpha, alpha);
+}
+"""
+
+
+@dataclass
+class _OverlayTextureSlot:
+    texture: int | None = None
+    size: tuple[int, int] = (0, 0)
+    content_key: tuple[object, ...] | None = None
+
+
 class _ShaderProgram:
     def __init__(self, vertex_source: str, fragment_source: str) -> None:
         self.program = glCreateProgram()
@@ -414,6 +465,15 @@ class PredatorPreyGpuRenderer:
         self.tutorial_overlay = TutorialOverlay()
         self._ui_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._ui_texture: int | None = None
+        self._overlay_textures_supported = True
+        self._overlay_textures: dict[str, _OverlayTextureSlot] = {
+            "hud": _OverlayTextureSlot(),
+            "zone_labels": _OverlayTextureSlot(),
+            "inspect_panel": _OverlayTextureSlot(),
+            "inspect_graph": _OverlayTextureSlot(),
+            "action_bar": _OverlayTextureSlot(),
+            "fallback_ui": _OverlayTextureSlot(),
+        }
         self._overlay_font = pygame.font.Font(None, 72)
         self._overlay_small_font = pygame.font.Font(None, 24)
         self._debug_font = pygame.font.Font(None, 18)
@@ -421,6 +481,8 @@ class PredatorPreyGpuRenderer:
         self._snapshot_debug_metrics: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
         self._debug_inspect_click_marker: tuple[float, float, float] | None = None
+        self._inspect_highlight_cache_key: tuple[object, ...] | None = None
+        self._inspect_highlight_cache_lines: tuple[LineSprite, ...] = ()
         self.predation_effect_manager = PredationEffectManager(
             enabled=bool(getattr(settings, "predation_kill_effects_enabled", True)),
             intensity=float(getattr(settings, "predation_kill_effect_intensity", 1.0)),
@@ -460,6 +522,10 @@ class PredatorPreyGpuRenderer:
         self._glyph_program = _ShaderProgram(_GLYPH_VERTEX_SHADER, _GLYPH_FRAGMENT_SHADER)
         self._line_program = _ShaderProgram(_LINE_VERTEX_SHADER, _LINE_FRAGMENT_SHADER)
         self._texture_program = _ShaderProgram(_TEXTURE_VERTEX_SHADER, _TEXTURE_FRAGMENT_SHADER)
+        self._overlay_texture_program = _ShaderProgram(
+            _OVERLAY_TEXTURE_VERTEX_SHADER,
+            _OVERLAY_TEXTURE_FRAGMENT_SHADER,
+        )
         self._quad_vbo = glGenBuffers(1)
         glBindBuffer(GL_ARRAY_BUFFER, self._quad_vbo)
         glBufferData(GL_ARRAY_BUFFER, _QUAD_VERTICES.nbytes, _QUAD_VERTICES, GL_STATIC_DRAW)
@@ -495,6 +561,7 @@ class PredatorPreyGpuRenderer:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        self._reset_overlay_texture_state()
 
     def _refresh_presentation_sizes(self) -> None:
         """Refresh SDL logical-window and OpenGL drawable sizes."""
@@ -566,14 +633,30 @@ class PredatorPreyGpuRenderer:
             glVertexAttribDivisor(4, 1)
         return vao
 
+    def _reset_overlay_texture_state(self) -> None:
+        for slot in self._overlay_textures.values():
+            slot.size = (0, 0)
+            slot.content_key = None
+
+    def _mark_overlay_dirty(self, *names: str) -> None:
+        for name in names:
+            slot = self._overlay_textures.get(name)
+            if slot is None:
+                continue
+            slot.content_key = None
+
     def set_theme(self, theme_name: str) -> None:
         self.theme = OceanTheme()
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
+        self._reset_overlay_texture_state()
 
     def set_mode(self, mode_name: str) -> None:
         _ = mode_name
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
+        self._reset_overlay_texture_state()
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         self._external_debug_metrics = metrics
@@ -602,7 +685,11 @@ class PredatorPreyGpuRenderer:
         self._zone_cache = ()
         self._zone_label_cache_key = None
         self._zone_label_surface = None
+        self._inspect_highlight_cache_key = None
+        self._inspect_highlight_cache_lines = ()
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
+        self._reset_overlay_texture_state()
         self._initialize_gl()
         self._log_gpu_coordinate_diagnostics("resize")
 
@@ -615,7 +702,11 @@ class PredatorPreyGpuRenderer:
         self._zone_label_cache_key = None
         self._zone_label_surface = None
         self._debug_inspect_click_marker = None
+        self._inspect_highlight_cache_key = None
+        self._inspect_highlight_cache_lines = ()
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
+        self._reset_overlay_texture_state()
         self.predation_effect_manager = PredationEffectManager(
             enabled=bool(getattr(self.settings, "predation_kill_effects_enabled", True)),
             intensity=float(getattr(self.settings, "predation_kill_effect_intensity", 1.0)),
@@ -625,6 +716,24 @@ class PredatorPreyGpuRenderer:
     def toggle_hud(self) -> None:
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
+        self.hud.invalidate_cache()
+        self._mark_overlay_dirty("hud")
+        self._mark_overlay_dirty("zone_labels")
+
+    def _hud_refresh_interval_ticks(self, simulation) -> int:
+        if self.debug_enabled:
+            return 1
+        quality = str(getattr(self.settings, "inspect_visual_quality", "balanced"))
+        if self.inspect_mode.enabled and quality == "performance":
+            return 8
+        if self.inspect_mode.enabled and quality == "balanced":
+            return 5
+        if self.inspect_mode.enabled and quality == "high":
+            return 3
+        return 4
+
+    def _inspect_budget_profile(self) -> str:
+        return str(getattr(self.settings, "inspect_visual_quality", "balanced"))
 
     def toggle_settings_overlay(self) -> None:
         if self.settings_overlay.visible:
@@ -759,12 +868,15 @@ class PredatorPreyGpuRenderer:
         timings["predator_highlights_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
-        inspect_lines = self._build_inspect_highlight(simulation, anim_time)
+        inspect_lines, inspect_highlight_metrics = self._build_inspect_highlight(simulation, anim_time)
+        timings.update(inspect_highlight_metrics)
+        draw_lines_t0 = time.perf_counter()
         if inspect_lines:
             self._draw_lines(inspect_lines, width=2.0)
         debug_click_lines = self._build_debug_inspect_click_marker(current_time)
         if debug_click_lines:
             self._draw_lines(debug_click_lines, width=2.0)
+        timings["inspect_highlight_draw_ms"] = (time.perf_counter() - draw_lines_t0) * 1000.0
         timings["inspect_highlight_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
@@ -786,6 +898,10 @@ class PredatorPreyGpuRenderer:
         return timings
 
     def _build_snapshot(self, simulation, anim_time: float) -> PredatorPreyRenderSnapshot:
+        budget_profile = self._inspect_budget_profile()
+        budget_active = self.inspect_mode.enabled and budget_profile == "performance"
+        ambient_step = 2 if budget_active else 1
+        trail_step = 2 if budget_active else 1
         zone_key = (
             self.width,
             self.height,
@@ -830,7 +946,7 @@ class PredatorPreyGpuRenderer:
                 0.95,
                 1.5,
             )
-            for particle in self.ambient_particles
+            for particle in self.ambient_particles[::ambient_step]
         ]
 
         food: list[RadialSprite] = []
@@ -864,9 +980,10 @@ class PredatorPreyGpuRenderer:
             rgb = _rgb01(color, depth_alpha)
             trail = creature.trail
             if trail:
-                trail_len = max(1, len(trail))
-                for index, (tx, ty) in enumerate(trail):
-                    t = (index + 1) / trail_len
+                sampled_trail = trail[::trail_step]
+                sampled_len = max(1, len(sampled_trail))
+                for index, (tx, ty) in enumerate(sampled_trail):
+                    t = (index + 1) / sampled_len
                     trails.append(
                         RadialSprite(
                             tx,
@@ -946,8 +1063,8 @@ class PredatorPreyGpuRenderer:
             diagnostics=kin_line_diagnostics,
         )
         kin_lines = kin_render.core_lines
-        kin_glow_lines = kin_render.glow_lines
-        kin_shimmer_sprites = kin_render.shimmer_sprites
+        kin_glow_lines = () if budget_active else kin_render.glow_lines
+        kin_shimmer_sprites = () if budget_active else kin_render.shimmer_sprites
         kin_ms = (time.perf_counter() - kin_t0) * 1000.0
 
         attack_lines = []
@@ -972,6 +1089,9 @@ class PredatorPreyGpuRenderer:
             "kin_line_qualifying_lineages": float(kin_line_diagnostics.get("qualifying_lineages", 0)),
             "kin_line_largest_lineage": float(kin_line_diagnostics.get("largest_lineage_size", 0)),
             "kin_line_debug_boost": 1.0 if kin_debug_boost else 0.0,
+            "inspect_quality_budget_active": 1.0 if budget_active else 0.0,
+            "ambient_sprite_count": float(len(ambient)),
+            "trail_sprite_count": float(len(trails)),
         }
         highlights = self._build_predator_highlights(simulation, anim_time)
         return PredatorPreyRenderSnapshot(
@@ -1108,6 +1228,7 @@ class PredatorPreyGpuRenderer:
             "tutorial_ms": 0.0,
             "action_bar_ms": 0.0,
             "ui_upload_ms": 0.0,
+            "ui_overlay_count": 0.0,
         }
         action_bar_context = self.action_bar.build_context(
             simulation,
@@ -1130,9 +1251,100 @@ class PredatorPreyGpuRenderer:
         )
         if not should_draw:
             return timings
+        use_overlay_textures = bool(getattr(self, "_overlay_textures_supported", False)) and not (
+            self.settings_overlay.visible
+            or self.settings_overlay.fade > 0
+            or self.help_overlay.visible
+            or self.help_overlay.fade > 0
+            or self.tutorial_overlay.visible
+            or self.tutorial_overlay.fade > 0
+            or simulation.predator_prey_game_over_active
+        )
+        if use_overlay_textures:
+            current_tick = int(getattr(simulation, "_frame", 0))
+            debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
+            hud_refresh_bucket = current_tick // max(1, self._hud_refresh_interval_ticks(simulation))
+            t0 = time.perf_counter()
+            hud_surface, hud_pos = self.hud.build_panel_surface(
+                (self.width, self.height),
+                simulation,
+                self.fps,
+                debug_lines=debug_lines,
+                refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
+            )
+            timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
+            if self.hud.visible and hud_surface.get_width() > 1 and hud_surface.get_height() > 1:
+                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                    "hud",
+                    hud_surface,
+                    content_key=("hud", id(hud_surface), hud_surface.get_size()),
+                )
+                self._draw_overlay_texture(
+                    "hud",
+                    pygame.Rect(hud_pos[0], hud_pos[1], hud_surface.get_width(), hud_surface.get_height()),
+                )
+                timings["ui_overlay_count"] += 1.0
+                zone_label_surface = self._draw_zone_labels(simulation, target=None)
+                if zone_label_surface is not None:
+                    timings["ui_upload_ms"] += self._upload_overlay_surface(
+                        "zone_labels",
+                        zone_label_surface,
+                        content_key=("zone_labels", id(zone_label_surface), zone_label_surface.get_size()),
+                    )
+                    self._draw_overlay_texture(
+                        "zone_labels",
+                        pygame.Rect(0, 0, zone_label_surface.get_width(), zone_label_surface.get_height()),
+                    )
+                    timings["ui_overlay_count"] += 1.0
+            t0 = time.perf_counter()
+            inspect_overlay = build_inspect_overlay_surfaces(
+                target_width=self.width,
+                target_height=self.height,
+                inspect_mode=self.inspect_mode,
+                simulation=simulation,
+            ) if self.inspect_mode.enabled else None
+            timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
+            if inspect_overlay is not None:
+                timings.update(inspect_overlay["timings"])
+                panel_surface = inspect_overlay["panel_surface"]
+                panel_rect = inspect_overlay["panel_rect"]
+                graph_surface = inspect_overlay["graph_surface"]
+                graph_rect = inspect_overlay["graph_rect"]
+                if panel_surface is not None:
+                    timings["ui_upload_ms"] += self._upload_overlay_surface(
+                        "inspect_panel",
+                        panel_surface,
+                        content_key=("inspect_panel", id(panel_surface), panel_surface.get_size()),
+                    )
+                    self._draw_overlay_texture("inspect_panel", panel_rect)
+                    timings["ui_overlay_count"] += 1.0
+                if graph_surface is not None:
+                    timings["ui_upload_ms"] += self._upload_overlay_surface(
+                        "inspect_graph",
+                        graph_surface,
+                        content_key=("inspect_graph", id(graph_surface), graph_surface.get_size()),
+                    )
+                    self._draw_overlay_texture("inspect_graph", graph_rect)
+                    timings["ui_overlay_count"] += 1.0
+            t0 = time.perf_counter()
+            action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
+                (self.width, self.height),
+                action_bar_context,
+            )
+            timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
+            if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
+                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                    "action_bar",
+                    action_bar_surface,
+                    content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
+                )
+                self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha)
+                timings["ui_overlay_count"] += 1.0
+            return timings
+
         self._ui_surface.fill((0, 0, 0, 0))
         if self.hud.visible:
-            self._draw_zone_labels(simulation)
+            self._draw_zone_labels(simulation, target=self._ui_surface)
         debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
         t0 = time.perf_counter()
         self.hud.render(self._ui_surface, simulation, self.fps, debug_lines=debug_lines)
@@ -1168,13 +1380,13 @@ class PredatorPreyGpuRenderer:
         t0 = time.perf_counter()
         self.action_bar.draw(self._ui_surface, action_bar_context)
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
-        t0 = time.perf_counter()
+        upload_t0 = time.perf_counter()
         self._draw_surface_texture(self._ui_surface)
-        timings["ui_upload_ms"] = (time.perf_counter() - t0) * 1000.0
+        timings["ui_upload_ms"] += (time.perf_counter() - upload_t0) * 1000.0
         return timings
 
-    def _draw_zone_labels(self, simulation) -> None:
-        """Draw the recovered HUD-gated environmental zone labels on the UI layer."""
+    def _draw_zone_labels(self, simulation, target: pygame.Surface | None = None) -> pygame.Surface | None:
+        """Build or blit the recovered HUD-gated environmental zone labels."""
         zone_label_key = (
             self.width,
             self.height,
@@ -1198,8 +1410,10 @@ class PredatorPreyGpuRenderer:
                 simulation.zone_manager.zones,
                 self._debug_font,
             )
-        if self._zone_label_surface is not None:
-            self._ui_surface.blit(self._zone_label_surface, (0, 0))
+        actual_target = self._ui_surface if target is None else target
+        if self._zone_label_surface is not None and actual_target is not None:
+            actual_target.blit(self._zone_label_surface, (0, 0))
+        return self._zone_label_surface
 
     def _draw_inspect_overlay(self, simulation) -> dict[str, float]:
         """Draw the creature card overlay on the UI surface."""
@@ -1207,21 +1421,42 @@ class PredatorPreyGpuRenderer:
 
         return draw_inspect_overlay(self._ui_surface, self.inspect_mode, simulation)
 
-    def _build_inspect_highlight(self, simulation, anim_time: float) -> list[LineSprite]:
+    def _build_inspect_highlight(
+        self,
+        simulation,
+        anim_time: float,
+    ) -> tuple[list[LineSprite], dict[str, float]]:
         """Build line sprites for the inspect selection ring and attention target."""
+        timings = {
+            "inspect_ring_build_ms": 0.0,
+            "inspect_attention_infer_ms": 0.0,
+        }
         if not self.inspect_mode.enabled:
-            return []
+            return [], timings
         get_focus_creature = getattr(self.inspect_mode, "get_focus_creature", None)
         if callable(get_focus_creature):
             creature = get_focus_creature(simulation)
         else:
             creature = self.inspect_mode.get_selected_creature(simulation)
         if creature is None:
-            return []
+            self._inspect_highlight_cache_key = None
+            self._inspect_highlight_cache_lines = ()
+            return [], timings
+        current_tick = int(getattr(simulation, "_frame", 0))
         pulse = 0.5 + 0.5 * math.sin(anim_time * 4.0)
         radius = creature.get_radius() + 6.0 + 4.0 * pulse
         color = (1.0, 1.0, 1.0, 0.8)
         cx, cy = creature.x, creature.y
+        cache_key = (
+            id(creature),
+            round(cx, 2),
+            round(cy, 2),
+            round(radius, 2),
+            current_tick,
+        )
+        if self._inspect_highlight_cache_key == cache_key and self._inspect_highlight_cache_lines:
+            return list(self._inspect_highlight_cache_lines), timings
+        ring_t0 = time.perf_counter()
         n = 24
         points = []
         for i in range(n):
@@ -1233,12 +1468,14 @@ class PredatorPreyGpuRenderer:
         for i in range(n):
             j = (i + 1) % n
             lines.append(LineSprite(points[i][0], points[i][1], points[j][0], points[j][1], color))
-
-        from .creature_observation import infer_attention_target
-        try:
-            attention = infer_attention_target(creature, simulation)
-        except Exception:
-            attention = None
+        timings["inspect_ring_build_ms"] = (time.perf_counter() - ring_t0) * 1000.0
+        attention_t0 = time.perf_counter()
+        attention = self.inspect_mode.get_attention_target(
+            simulation,
+            creature,
+            refresh_interval_ticks=inspect_attention_refresh_interval_ticks(simulation),
+        )
+        timings["inspect_attention_infer_ms"] = (time.perf_counter() - attention_t0) * 1000.0
         if attention is not None:
             t_pulse = 0.4 + 0.4 * math.sin(anim_time * 3.0)
             kind_colors = {
@@ -1248,8 +1485,9 @@ class PredatorPreyGpuRenderer:
             }
             att_color = kind_colors.get(attention.kind, (1.0, 1.0, 1.0, t_pulse))
             lines.append(LineSprite(cx, cy, attention.x, attention.y, att_color))
-
-        return lines
+        self._inspect_highlight_cache_key = cache_key
+        self._inspect_highlight_cache_lines = tuple(lines)
+        return lines, timings
 
     def _build_debug_inspect_click_marker(self, current_time: float) -> list[LineSprite]:
         """Build a short-lived debug marker at the inspect click's mapped world point."""
@@ -1337,6 +1575,14 @@ class PredatorPreyGpuRenderer:
                 sample=timings.get("inspect_lineage_sample_ms", 0.0),
                 upload=timings.get("ui_upload_ms", 0.0),
             ),
+            "Dbg inspect: ring {ring:.2f}  attention {attn:.2f}  line {line:.2f}  "
+            "overlays {count:.0f}  q={quality}".format(
+                ring=timings.get("inspect_ring_build_ms", 0.0),
+                attn=timings.get("inspect_attention_infer_ms", 0.0),
+                line=timings.get("inspect_highlight_draw_ms", 0.0),
+                count=timings.get("ui_overlay_count", 0.0),
+                quality=self._inspect_budget_profile(),
+            ),
         ]
         kin_count = int(timings.get("kin_line_count", 0.0))
         kin_segs = int(timings.get("kin_line_segment_count", 0.0))
@@ -1375,30 +1621,109 @@ class PredatorPreyGpuRenderer:
             y += text.get_height() + 10
         self._ui_surface.blit(overlay, (0, 0))
 
-    def _draw_surface_texture(self, surface: pygame.Surface) -> None:
-        if self._ui_texture is None:
-            return
+    def _ensure_overlay_texture(self, name: str) -> int | None:
+        slot = self._overlay_textures.get(name)
+        if slot is None:
+            return None
+        if slot.texture is None:
+            slot.texture = glGenTextures(1)
+            glBindTexture(GL_TEXTURE_2D, slot.texture)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        return slot.texture
+
+    def _upload_overlay_surface(
+        self,
+        name: str,
+        surface: pygame.Surface,
+        *,
+        content_key: tuple[object, ...],
+    ) -> float:
+        texture = self._ensure_overlay_texture(name)
+        slot = self._overlay_textures[name]
+        if texture is None or slot.content_key == content_key:
+            return 0.0
+        t0 = time.perf_counter()
         data = pygame.image.tostring(surface, "RGBA", True)
         glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, self._ui_texture)
+        glBindTexture(GL_TEXTURE_2D, texture)
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            GL_RGBA,
-            surface.get_width(),
-            surface.get_height(),
-            0,
-            GL_RGBA,
-            GL_UNSIGNED_BYTE,
-            data,
-        )
-        from OpenGL.GL import glGetUniformLocation
+        if slot.size != surface.get_size():
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA,
+                surface.get_width(),
+                surface.get_height(),
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                data,
+            )
+            slot.size = surface.get_size()
+        else:
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                0,
+                0,
+                surface.get_width(),
+                surface.get_height(),
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                data,
+            )
+        slot.content_key = content_key
+        return (time.perf_counter() - t0) * 1000.0
 
-        glUseProgram(self._texture_program.program)
-        glUniform1i(glGetUniformLocation(self._texture_program.program, "u_texture"), 0)
+    def _draw_overlay_texture(
+        self,
+        name: str,
+        rect: pygame.Rect,
+        *,
+        alpha: float = 1.0,
+    ) -> None:
+        slot = self._overlay_textures.get(name)
+        if slot is None or slot.texture is None:
+            return
+        from OpenGL.GL import glGetUniformLocation, glUniform1f, glUniform4f
+
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, slot.texture)
+        glUseProgram(self._overlay_texture_program.program)
+        glUniform1i(glGetUniformLocation(self._overlay_texture_program.program, "u_texture"), 0)
+        glUniform2f(
+            glGetUniformLocation(self._overlay_texture_program.program, "u_viewport"),
+            float(self.width),
+            float(self.height),
+        )
+        glUniform4f(
+            glGetUniformLocation(self._overlay_texture_program.program, "u_rect"),
+            float(rect.x),
+            float(rect.y),
+            float(rect.width),
+            float(rect.height),
+        )
+        glUniform1f(
+            glGetUniformLocation(self._overlay_texture_program.program, "u_alpha"),
+            float(alpha),
+        )
         glBindVertexArray(self._texture_vao)
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)
+
+    def _draw_surface_texture(self, surface: pygame.Surface) -> None:
+        upload_ms = self._upload_overlay_surface(
+            "fallback_ui",
+            surface,
+            content_key=("fallback_ui", time.perf_counter_ns()),
+        )
+        _ = upload_ms
+        self._draw_overlay_texture(
+            "fallback_ui",
+            pygame.Rect(0, 0, surface.get_width(), surface.get_height()),
+        )
 
     def _drain_visual_events(self, simulation) -> None:
         simulation.death_events.clear()

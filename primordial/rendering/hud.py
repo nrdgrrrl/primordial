@@ -24,6 +24,16 @@ class HUD:
         self.padding = 10
         self.line_height = font_size + 4
         self.visible = True
+        self._panel_surface_cache: pygame.Surface | None = None
+        self._panel_cache_key: tuple[object, ...] | None = None
+        self._panel_position_cache: tuple[int, int] = (10, 10)
+        self._refresh_token: object | None = None
+        self._last_fps_display: str = "0"
+
+    def invalidate_cache(self) -> None:
+        self._panel_surface_cache = None
+        self._panel_cache_key = None
+        self._refresh_token = None
 
     def render(
         self,
@@ -31,32 +41,74 @@ class HUD:
         simulation: "Simulation",
         fps: float,
         debug_lines: list[str] | None = None,
+        *,
+        refresh_token: object | None = None,
     ) -> None:
         if not self.visible:
             return
+        panel_surface, panel_pos = self.build_panel_surface(
+            surface.get_size(),
+            simulation,
+            fps,
+            debug_lines=debug_lines,
+            refresh_token=refresh_token,
+        )
+        surface.blit(panel_surface, panel_pos)
+
+    def build_panel_surface(
+        self,
+        target_size: tuple[int, int],
+        simulation: "Simulation",
+        fps: float,
+        *,
+        debug_lines: list[str] | None = None,
+        refresh_token: object | None = None,
+    ) -> tuple[pygame.Surface, tuple[int, int]]:
+        if not self.visible:
+            empty = pygame.Surface((1, 1), pygame.SRCALPHA)
+            return empty, (0, 0)
+        effective_refresh_token = (
+            refresh_token
+            if refresh_token is not None
+            else (
+                int(getattr(simulation, "_frame", 0)),
+                int(round(fps)),
+                tuple(debug_lines or ()),
+            )
+        )
+        if (
+            self._panel_surface_cache is not None
+            and self._refresh_token == effective_refresh_token
+            and self._panel_cache_key == (target_size, simulation.settings.sim_mode, simulation.paused, bool(debug_lines))
+        ):
+            return self._panel_surface_cache, self._panel_position_cache
 
         mode = simulation.settings.sim_mode
-
         if mode == "predator_prey":
-            self._render_panel(surface, simulation, fps,
-                               self._lines_predator_prey(simulation),
-                               show_food_bar=True,
-                               debug_lines=debug_lines)
+            lines = self._lines_predator_prey(simulation)
+            show_food_bar = True
         elif mode == "boids":
-            self._render_panel(surface, simulation, fps,
-                               self._lines_boids(simulation),
-                               show_food_bar=False,
-                               debug_lines=debug_lines)
+            lines = self._lines_boids(simulation)
+            show_food_bar = False
         elif mode == "drift":
-            self._render_panel(surface, simulation, fps,
-                               self._lines_drift(simulation),
-                               show_food_bar=False,
-                               debug_lines=debug_lines)
+            lines = self._lines_drift(simulation)
+            show_food_bar = False
         else:
-            self._render_panel(surface, simulation, fps,
-                               self._lines_energy(simulation),
-                               show_food_bar=True,
-                               debug_lines=debug_lines)
+            lines = self._lines_energy(simulation)
+            show_food_bar = True
+        panel_surface, panel_pos = self._build_panel_surface(
+            target_size,
+            simulation,
+            fps,
+            lines=lines,
+            show_food_bar=show_food_bar,
+            debug_lines=debug_lines,
+        )
+        self._panel_cache_key = (target_size, simulation.settings.sim_mode, simulation.paused, bool(debug_lines))
+        self._panel_surface_cache = panel_surface
+        self._panel_position_cache = panel_pos
+        self._refresh_token = effective_refresh_token
+        return panel_surface, panel_pos
 
     # ------------------------------------------------------------------
     # Mode-specific line builders
@@ -207,21 +259,24 @@ class HUD:
     # Shared panel renderer
     # ------------------------------------------------------------------
 
-    def _render_panel(
+    def _build_panel_surface(
         self,
-        surface: pygame.Surface,
+        target_size: tuple[int, int],
         simulation: "Simulation",
         fps: float,
+        *,
         lines: list[str],
         show_food_bar: bool,
         debug_lines: list[str] | None = None,
-    ) -> None:
+    ) -> tuple[pygame.Surface, tuple[int, int]]:
         if simulation.paused:
             lines = ["[PAUSED]"] + lines
-        lines.append(f"FPS: {fps:.0f}")
+        fps_display = f"{fps:.0f}"
+        self._last_fps_display = fps_display
+        lines.append(f"FPS: {fps_display}")
         if debug_lines:
             lines.extend(debug_lines)
-        max_panel_width = max(220, surface.get_width() - 20)
+        max_panel_width = max(220, target_size[0] - 20)
         lines = self._fit_lines(lines, max_panel_width - self.padding * 2)
 
         food_bar_height = 12
@@ -280,9 +335,9 @@ class HUD:
             panel.blit(famine_surf, (self.padding, label_y))
             panel.blit(feast_surf, (bar_x + bar_w + 4, label_y))
 
-        screen_height = surface.get_height()
+        screen_height = target_size[1]
         pos = (10, screen_height - panel_height - 10)
-        surface.blit(panel, pos)
+        return panel, pos
 
     def _fit_lines(self, lines: list[str], max_text_width: int) -> list[str]:
         fitted: list[str] = []

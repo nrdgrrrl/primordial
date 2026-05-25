@@ -37,9 +37,51 @@ if TYPE_CHECKING:
 _PLAYBACK_PAUSE = "pause"
 _PLAYBACK_SLOW = "slow"
 _PLAYBACK_NORMAL = "normal"
+_INSPECT_QUALITY_HIGH = "high"
+_INSPECT_QUALITY_BALANCED = "balanced"
+_INSPECT_QUALITY_PERFORMANCE = "performance"
 _INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS = 8
 _INSPECT_HISTORY_MAX_SAMPLES = 180
 _INSPECT_PANEL_REFRESH_INTERVAL_TICKS = 6
+
+
+def _inspect_visual_quality(simulation: Simulation | None) -> str:
+    settings = getattr(simulation, "settings", None)
+    quality = str(getattr(settings, "inspect_visual_quality", _INSPECT_QUALITY_HIGH))
+    if quality not in {
+        _INSPECT_QUALITY_HIGH,
+        _INSPECT_QUALITY_BALANCED,
+        _INSPECT_QUALITY_PERFORMANCE,
+    }:
+        return _INSPECT_QUALITY_BALANCED
+    return quality
+
+
+def inspect_history_sample_interval_ticks(simulation: Simulation | None) -> int:
+    quality = _inspect_visual_quality(simulation)
+    if quality == _INSPECT_QUALITY_HIGH:
+        return _INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS
+    if quality == _INSPECT_QUALITY_PERFORMANCE:
+        return 12
+    return 10
+
+
+def inspect_panel_refresh_interval_ticks(simulation: Simulation | None) -> int:
+    quality = _inspect_visual_quality(simulation)
+    if quality == _INSPECT_QUALITY_HIGH:
+        return _INSPECT_PANEL_REFRESH_INTERVAL_TICKS
+    if quality == _INSPECT_QUALITY_PERFORMANCE:
+        return 10
+    return 8
+
+
+def inspect_attention_refresh_interval_ticks(simulation: Simulation | None) -> int:
+    quality = _inspect_visual_quality(simulation)
+    if quality == _INSPECT_QUALITY_HIGH:
+        return 1
+    if quality == _INSPECT_QUALITY_PERFORMANCE:
+        return 10
+    return 5
 
 
 @dataclass
@@ -91,6 +133,18 @@ class InspectMode:
     _graph_static_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
     _graph_dynamic_surface_cache: object | None = field(default=None, repr=False)
     _graph_dynamic_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
+    _creature_lookup_frame: int = field(default=-1, repr=False)
+    _creature_lookup_size: int = field(default=-1, repr=False)
+    _creature_lookup_by_id: dict[int, Creature] = field(default_factory=dict, repr=False)
+    _focus_cache_frame: int = field(default=-1, repr=False)
+    _focus_cache_creature_id: int | None = field(default=None, repr=False)
+    _focus_cache_creature: Creature | None = field(default=None, repr=False)
+    _attention_cache_tick: int = field(default=-1, repr=False)
+    _attention_cache_interval_ticks: int = field(default=0, repr=False)
+    _attention_cache_creature_id: int | None = field(default=None, repr=False)
+    _attention_cache_target: object | None = field(default=None, repr=False)
+    _latest_lineage_count: int = field(default=0, repr=False)
+    _latest_lineage_trait_value: float | None = field(default=None, repr=False)
 
     # ── toggle ───────────────────────────────────────────────────────
 
@@ -181,6 +235,12 @@ class InspectMode:
         self._panel_surface_cache = None
         self._panel_cache_key = None
 
+    def _invalidate_attention_cache(self) -> None:
+        self._attention_cache_tick = -1
+        self._attention_cache_interval_ticks = 0
+        self._attention_cache_creature_id = None
+        self._attention_cache_target = None
+
     def _invalidate_graph_dynamic_cache(self) -> None:
         self._graph_dynamic_surface_cache = None
         self._graph_dynamic_cache_key = None
@@ -197,6 +257,9 @@ class InspectMode:
         self._energy_history.clear()
         self._lineage_population_history.clear()
         self._lineage_trait_history.clear()
+        self._latest_lineage_count = 0
+        self._latest_lineage_trait_value = None
+        self._invalidate_attention_cache()
         self._invalidate_panel_cache()
         self._invalidate_graph_cache()
 
@@ -219,10 +282,16 @@ class InspectMode:
     ) -> Creature | None:
         if creature_id is None:
             return None
-        for creature in simulation.creatures:
-            if id(creature) == creature_id:
-                return creature
-        return None
+        current_tick = int(getattr(simulation, "_frame", 0))
+        creature_count = len(simulation.creatures)
+        if (
+            self._creature_lookup_frame != current_tick
+            or self._creature_lookup_size != creature_count
+        ):
+            self._creature_lookup_frame = current_tick
+            self._creature_lookup_size = creature_count
+            self._creature_lookup_by_id = {id(creature): creature for creature in simulation.creatures}
+        return self._creature_lookup_by_id.get(int(creature_id))
 
     def _store_live_snapshot(self, creature: Creature) -> None:
         self.selected_species = str(creature.species)
@@ -238,6 +307,10 @@ class InspectMode:
         self.selected_dead = False
         self.selected_death_cause = None
         self.selected_death_tick = None
+        self._focus_cache_frame = -1
+        self._focus_cache_creature_id = id(creature)
+        self._focus_cache_creature = creature
+        self._invalidate_attention_cache()
         self._store_live_snapshot(creature)
         self.selected_graph_trait_key = self._graph_trait_key_for_mode(simulation)
         self.selected_graph_trait_initial_value = float(
@@ -263,6 +336,9 @@ class InspectMode:
         if y is not None:
             self.selected_last_known_y = float(y)
         self.follow_creature_id = None
+        self._focus_cache_frame = -1
+        self._focus_cache_creature = None
+        self._invalidate_attention_cache()
         self._invalidate_panel_cache()
         self._invalidate_graph_dynamic_cache()
 
@@ -365,21 +441,71 @@ class InspectMode:
 
     def get_focus_creature(self, simulation: Simulation) -> Creature | None:
         """Return the creature that should be highlighted for live inspect follow."""
+        current_tick = int(getattr(simulation, "_frame", 0))
+        if self._focus_cache_frame == current_tick:
+            return self._focus_cache_creature
         selected = self.get_selected_creature(simulation)
         if selected is not None:
             self.follow_creature_id = id(selected)
             self._store_live_snapshot(selected)
+            self._focus_cache_frame = current_tick
+            self._focus_cache_creature_id = id(selected)
+            self._focus_cache_creature = selected
             return selected
         proxy = self._find_creature_by_id(simulation, self.follow_creature_id)
         if proxy is not None and self.selected_lineage_id is not None:
             if int(proxy.lineage_id) == int(self.selected_lineage_id):
+                self._focus_cache_frame = current_tick
+                self._focus_cache_creature_id = id(proxy)
+                self._focus_cache_creature = proxy
                 return proxy
         proxy = self._find_lineage_proxy(simulation)
         if proxy is None:
             self.follow_creature_id = None
+            self._focus_cache_frame = current_tick
+            self._focus_cache_creature_id = None
+            self._focus_cache_creature = None
             return None
         self.follow_creature_id = id(proxy)
+        self._focus_cache_frame = current_tick
+        self._focus_cache_creature_id = id(proxy)
+        self._focus_cache_creature = proxy
         return proxy
+
+    def get_attention_target(
+        self,
+        simulation: Simulation,
+        creature: Creature | None,
+        *,
+        refresh_interval_ticks: int | None = None,
+    ):
+        if creature is None:
+            self._invalidate_attention_cache()
+            return None
+        interval = max(
+            1,
+            inspect_attention_refresh_interval_ticks(simulation)
+            if refresh_interval_ticks is None
+            else int(refresh_interval_ticks),
+        )
+        current_tick = int(getattr(simulation, "_frame", 0))
+        creature_id = id(creature)
+        if (
+            self._attention_cache_creature_id == creature_id
+            and self._attention_cache_interval_ticks == interval
+            and self._attention_cache_tick >= 0
+            and (current_tick - self._attention_cache_tick) < interval
+        ):
+            return self._attention_cache_target
+        try:
+            attention = infer_attention_target(creature, simulation)
+        except Exception:
+            attention = None
+        self._attention_cache_tick = current_tick
+        self._attention_cache_interval_ticks = interval
+        self._attention_cache_creature_id = creature_id
+        self._attention_cache_target = attention
+        return attention
 
     def observe_simulation(self, simulation: Simulation) -> dict[str, float]:
         """Refresh selection state and bounded history from the latest sim tick."""
@@ -409,7 +535,8 @@ class InspectMode:
 
         if (
             self._last_history_sample_tick is not None
-            and (current_tick - self._last_history_sample_tick) < _INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS
+            and (current_tick - self._last_history_sample_tick)
+            < inspect_history_sample_interval_ticks(simulation)
         ):
             return {
                 "inspect_observe_ms": (time.perf_counter() - observe_t0) * 1000.0,
@@ -421,6 +548,8 @@ class InspectMode:
         if selected is not None:
             self._energy_history.append((current_tick, float(selected.energy)))
         lineage_count, lineage_trait_value = self._lineage_stats(simulation)
+        self._latest_lineage_count = int(lineage_count)
+        self._latest_lineage_trait_value = lineage_trait_value
         if self.selected_lineage_id is not None:
             self._lineage_population_history.append((current_tick, lineage_count))
             self._lineage_trait_history.append((current_tick, lineage_trait_value))
@@ -446,6 +575,10 @@ class InspectMode:
         self.follow_creature_id = None
         self.selected_graph_trait_key = None
         self.selected_graph_trait_initial_value = None
+        self._focus_cache_frame = -1
+        self._focus_cache_creature_id = None
+        self._focus_cache_creature = None
+        self._invalidate_attention_cache()
         self._reset_histories()
 
 
@@ -591,6 +724,8 @@ class InspectSelectionDisplay:
 def build_creature_card(
     creature: Creature,
     simulation: Simulation,
+    *,
+    attention_target=None,
 ) -> dict[str, str]:
     """Build a human-readable creature card dict.
 
@@ -673,10 +808,12 @@ def build_creature_card(
     card["behavior"] = behavior
     card["vel"] = f"{vel:.2f}"
 
-    try:
-        attention = infer_attention_target(creature, simulation)
-    except Exception:
-        attention = None
+    attention = attention_target
+    if attention is None:
+        try:
+            attention = infer_attention_target(creature, simulation)
+        except Exception:
+            attention = None
     if attention is not None:
         card["attention"] = attention.kind
         card["attention_conf"] = f"{attention.confidence:.0%}"
@@ -1095,8 +1232,7 @@ def _build_selection_display(
     if lineage_id is not None:
         title = f"{title_species} #{lineage_id}"
 
-    lineage_count, _lineage_trait_value = inspect_mode._lineage_stats(simulation)
-    lineage_status = _lineage_status_label(lineage_count)
+    lineage_status = _lineage_status_label(int(inspect_mode._latest_lineage_count))
     selected_creature = inspect_mode.get_selected_creature(simulation)
     if selected_creature is not None and card is not None:
         return InspectSelectionDisplay(
@@ -1494,34 +1630,75 @@ def draw_inspect_overlay(
         "inspect_graph_cache_hit": 0.0,
     }
     creature = inspect_mode.get_focus_creature(simulation)
-    panel_t0 = time.perf_counter()
-    panel_surface, panel_metrics = _build_inspect_panel_surface(
+    overlay = build_inspect_overlay_surfaces(
         target_width=target.get_width(),
         target_height=target.get_height(),
         inspect_mode=inspect_mode,
         simulation=simulation,
         focus_creature=creature,
     )
-    timings["inspect_panel_ms"] = (time.perf_counter() - panel_t0) * 1000.0
-    timings.update(panel_metrics)
+    panel_surface = overlay["panel_surface"]
+    if panel_surface is not None:
+        target.blit(panel_surface, overlay["panel_rect"].topleft)
+    graph_surface = overlay["graph_surface"]
+    if graph_surface is not None:
+        target.blit(graph_surface, overlay["graph_rect"].topleft)
+    timings.update(overlay["timings"])
+    return timings
+
+
+def build_inspect_overlay_surfaces(
+    *,
+    target_width: int,
+    target_height: int,
+    inspect_mode: InspectMode,
+    simulation: Simulation,
+    focus_creature: Creature | None = None,
+) -> dict[str, object]:
+    import pygame
+
+    creature = focus_creature if focus_creature is not None else inspect_mode.get_focus_creature(simulation)
+    panel_t0 = time.perf_counter()
+    panel_surface, panel_metrics = _build_inspect_panel_surface(
+        target_width=target_width,
+        target_height=target_height,
+        inspect_mode=inspect_mode,
+        simulation=simulation,
+        focus_creature=creature,
+    )
+    panel_ms = (time.perf_counter() - panel_t0) * 1000.0
     placement = compute_inspect_panel_placement(
-        target.get_width(),
-        target.get_height(),
+        target_width,
+        target_height,
         panel_surface.get_width(),
         panel_surface.get_height(),
     )
-    target.blit(panel_surface, (placement.x, placement.y))
+    panel_rect = pygame.Rect(placement.x, placement.y, panel_surface.get_width(), panel_surface.get_height())
     graph_t0 = time.perf_counter()
     graph_surface, graph_rect, graph_metrics = _build_graph_strip_surface(
-        target_width=target.get_width(),
-        target_height=target.get_height(),
+        target_width=target_width,
+        target_height=target_height,
         inspect_mode=inspect_mode,
         simulation=simulation,
     )
-    timings["inspect_graph_ms"] = (time.perf_counter() - graph_t0) * 1000.0
+    graph_ms = (time.perf_counter() - graph_t0) * 1000.0
+    timings = {
+        "inspect_panel_ms": panel_ms,
+        "inspect_graph_ms": graph_ms,
+        "inspect_graph_static_ms": 0.0,
+        "inspect_graph_dynamic_ms": 0.0,
+        "inspect_panel_layout_ms": 0.0,
+        "inspect_graph_cache_hit": 0.0,
+    }
+    timings.update(panel_metrics)
     timings.update(graph_metrics)
-    target.blit(graph_surface, graph_rect.topleft)
-    return timings
+    return {
+        "panel_surface": panel_surface,
+        "panel_rect": panel_rect,
+        "graph_surface": graph_surface,
+        "graph_rect": graph_rect,
+        "timings": timings,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1657,7 +1834,7 @@ def _build_inspect_panel_surface(
     panel_width = _inspect_panel_width(target_width)
     max_height = max(1, target_height - (_INSPECT_MARGIN * 2))
     current_tick = int(getattr(simulation, "_frame", 0))
-    refresh_bucket = current_tick // _INSPECT_PANEL_REFRESH_INTERVAL_TICKS
+    refresh_bucket = current_tick // inspect_panel_refresh_interval_ticks(simulation)
     cache_key = (
         panel_width,
         max_height,
@@ -1673,7 +1850,16 @@ def _build_inspect_panel_surface(
         return inspect_mode._panel_surface_cache, {"inspect_panel_layout_ms": 0.0}
 
     layout_t0 = time.perf_counter()
-    card = build_creature_card(focus_creature, simulation) if focus_creature is not None else None
+    attention_target = inspect_mode.get_attention_target(simulation, focus_creature)
+    card = (
+        build_creature_card(
+            focus_creature,
+            simulation,
+            attention_target=attention_target,
+        )
+        if focus_creature is not None
+        else None
+    )
     selection_display = _build_selection_display(
         inspect_mode,
         simulation,

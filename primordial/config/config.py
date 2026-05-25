@@ -71,6 +71,7 @@ _SECTION_FIELDS: dict[str, dict[str, tuple[str, str]]] = {
         "predation_kill_effects_enabled": ("predation_kill_effects_enabled", "bool"),
         "predation_kill_effect_intensity": ("predation_kill_effect_intensity", "float"),
         "predation_kill_effect_max_active": ("predation_kill_effect_max_active", "int"),
+        "inspect_visual_quality": ("inspect_visual_quality", "str"),
     },
 }
 
@@ -493,6 +494,12 @@ class Config:
             0.1, min(2.5, self.predation_kill_effect_intensity)
         )
         self.predation_kill_effect_max_active = max(1, min(256, self.predation_kill_effect_max_active))
+        if self.inspect_visual_quality not in {"high", "balanced", "performance"}:
+            logger.warning(
+                "Invalid inspect_visual_quality '%s'; falling back to balanced.",
+                self.inspect_visual_quality,
+            )
+            self.inspect_visual_quality = "balanced"
         predator_prey_params = self.mode_params.get("predator_prey", {})
         soft_cap = int(predator_prey_params.get("predator_refuge_density_soft_cap", 3))
         hard_cap = int(predator_prey_params.get("predator_refuge_density_hard_cap", 7))
@@ -588,6 +595,7 @@ predator_highlight_pulse_seconds = {self.predator_highlight_pulse_seconds:.2f}
 predation_kill_effects_enabled = {str(self.predation_kill_effects_enabled).lower()}
 predation_kill_effect_intensity = {self.predation_kill_effect_intensity:.2f}
 predation_kill_effect_max_active = {self.predation_kill_effect_max_active}
+inspect_visual_quality = "{self.inspect_visual_quality}"
 
 # Per-mode parameter overrides — these override the base [simulation] values
 # when that mode is active. Edit to tune each mode independently.

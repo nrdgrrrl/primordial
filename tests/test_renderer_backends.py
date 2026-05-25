@@ -18,7 +18,11 @@ from primordial.rendering import (
     display_flags_for_settings,
     wants_gpu_renderer,
 )
-from primordial.rendering.gpu_renderer import PredatorPreyGpuRenderer, _TEXTURE_FRAGMENT_SHADER
+from primordial.rendering.gpu_renderer import (
+    PredatorPreyGpuRenderer,
+    _OverlayTextureSlot,
+    _TEXTURE_FRAGMENT_SHADER,
+)
 from primordial.settings import Settings
 
 
@@ -180,6 +184,69 @@ class RendererBackendTests(unittest.TestCase):
         self.assertIsNone(renderer._zone_label_surface)
         self.assertEqual(renderer._ui_surface.get_bounding_rect(min_alpha=1).size, (0, 0))
         self.assertTrue(drawn["called"])
+
+    def test_action_bar_alpha_changes_do_not_force_fallback_ui_upload(self) -> None:
+        renderer = PredatorPreyGpuRenderer.__new__(PredatorPreyGpuRenderer)
+        renderer.width = 320
+        renderer.height = 180
+        renderer.fps = 0.0
+        renderer.settings = SimpleNamespace(inspect_visual_quality="balanced")
+        renderer.debug_enabled = False
+        renderer._debug_timing = {}
+        renderer._overlay_textures_supported = True
+        renderer._overlay_textures = {
+            "hud": _OverlayTextureSlot(),
+            "zone_labels": _OverlayTextureSlot(),
+            "inspect_panel": _OverlayTextureSlot(),
+            "inspect_graph": _OverlayTextureSlot(),
+            "action_bar": _OverlayTextureSlot(),
+            "fallback_ui": _OverlayTextureSlot(),
+        }
+        renderer.hud = SimpleNamespace(
+            visible=False,
+            build_panel_surface=lambda *args, **kwargs: (
+                pygame.Surface((1, 1), pygame.SRCALPHA),
+                (0, 0),
+            ),
+        )
+        renderer.settings_overlay = SimpleNamespace(visible=False, fade=0.0)
+        renderer.help_overlay = SimpleNamespace(visible=False, fade=0.0)
+        renderer.tutorial_overlay = SimpleNamespace(visible=False, fade=0.0)
+        renderer.inspect_mode = SimpleNamespace(enabled=False)
+        action_bar_surface = pygame.Surface((120, 32), pygame.SRCALPHA)
+        alpha_state = {"value": 0.8}
+        renderer.action_bar = SimpleNamespace(
+            build_context=lambda *args, **kwargs: "ctx",
+            opacity=lambda context: alpha_state["value"],
+            overlay_state=lambda screen_size, context: (
+                action_bar_surface,
+                pygame.Rect(10, 20, 120, 32),
+                alpha_state["value"],
+            ),
+        )
+        uploads: list[tuple[str, tuple[object, ...]]] = []
+        draws: list[tuple[str, float]] = []
+        fallback_called = {"value": 0}
+        renderer._upload_overlay_surface = (
+            lambda name, surface, content_key: uploads.append((name, content_key)) or 0.5
+        )
+        renderer._draw_overlay_texture = (
+            lambda name, rect, alpha=1.0: draws.append((name, alpha))
+        )
+        renderer._draw_surface_texture = lambda surface: fallback_called.__setitem__(
+            "value",
+            fallback_called["value"] + 1,
+        )
+        simulation = SimpleNamespace(predator_prey_game_over_active=False)
+
+        renderer._draw_ui(simulation)
+        alpha_state["value"] = 0.35
+        renderer._draw_ui(simulation)
+
+        self.assertEqual(fallback_called["value"], 0)
+        self.assertEqual([name for name, _key in uploads], ["action_bar", "action_bar"])
+        self.assertEqual(uploads[0][1], uploads[1][1])
+        self.assertEqual(draws, [("action_bar", 0.8), ("action_bar", 0.35)])
 
 
 if __name__ == "__main__":

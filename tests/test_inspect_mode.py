@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pygame
 
@@ -209,6 +210,40 @@ class TestInspectModeToggle(unittest.TestCase):
         was = mode.was_paused_before
         mode.toggle(simulation_paused=False)
         self.assertTrue(was)
+
+
+class TestInspectAttentionCache(unittest.TestCase):
+    def test_attention_cache_reuses_until_selection_changes(self):
+        c1 = _make_creature(x=100.0, y=100.0)
+        c2 = _make_creature(x=180.0, y=100.0, lineage_id=2)
+        sim = _make_simulation([c1, c2])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(c1.x, c1.y, sim)
+
+        with patch("primordial.rendering.inspect_mode.infer_attention_target", return_value=None) as infer_mock:
+            mode.get_attention_target(sim, c1, refresh_interval_ticks=10)
+            mode.get_attention_target(sim, c1, refresh_interval_ticks=10)
+            self.assertEqual(infer_mock.call_count, 1)
+
+            mode.select_at_world_pos(c2.x, c2.y, sim)
+            mode.get_attention_target(sim, c2, refresh_interval_ticks=10)
+            self.assertEqual(infer_mock.call_count, 2)
+
+    def test_attention_cache_clears_when_selected_creature_dies(self):
+        c1 = _make_creature(x=100.0, y=100.0)
+        sim = _make_simulation([c1])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(c1.x, c1.y, sim)
+
+        with patch("primordial.rendering.inspect_mode.infer_attention_target", return_value=None) as infer_mock:
+            mode.get_attention_target(sim, c1, refresh_interval_ticks=10)
+            self.assertEqual(infer_mock.call_count, 1)
+            mode._mark_selected_dead(tick=8, cause="old_age", x=c1.x, y=c1.y)
+            self.assertIsNone(mode.get_attention_target(sim, None, refresh_interval_ticks=10))
+            mode.follow_creature_id = id(c1)
+            mode.selected_dead = False
+            mode.get_attention_target(sim, c1, refresh_interval_ticks=10)
+            self.assertEqual(infer_mock.call_count, 2)
 
 
 class TestTogglePauseSlow(unittest.TestCase):

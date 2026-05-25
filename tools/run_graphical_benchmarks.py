@@ -29,6 +29,17 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip representative cProfile captures.",
     )
+    parser.add_argument(
+        "--suite",
+        choices=["default", "inspect_follow"],
+        default="default",
+        help="Benchmark suite to run.",
+    )
+    parser.add_argument(
+        "--fullscreen",
+        action="store_true",
+        help="For the inspect_follow suite, run at desktop fullscreen instead of the windowed target.",
+    )
     return parser.parse_args()
 
 
@@ -44,6 +55,8 @@ def main() -> int:
         output_root=output_root,
         command=command,
         collect_profiles=not args.skip_profiles,
+        suite=args.suite,
+        inspect_fullscreen=bool(args.fullscreen),
     )
     return 0
 

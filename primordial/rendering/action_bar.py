@@ -272,6 +272,21 @@ class ActionBar:
         panel_surface.set_alpha(int(round(255 * alpha)))
         surface.blit(panel_surface, layout.panel_rect.topleft)
 
+    def overlay_state(
+        self,
+        screen_size: tuple[int, int],
+        context: ActionBarContext,
+        *,
+        now: float | None = None,
+    ) -> tuple[pygame.Surface | None, pygame.Rect | None, float]:
+        alpha = self.opacity(context, now=now)
+        items = self.command_items(context)
+        if alpha <= 0.0 or not items:
+            return None, None, 0.0
+        layout = self.calculate_layout(screen_size, items)
+        panel_surface = self._get_panel_surface(layout, items)
+        return panel_surface, layout.panel_rect, alpha
+
     def _get_panel_surface(
         self,
         layout: ActionBarLayout,

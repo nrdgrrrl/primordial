@@ -205,6 +205,15 @@ def build_settings_fields() -> list[Field]:
             guidance="Lower values reduce worst-case render work during heavy feeding bursts.",
         ),
         Field(
+            "Inspect Quality",
+            "inspect_visual_quality",
+            "enum",
+            options=["high", "balanced", "performance"],
+            section=CATEGORY_RENDERING,
+            description="Trades Inspect-mode visual richness against render stability without changing the simulation world.",
+            guidance="Balanced throttles UI work; Performance also trims non-essential render layers while Inspect is open.",
+        ),
+        Field(
             "Mutation Rate",
             "mutation_rate",
             "float",

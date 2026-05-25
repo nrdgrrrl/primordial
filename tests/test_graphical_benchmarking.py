@@ -13,6 +13,7 @@ from primordial.graphical_benchmarking import (
     DisplayContext,
     RunSpec,
     SuitePaths,
+    _build_inspect_follow_run_specs,
     _run_single_graphical_benchmark,
 )
 from primordial.settings import Settings
@@ -97,6 +98,26 @@ class GraphicalBenchmarkingTests(unittest.TestCase):
             self.assertGreaterEqual(len(run_result["checkpoints"]), 1)
             for checkpoint in run_result["checkpoints"]:
                 self.assertTrue(Path(checkpoint["screenshot"]).exists())
+
+    def test_inspect_follow_suite_builds_required_scenarios(self) -> None:
+        specs = _build_inspect_follow_run_specs(fullscreen=False)
+
+        self.assertEqual(
+            [spec.scenario for spec in specs],
+            [
+                "inspect_follow_baseline_hud_off",
+                "inspect_follow_hud_only",
+                "inspect_follow_paused",
+                "inspect_follow_slow",
+                "inspect_follow_normal",
+                "inspect_follow_normal_action_bar_hidden",
+            ],
+        )
+        self.assertEqual(specs[0].show_hud, False)
+        self.assertEqual(specs[2].inspect_scenario, "pause")
+        self.assertEqual(specs[4].inspect_scenario, "normal")
+        self.assertTrue(specs[4].action_bar_visible)
+        self.assertFalse(specs[5].action_bar_visible)
 
 
 if __name__ == "__main__":

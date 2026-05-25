@@ -33,6 +33,7 @@ Settings are grouped into categories:
 - **Evolution**: mutation, cosmic rays, epistasis, food cycle, zones.
 - **Ecology / Predator-Prey**: predator-prey-specific starting mix and dials.
 - **Rendering**: kin-line visuals and related rendering options.
+  This now includes **Inspect Quality**, which can keep the full look, use a balanced UI-throttled budget, or switch to a stronger Inspect-only performance budget without altering simulation behavior.
 - **Actions**: snapshots, help, reset actions.
 
 The selected setting has a description panel explaining what it does, its range or choices, and whether it applies on save or requires a reset.

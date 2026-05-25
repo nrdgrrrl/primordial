@@ -288,6 +288,7 @@ class Renderer:
         self._is_stub_theme = theme_name != "ocean"
         self._invalidate_static_caches()
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
 
     def set_mode(self, mode_name: str) -> None:
         """Update stub detection when sim mode changes."""
@@ -295,6 +296,7 @@ class Renderer:
         self._is_stub_mode = mode_name not in _IMPLEMENTED_MODES
         self._invalidate_static_caches()
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         """Attach outer-loop timing metrics for debug and summary consumers."""
@@ -322,6 +324,7 @@ class Renderer:
         self._shimmer_states.clear()
         self._invalidate_static_caches()
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
         self.ambient_particles = self.theme.create_ambient_particles(
             self.width, self.height, 30
         )
@@ -347,6 +350,7 @@ class Renderer:
         self._external_debug_metrics = {}
         self._invalidate_static_caches()
         self.inspect_mode.invalidate_render_caches()
+        self.hud.invalidate_cache()
         if isinstance(self.theme, OceanTheme):
             self.theme.invalidate_runtime_caches()
             self.theme._trail_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -575,7 +579,22 @@ class Renderer:
         # --- HUD ---
         t0 = time.perf_counter()
         debug_lines = self._build_debug_lines(timings) if self.debug_enabled else None
-        self.hud.render(target, simulation, self.fps, debug_lines=debug_lines)
+        current_tick = int(getattr(simulation, "_frame", 0))
+        if self.debug_enabled:
+            hud_refresh_bucket = current_tick
+        elif self.inspect_mode.enabled:
+            quality = str(getattr(self.settings, "inspect_visual_quality", "balanced"))
+            interval = 8 if quality == "performance" else 5 if quality == "balanced" else 3
+            hud_refresh_bucket = current_tick // max(1, interval)
+        else:
+            hud_refresh_bucket = current_tick // 4
+        self.hud.render(
+            target,
+            simulation,
+            self.fps,
+            debug_lines=debug_lines,
+            refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
+        )
         timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
@@ -640,6 +659,7 @@ class Renderer:
         """Toggle HUD visibility."""
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
+        self.hud.invalidate_cache()
         self._zone_label_surf_cached = None
         self._static_background_surf_cached = None
         self._static_background_cache_key = None

@@ -52,6 +52,7 @@ predator_highlight_pulse_seconds = 1.10
 predation_kill_effects_enabled = true
 predation_kill_effect_intensity = 1.00
 predation_kill_effect_max_active = 64
+inspect_visual_quality = "performance" # high | balanced | performance
 
 # Per-mode parameter overrides — these override the base [simulation] values
 # when that mode is active. Edit to tune each mode independently.

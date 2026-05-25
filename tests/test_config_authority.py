@@ -39,6 +39,7 @@ fullscreen = false
 
 [rendering]
 glyph_size_base = 64
+inspect_visual_quality = "performance"
 """.strip()
                 + "\n",
                 encoding="utf-8",
@@ -52,6 +53,24 @@ glyph_size_base = 64
         self.assertEqual(settings.food_spawn_rate, 0.55)
         self.assertFalse(settings.fullscreen)
         self.assertEqual(settings.glyph_size_base, 64)
+        self.assertEqual(settings.inspect_visual_quality, "performance")
+
+    def test_invalid_inspect_visual_quality_falls_back_to_balanced(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                """
+[rendering]
+inspect_visual_quality = "ultra"
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                settings = Config()
+
+        self.assertEqual(settings.inspect_visual_quality, "balanced")
 
     def test_mode_specific_user_overrides_layer_on_top_of_canonical_mode_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

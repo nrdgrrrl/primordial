@@ -94,6 +94,11 @@ class RunSpec:
     screenshot_times: tuple[float, ...]
     toggles: tuple[ToggleAction, ...] = ()
     notes: str = ""
+    show_hud: bool | None = None
+    inspect_scenario: str | None = None
+    action_bar_visible: bool = False
+    warmup_ticks: int = 0
+    inspect_visual_quality: str | None = None
 
     @property
     def run_id(self) -> str:
@@ -174,6 +179,8 @@ def run_graphical_benchmark_suite(
     output_root: Path,
     command: str,
     collect_profiles: bool = True,
+    suite: str = "default",
+    inspect_fullscreen: bool = False,
 ) -> dict[str, Any]:
     """Run the full graphical benchmark matrix and write packaged results."""
     suite_paths = _create_suite_paths(output_root)
@@ -183,7 +190,10 @@ def run_graphical_benchmark_suite(
     environment_path = suite_paths.root / "ENVIRONMENT.md"
     environment_path.write_text(environment_info, encoding="utf-8")
 
-    run_specs = _build_default_run_specs()
+    if suite == "inspect_follow":
+        run_specs = _build_inspect_follow_run_specs(fullscreen=inspect_fullscreen)
+    else:
+        run_specs = _build_default_run_specs()
     logger.info("Starting graphical benchmark suite with %d runs", len(run_specs))
 
     run_results: list[dict[str, Any]] = []
@@ -430,6 +440,95 @@ def _build_profile_specs() -> list[tuple[str, int]]:
     ]
 
 
+def _build_inspect_follow_run_specs(*, fullscreen: bool) -> list[RunSpec]:
+    seed = ALL_MODE_SEEDS[1]
+    screenshot_times = (1.0, 4.0)
+    duration = 6.0
+    warmup_ticks = 1800
+    return [
+        RunSpec(
+            scenario="inspect_follow_baseline_hud_off",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Baseline predator-prey without HUD or Inspect.",
+            show_hud=False,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_follow_hud_only",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="HUD on, no Inspect.",
+            show_hud=True,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_follow_paused",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect enabled with a selected organism, paused.",
+            show_hud=True,
+            inspect_scenario="pause",
+            action_bar_visible=True,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_follow_slow",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect enabled in slow follow mode.",
+            show_hud=True,
+            inspect_scenario="slow",
+            action_bar_visible=True,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_follow_normal",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect enabled in normal follow mode with the action bar visible.",
+            show_hud=True,
+            inspect_scenario="normal",
+            action_bar_visible=True,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_follow_normal_action_bar_hidden",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect enabled in normal follow mode with the action bar faded out.",
+            show_hud=True,
+            inspect_scenario="normal",
+            action_bar_visible=False,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+    ]
+
+
 def _create_suite_paths(root: Path) -> SuitePaths:
     per_run = root / "per_run"
     frame_samples = root / "frame_samples"
@@ -499,7 +598,9 @@ def _run_single_graphical_benchmark(
         settings = Settings()
         settings.sim_mode = spec.mode
         settings.fullscreen = spec.fullscreen
-        settings.show_hud = False
+        settings.show_hud = False if spec.show_hud is None else bool(spec.show_hud)
+        if spec.inspect_visual_quality is not None:
+            settings.inspect_visual_quality = str(spec.inspect_visual_quality)
 
         world_width, world_height, screen = _create_display_for_run(settings)
         pygame.display.set_caption(f"Primordial Benchmark: {spec.run_id}")
@@ -516,6 +617,10 @@ def _run_single_graphical_benchmark(
         clock = pygame.time.Clock()
         runtime_loop = create_fixed_step_loop_state(settings)
         timing_collector = LoopTimingCollector(retain_samples=True)
+        if spec.warmup_ticks > 0:
+            for _ in range(spec.warmup_ticks):
+                simulation.step()
+        _configure_benchmark_overlay_state(spec, simulation, renderer)
 
         original_renderer_resize = renderer.resize
         original_simulation_resize = simulation.resize
@@ -564,10 +669,11 @@ def _run_single_graphical_benchmark(
                 runtime_loop.reset_timing_debt()
 
             sim_suppressed = simulation_timing_is_suppressed(simulation)
+            inspect_suppress = _benchmark_inspect_suppress(spec, renderer, settings)
             sim_ms, sim_steps, clamp_frames, dropped_seconds = advance_fixed_step_frame(
                 simulation,
                 runtime_loop,
-                allow_simulation=not sim_suppressed,
+                allow_simulation=not sim_suppressed and not inspect_suppress,
             )
 
             debug_payload = timing_collector.latest_debug_payload()
@@ -586,6 +692,10 @@ def _run_single_graphical_benchmark(
                 }
             )
             renderer.set_external_debug_metrics(debug_payload)
+            if spec.action_bar_visible:
+                action_bar = getattr(renderer, "action_bar", None)
+                if action_bar is not None:
+                    action_bar.last_mouse_motion_time = time.monotonic()
             runtime_loop.restore_buffered_attacks(simulation)
             render_metrics = renderer.draw(simulation)
             present_start = time.perf_counter()
@@ -830,6 +940,9 @@ def _build_run_result(
 
     timing_ms = timing_summary["timing_ms"]
     effective_fps_summary = timing_summary["effective_fps"]
+    one_percent_low_fps = 0.0
+    if float(timing_ms["frame"]["p99"]) > 0.0:
+        one_percent_low_fps = 1000.0 / float(timing_ms["frame"]["p99"])
     render_breakdown_mean_ms = {
         key: (render_breakdown_sums[key] / render_breakdown_counts[key])
         for key in sorted(render_breakdown_sums)
@@ -859,6 +972,10 @@ def _build_run_result(
         "render_backend": renderer_backend_name(renderer),
         "gpu_info": renderer_gpu_info(renderer),
         "notes": spec.notes,
+        "inspect_scenario": spec.inspect_scenario,
+        "action_bar_visible": spec.action_bar_visible,
+        "warmup_ticks": spec.warmup_ticks,
+        "inspect_visual_quality": spec.inspect_visual_quality,
         "resolution": {
             "world": [simulation.width, simulation.height],
             "initial_display": checkpoints[0]["display_size"] if checkpoints else current_display_size,
@@ -870,6 +987,7 @@ def _build_run_result(
             "sim_ticks_advanced": timing_summary["sim_steps_total"],
             "frames_rendered": timing_summary["frames_rendered"],
             "effective_fps_overall": timing_summary["effective_fps_overall"],
+            "one_percent_low_fps": one_percent_low_fps,
             "effective_fps_frame_stats": effective_fps_summary,
             "frame_ms": timing_ms["frame"],
             "event_ms": timing_ms["event"],
@@ -1732,6 +1850,51 @@ def _create_display_for_run(settings: Settings) -> tuple[int, int, pygame.Surfac
     return width, height, screen
 
 
+def _configure_benchmark_overlay_state(spec: RunSpec, simulation: Simulation, renderer: object) -> None:
+    inspect_mode = getattr(renderer, "inspect_mode", None)
+    if inspect_mode is not None:
+        inspect_mode.enabled = False
+        clear_selection = getattr(inspect_mode, "clear_selection", None)
+        if callable(clear_selection):
+            clear_selection()
+    simulation.paused = False
+    if spec.inspect_scenario and inspect_mode is not None and simulation.creatures:
+        candidate = max(
+            simulation.creatures,
+            key=lambda creature: (float(creature.energy), -float(creature.age)),
+        )
+        inspect_mode.enabled = True
+        bind_selection = getattr(inspect_mode, "_bind_selection", None)
+        if callable(bind_selection):
+            bind_selection(candidate, simulation)
+        inspect_mode.pause_mode = str(spec.inspect_scenario)
+        inspect_mode._slow_accumulator = 0.0
+        simulation.paused = inspect_mode.pause_mode == "pause"
+    action_bar = getattr(renderer, "action_bar", None)
+    if action_bar is not None:
+        if spec.action_bar_visible:
+            action_bar.notify_mouse_motion((8, 0), now=time.monotonic())
+        else:
+            action_bar.last_mouse_motion_time = None
+
+
+def _benchmark_inspect_suppress(spec: RunSpec, renderer: object, settings: Settings) -> bool:
+    if spec.inspect_scenario is None:
+        return False
+    inspect_mode = getattr(renderer, "inspect_mode", None)
+    if inspect_mode is None or not getattr(inspect_mode, "enabled", False):
+        return False
+    pause_mode = str(getattr(inspect_mode, "pause_mode", "pause"))
+    if pause_mode == "pause":
+        return True
+    if pause_mode == "slow":
+        frame_dt = max(0.0, 1.0 / max(1, get_effective_target_fps(settings)))
+        should_step_slow = getattr(inspect_mode, "should_step_slow", None)
+        if callable(should_step_slow):
+            return not bool(should_step_slow(frame_dt))
+    return False
+
+
 def _build_settings_snapshot(settings: Settings, mode: str) -> dict[str, Any]:
     return {
         "sim_mode": settings.sim_mode,
@@ -1741,6 +1904,7 @@ def _build_settings_snapshot(settings: Settings, mode: str) -> dict[str, Any]:
         "target_fps": get_effective_target_fps(settings),
         "simulation_tick_hz": get_simulation_tick_hz(settings),
         "show_hud": settings.show_hud,
+        "inspect_visual_quality": getattr(settings, "inspect_visual_quality", "balanced"),
         "initial_population": settings.initial_population,
         "max_population": settings.max_population,
         "food_spawn_rate": settings.food_spawn_rate,

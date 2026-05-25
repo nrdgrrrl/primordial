@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — perf: split gpu inspect overlays and add inspect quality budgets
+
+- Extended the live graphical benchmark harness with an `inspect_follow` suite that runs real-display predator-prey scenarios for baseline, HUD-only, paused Inspect, slow follow, normal follow, and normal follow with the action bar faded out, including average FPS, 1% low FPS, and detailed render-breakdown metrics.
+- Reworked the GPU renderer to stop treating HUD/Inspect/action-bar overlays as one full-screen transparent upload in the common Inspect path. Cached HUD, zone labels, Inspect panel, Inspect graph strip, and action bar now upload as independent overlay textures and are composited with per-overlay alpha, so small UI changes no longer force a full-screen UI texture refresh.
+- Added cached Inspect focus/attention lookup reuse, throttled HUD refresh, explicit inspect ring/attention/draw timings, and an `inspect_visual_quality` rendering setting with `high`, `balanced`, and `performance` budgets. The performance budget trims non-essential render layers only while Inspect is open and leaves simulation behavior unchanged.
+- Added focused regression coverage for the new quality setting, action-bar overlay alpha behavior, inspect attention-cache invalidation, HUD cache invalidation, and inspect-follow benchmark-suite construction.
+
 ## [2026-05-25] — perf: cache inspect UI surfaces and add fine-grained timings
 
 - Added fine-grained Inspect/UI timing breakdowns in both renderer paths so debug output and profiling runs can separate simulation stepping, inspect lineage sampling, inspect panel layout, inspect graph rendering, HUD work, action-bar work, and GPU UI upload/compositing cost.
