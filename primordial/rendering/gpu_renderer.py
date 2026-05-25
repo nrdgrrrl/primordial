@@ -305,7 +305,7 @@ void main() {
     vec2 ndc = vec2((pixel.x / u_viewport.x) * 2.0 - 1.0,
                     1.0 - (pixel.y / u_viewport.y) * 2.0);
     gl_Position = vec4(ndc, 0.0, 1.0);
-    v_uv = local_uv;
+    v_uv = vec2(local_uv.x, 1.0 - local_uv.y);
 }
 """
 
