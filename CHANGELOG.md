@@ -2,6 +2,19 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — feat: GPU renderer presentation layout support
+
+- Added `PresentationLayout` integration to `PredatorPreyGpuRenderer` for Inspect-mode gutter layout
+- Added `layout` property with caching based on display size, world size, and inspect state
+- Added `u_play_scale`, `u_play_offset_x`, `u_play_offset_y` uniforms to radial, glyph, and line vertex shaders
+- In gutter mode, world content is transformed (scale + offset) to the play viewport; overlay textures use screen-sized viewport
+- Gutter background rects drawn as overlay textures at `right_gutter_rect` and `bottom_gutter_rect`
+- `_draw_ui` dispatches to `_draw_ui_gutter_overlay`, `_draw_ui_gutter_fallback`, `_draw_ui_overlay_textures`, or `_draw_ui_fallback` based on gutter mode and overlay texture support
+- HUD, inspect panel, graph, and action bar positioned at layout rects in gutter mode
+- `_draw_overlay_texture` accepts optional `viewport` parameter for screen-space positioning
+- `_ShaderProgram.use` uses top-level `glGetUniformLocation` instead of inline import
+- Non-gutter rendering is unchanged; layout collapses to fullscreen when Inspect is off
+
 ## [2026-05-25] — feat: add HUD focus selection and attention line
 
 - Added `HUDFocus` dataclass for lightweight organism-focus selection outside Inspect mode

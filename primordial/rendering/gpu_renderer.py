@@ -76,8 +76,11 @@ from OpenGL.GL import (
     glTexImage2D,
     glTexParameteri,
     glTexSubImage2D,
+    glGetUniformLocation,
+    glUniform1f,
     glUniform1i,
     glUniform2f,
+    glUniform4f,
     glUseProgram,
     glVertexAttribDivisor,
     glViewport,
@@ -86,6 +89,7 @@ from OpenGL.raw.GL.VERSION.GL_2_0 import (
     glVertexAttribPointer as raw_glVertexAttribPointer,
 )
 
+from .presentation_layout import PresentationLayout, compute_layout
 from .action_bar import ActionBar
 from .glyphs import build_glyph_surface
 from .help_overlay import HelpOverlay
@@ -152,13 +156,16 @@ layout (location = 3) in vec4 i_color;
 layout (location = 4) in vec2 i_shape;
 
 uniform vec2 u_viewport;
+uniform float u_play_scale;
+uniform float u_play_offset_x;
+uniform float u_play_offset_y;
 
 out vec2 v_local;
 out vec4 v_color;
 out vec2 v_shape;
 
 void main() {
-    vec2 pixel = i_center + (in_pos * i_radius);
+    vec2 pixel = (i_center + (in_pos * i_radius)) * u_play_scale + vec2(u_play_offset_x, u_play_offset_y);
     vec2 ndc = vec2((pixel.x / u_viewport.x) * 2.0 - 1.0,
                     1.0 - (pixel.y / u_viewport.y) * 2.0);
     gl_Position = vec4(ndc, 0.0, 1.0);
@@ -201,6 +208,9 @@ layout (location = 4) in vec4 i_uv;
 layout (location = 5) in float i_angle;
 
 uniform vec2 u_viewport;
+uniform float u_play_scale;
+uniform float u_play_offset_x;
+uniform float u_play_offset_y;
 
 out vec2 v_uv;
 out vec4 v_color;
@@ -209,7 +219,7 @@ void main() {
     float c = cos(i_angle);
     float s = sin(i_angle);
     mat2 rot = mat2(c, -s, s, c);
-    vec2 pixel = i_center + rot * (in_pos * i_size);
+    vec2 pixel = (i_center + rot * (in_pos * i_size)) * u_play_scale + vec2(u_play_offset_x, u_play_offset_y);
     vec2 ndc = vec2((pixel.x / u_viewport.x) * 2.0 - 1.0,
                     1.0 - (pixel.y / u_viewport.y) * 2.0);
     vec2 local_uv = in_pos * 0.5 + 0.5;
@@ -243,11 +253,15 @@ _LINE_VERTEX_SHADER = """
 layout (location = 0) in vec2 in_pos;
 layout (location = 1) in vec4 in_color;
 uniform vec2 u_viewport;
+uniform float u_play_scale;
+uniform float u_play_offset_x;
+uniform float u_play_offset_y;
 out vec4 v_color;
 
 void main() {
-    vec2 ndc = vec2((in_pos.x / u_viewport.x) * 2.0 - 1.0,
-                    1.0 - (in_pos.y / u_viewport.y) * 2.0);
+    vec2 pixel = in_pos * u_play_scale + vec2(u_play_offset_x, u_play_offset_y);
+    vec2 ndc = vec2((pixel.x / u_viewport.x) * 2.0 - 1.0,
+                    1.0 - (pixel.y / u_viewport.y) * 2.0);
     gl_Position = vec4(ndc, 0.0, 1.0);
     v_color = in_color;
 }
@@ -363,13 +377,7 @@ class _ShaderProgram:
 
     def use(self, width: int, height: int) -> None:
         glUseProgram(self.program)
-        location = 0
-        try:
-            from OpenGL.GL import glGetUniformLocation
-
-            location = glGetUniformLocation(self.program, "u_viewport")
-        except Exception:
-            location = -1
+        location = glGetUniformLocation(self.program, "u_viewport")
         if location >= 0:
             glUniform2f(location, float(width), float(height))
 
@@ -475,6 +483,8 @@ class PredatorPreyGpuRenderer:
             "inspect_graph": _OverlayTextureSlot(),
             "action_bar": _OverlayTextureSlot(),
             "fallback_ui": _OverlayTextureSlot(),
+            "gutter_right": _OverlayTextureSlot(),
+            "gutter_bottom": _OverlayTextureSlot(),
         }
         self._overlay_font = pygame.font.Font(None, 72)
         self._overlay_small_font = pygame.font.Font(None, 24)
@@ -495,6 +505,9 @@ class PredatorPreyGpuRenderer:
         self._zone_cache: tuple[RadialSprite, ...] = ()
         self._zone_label_cache_key: tuple[object, ...] | None = None
         self._zone_label_surface: pygame.Surface | None = None
+        self._layout_cache_key: tuple | None = None
+        self._layout: PresentationLayout | None = None
+        self._play_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._initialize_gl()
         self._log_gpu_coordinate_diagnostics("startup")
 
@@ -582,6 +595,25 @@ class PredatorPreyGpuRenderer:
         # Existing metrics/debug consumers use display_* for the GL drawable size.
         self.display_width = self.drawable_width
         self.display_height = self.drawable_height
+
+    @property
+    def layout(self) -> PresentationLayout:
+        dw = getattr(self, "display_width", self.width)
+        dh = getattr(self, "display_height", self.height)
+        w = self.width
+        h = self.height
+        inspect = self.inspect_mode.enabled
+        cache_key = (dw, dh, w, h, inspect)
+        if cache_key != getattr(self, "_layout_cache_key", None) or self._layout is None:
+            self._layout = compute_layout(
+                dw,
+                dh,
+                w,
+                h,
+                inspect_active=inspect,
+            )
+            self._layout_cache_key = cache_key
+        return self._layout
 
     def _current_gl_viewport(self) -> list[int] | None:
         try:
@@ -682,6 +714,8 @@ class PredatorPreyGpuRenderer:
             self.screen = screen
         self._refresh_presentation_sizes()
         self._ui_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._play_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self._layout_cache_key = None
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
         self._zone_cache_key = None
         self._zone_cache = ()
@@ -813,7 +847,12 @@ class PredatorPreyGpuRenderer:
         timings.update(self._snapshot_debug_metrics)
         bg = snapshot.background_color
         t0 = time.perf_counter()
-        glClearColor(bg[0], bg[1], bg[2], bg[3])
+        layout = self.layout
+        gutter_mode = layout.is_gutter_layout
+        if gutter_mode:
+            glClearColor(0.024, 0.039, 0.071, 1.0)
+        else:
+            glClearColor(bg[0], bg[1], bg[2], bg[3])
         glClear(GL_COLOR_BUFFER_BIT)
         timings["clear_ms"] = (time.perf_counter() - t0) * 1000.0
 
@@ -1149,6 +1188,31 @@ class PredatorPreyGpuRenderer:
             )
         return result
 
+    def _play_transform(self) -> tuple[float, float, float, int, int]:
+        layout = self.layout
+        if layout.is_gutter_layout:
+            vx, vy, vw, vh = layout.play_viewport_rect
+            scale = layout.scale
+            offset_x = float(vx) + layout.offset_x
+            offset_y = float(vy) + layout.offset_y
+            dw = getattr(self, "display_width", self.width)
+            dh = getattr(self, "display_height", self.height)
+            viewport_w = dw
+            viewport_h = dh
+        else:
+            scale = 1.0
+            offset_x = 0.0
+            offset_y = 0.0
+            viewport_w = self.width
+            viewport_h = self.height
+        return scale, offset_x, offset_y, viewport_w, viewport_h
+
+    def _set_play_uniforms(self, program: _ShaderProgram, viewport_w: int, viewport_h: int, scale: float, offset_x: float, offset_y: float) -> None:
+        program.use(viewport_w, viewport_h)
+        glUniform1f(glGetUniformLocation(program.program, "u_play_scale"), scale)
+        glUniform1f(glGetUniformLocation(program.program, "u_play_offset_x"), offset_x)
+        glUniform1f(glGetUniformLocation(program.program, "u_play_offset_y"), offset_y)
+
     def _draw_radials(self, sprites: tuple[RadialSprite, ...], *, blend: str) -> None:
         if not sprites:
             return
@@ -1169,7 +1233,8 @@ class PredatorPreyGpuRenderer:
             ],
             dtype=np.float32,
         )
-        self._radial_program.use(self.width, self.height)
+        scale, offset_x, offset_y, viewport_w, viewport_h = self._play_transform()
+        self._set_play_uniforms(self._radial_program, viewport_w, viewport_h, scale, offset_x, offset_y)
         glBindVertexArray(self._radial_vao)
         glBindBuffer(GL_ARRAY_BUFFER, self._radial_instance_vbo)
         glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_DYNAMIC_DRAW)
@@ -1194,11 +1259,10 @@ class PredatorPreyGpuRenderer:
                 ]
             )
         data = np.array(rows, dtype=np.float32)
-        self._glyph_program.use(self.width, self.height)
+        scale, offset_x, offset_y, viewport_w, viewport_h = self._play_transform()
+        self._set_play_uniforms(self._glyph_program, viewport_w, viewport_h, scale, offset_x, offset_y)
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, self._glyph_atlas.texture)
-        from OpenGL.GL import glGetUniformLocation
-
         glUniform1i(glGetUniformLocation(self._glyph_program.program, "u_texture"), 0)
         glBindVertexArray(self._glyph_vao)
         glBindBuffer(GL_ARRAY_BUFFER, self._glyph_instance_vbo)
@@ -1223,7 +1287,8 @@ class PredatorPreyGpuRenderer:
             ],
             dtype=np.float32,
         )
-        self._line_program.use(self.width, self.height)
+        scale, offset_x, offset_y, viewport_w, viewport_h = self._play_transform()
+        self._set_play_uniforms(self._line_program, viewport_w, viewport_h, scale, offset_x, offset_y)
         glBindVertexArray(self._line_vao)
         glBindBuffer(GL_ARRAY_BUFFER, self._line_vbo)
         glBufferData(GL_ARRAY_BUFFER, data.nbytes, data, GL_DYNAMIC_DRAW)
@@ -1279,88 +1344,275 @@ class PredatorPreyGpuRenderer:
             or self.tutorial_overlay.fade > 0
             or simulation.predator_prey_game_over_active
         )
+        layout = self.layout
+        gutter_mode = layout.is_gutter_layout
+
+        if gutter_mode and use_overlay_textures:
+            return self._draw_ui_gutter_overlay(simulation, timings, action_bar_context)
+
+        if gutter_mode:
+            return self._draw_ui_gutter_fallback(simulation, timings, action_bar_context)
+
         if use_overlay_textures:
-            current_tick = int(getattr(simulation, "_frame", 0))
-            debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
-            hud_refresh_bucket = current_tick // max(1, self._hud_refresh_interval_ticks(simulation))
+            return self._draw_ui_overlay_textures(simulation, timings, action_bar_context)
+
+        return self._draw_ui_fallback(simulation, timings, action_bar_context)
+
+    def _draw_gutter_rect(self, name: str, rect: tuple[int, int, int, int], color: tuple[int, int, int, int]) -> None:
+        rx, ry, rw, rh = rect
+        if rw <= 0 or rh <= 0:
+            return
+        surface = pygame.Surface((rw, rh), pygame.SRCALPHA)
+        surface.fill(color)
+        self._upload_overlay_surface(
+            name,
+            surface,
+            content_key=(name, rw, rh),
+        )
+        self._draw_overlay_texture(name, pygame.Rect(rx, ry, rw, rh), viewport=(self.display_width, self.display_height))
+
+    def _draw_ui_gutter_overlay(self, simulation, timings: dict[str, float], action_bar_context) -> dict[str, float]:
+        layout = self.layout
+        overlay_viewport = (self.display_width, self.display_height)
+
+        right_gx, right_gy, right_gw, right_gh = layout.right_gutter_rect
+        if right_gw > 0 and right_gh > 0:
+            self._draw_gutter_rect("gutter_right", layout.right_gutter_rect, (10, 18, 28, 240))
+
+        bot_gx, bot_gy, bot_gw, bot_gh = layout.bottom_gutter_rect
+        if bot_gw > 0 and bot_gh > 0:
+            self._draw_gutter_rect("gutter_bottom", layout.bottom_gutter_rect, (10, 18, 28, 240))
+
+        current_tick = int(getattr(simulation, "_frame", 0))
+        debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
+        hud_refresh_bucket = current_tick // max(1, self._hud_refresh_interval_ticks(simulation))
+
+        hud_x, hud_y, hud_w, hud_h = layout.hud_rect
+        if self.hud.visible and hud_w > 0 and hud_h > 0:
             t0 = time.perf_counter()
-            hud_surface, hud_pos = self.hud.build_panel_surface(
-                (self.width, self.height),
+            hud_surface, _ = self.hud.build_panel_surface(
+                (hud_w, hud_h),
                 simulation,
                 self.fps,
                 debug_lines=debug_lines,
                 refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
             )
             timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
-            if self.hud.visible and hud_surface.get_width() > 1 and hud_surface.get_height() > 1:
+            if hud_surface.get_width() > 1 and hud_surface.get_height() > 1:
                 timings["ui_upload_ms"] += self._upload_overlay_surface(
                     "hud",
                     hud_surface,
                     content_key=("hud", id(hud_surface), hud_surface.get_size()),
                 )
-                self._draw_overlay_texture(
-                    "hud",
-                    pygame.Rect(hud_pos[0], hud_pos[1], hud_surface.get_width(), hud_surface.get_height()),
-                )
+                self._draw_overlay_texture("hud", pygame.Rect(hud_x, hud_y, hud_surface.get_width(), hud_surface.get_height()), viewport=overlay_viewport)
                 timings["ui_overlay_count"] += 1.0
-                zone_label_surface = self._draw_zone_labels(simulation, target=None)
-                if zone_label_surface is not None:
-                    timings["ui_upload_ms"] += self._upload_overlay_surface(
-                        "zone_labels",
-                        zone_label_surface,
-                        content_key=("zone_labels", id(zone_label_surface), zone_label_surface.get_size()),
-                    )
-                    self._draw_overlay_texture(
-                        "zone_labels",
-                        pygame.Rect(0, 0, zone_label_surface.get_width(), zone_label_surface.get_height()),
-                    )
-                    timings["ui_overlay_count"] += 1.0
-            t0 = time.perf_counter()
-            inspect_overlay = build_inspect_overlay_surfaces(
-                target_width=self.width,
-                target_height=self.height,
-                inspect_mode=self.inspect_mode,
-                simulation=simulation,
-            ) if self.inspect_mode.enabled else None
-            timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
-            if inspect_overlay is not None:
-                timings.update(inspect_overlay["timings"])
-                panel_surface = inspect_overlay["panel_surface"]
-                panel_rect = inspect_overlay["panel_rect"]
-                graph_surface = inspect_overlay["graph_surface"]
-                graph_rect = inspect_overlay["graph_rect"]
-                if panel_surface is not None:
-                    timings["ui_upload_ms"] += self._upload_overlay_surface(
-                        "inspect_panel",
-                        panel_surface,
-                        content_key=("inspect_panel", id(panel_surface), panel_surface.get_size()),
-                    )
-                    self._draw_overlay_texture("inspect_panel", panel_rect)
-                    timings["ui_overlay_count"] += 1.0
-                if graph_surface is not None:
-                    timings["ui_upload_ms"] += self._upload_overlay_surface(
-                        "inspect_graph",
-                        graph_surface,
-                        content_key=("inspect_graph", id(graph_surface), graph_surface.get_size()),
-                    )
-                    self._draw_overlay_texture("inspect_graph", graph_rect)
-                    timings["ui_overlay_count"] += 1.0
-            t0 = time.perf_counter()
-            action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
-                (self.width, self.height),
-                action_bar_context,
-            )
-            timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
-            if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
-                timings["ui_upload_ms"] += self._upload_overlay_surface(
-                    "action_bar",
-                    action_bar_surface,
-                    content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
-                )
-                self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha)
-                timings["ui_overlay_count"] += 1.0
-            return timings
 
+        if self.inspect_mode.enabled:
+            right_gx, right_gy, right_gw, right_gh = layout.right_gutter_rect
+            if right_gw > 0 and right_gh > 0:
+                t0 = time.perf_counter()
+                inspect_overlay = build_inspect_overlay_surfaces(
+                    target_width=right_gw,
+                    target_height=right_gh,
+                    inspect_mode=self.inspect_mode,
+                    simulation=simulation,
+                )
+                timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
+                if inspect_overlay is not None:
+                    timings.update(inspect_overlay["timings"])
+                    panel_surface = inspect_overlay["panel_surface"]
+                    panel_rect = inspect_overlay["panel_rect"]
+                    graph_surface = inspect_overlay["graph_surface"]
+                    graph_rect = inspect_overlay["graph_rect"]
+                    if panel_surface is not None:
+                        screen_panel_rect = pygame.Rect(
+                            right_gx + panel_rect.x,
+                            right_gy + panel_rect.y,
+                            panel_rect.width,
+                            panel_rect.height,
+                        )
+                        timings["ui_upload_ms"] += self._upload_overlay_surface(
+                            "inspect_panel",
+                            panel_surface,
+                            content_key=("inspect_panel", id(panel_surface), panel_surface.get_size()),
+                        )
+                        self._draw_overlay_texture("inspect_panel", screen_panel_rect, viewport=overlay_viewport)
+                        timings["ui_overlay_count"] += 1.0
+                    if graph_surface is not None:
+                        graph_x, graph_y, graph_w, graph_h = layout.graph_rect
+                        if graph_w > 0 and graph_h > 0:
+                            screen_graph_rect = pygame.Rect(graph_x, graph_y, graph_rect.width, graph_rect.height)
+                            timings["ui_upload_ms"] += self._upload_overlay_surface(
+                                "inspect_graph",
+                                graph_surface,
+                                content_key=("inspect_graph", id(graph_surface), graph_surface.get_size()),
+                            )
+                            self._draw_overlay_texture("inspect_graph", screen_graph_rect, viewport=overlay_viewport)
+                            timings["ui_overlay_count"] += 1.0
+
+        t0 = time.perf_counter()
+        action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
+            (self.display_width, self.display_height),
+            action_bar_context,
+        )
+        timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
+        if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
+            timings["ui_upload_ms"] += self._upload_overlay_surface(
+                "action_bar",
+                action_bar_surface,
+                content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
+            )
+            self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha, viewport=overlay_viewport)
+            timings["ui_overlay_count"] += 1.0
+        return timings
+
+    def _draw_ui_gutter_fallback(self, simulation, timings: dict[str, float], action_bar_context) -> dict[str, float]:
+        layout = self.layout
+
+        right_gx, right_gy, right_gw, right_gh = layout.right_gutter_rect
+        if right_gw > 0 and right_gh > 0:
+            gutter_panel = pygame.Surface((right_gw, right_gh), pygame.SRCALPHA)
+            gutter_panel.fill((10, 18, 28, 240))
+            self._upload_overlay_surface("gutter_right", gutter_panel, content_key=("gutter_right", right_gw, right_gh))
+            self._draw_overlay_texture("gutter_right", pygame.Rect(right_gx, right_gy, right_gw, right_gh), viewport=(self.display_width, self.display_height))
+
+        bot_gx, bot_gy, bot_gw, bot_gh = layout.bottom_gutter_rect
+        if bot_gw > 0 and bot_gh > 0:
+            gutter_panel = pygame.Surface((bot_gw, bot_gh), pygame.SRCALPHA)
+            gutter_panel.fill((10, 18, 28, 240))
+            self._upload_overlay_surface("gutter_bottom", gutter_panel, content_key=("gutter_bottom", bot_gw, bot_gh))
+            self._draw_overlay_texture("gutter_bottom", pygame.Rect(bot_gx, bot_gy, bot_gw, bot_gh), viewport=(self.display_width, self.display_height))
+
+        if self.settings_overlay.visible or self.settings_overlay.fade > 0:
+            t0 = time.perf_counter()
+            self.settings_overlay.update()
+            ui_surf = pygame.Surface((self.display_width, self.display_height), pygame.SRCALPHA)
+            self.settings_overlay.draw(ui_surf)
+            self._upload_overlay_surface("fallback_ui", ui_surf, content_key=("fallback_ui_settings", time.perf_counter_ns()))
+            self._draw_overlay_texture("fallback_ui", pygame.Rect(0, 0, self.display_width, self.display_height), viewport=(self.display_width, self.display_height))
+            timings["settings_ms"] = (time.perf_counter() - t0) * 1000.0
+        if self.help_overlay.visible or self.help_overlay.fade > 0:
+            t0 = time.perf_counter()
+            self.help_overlay.update()
+            ui_surf = pygame.Surface((self.display_width, self.display_height), pygame.SRCALPHA)
+            self.help_overlay.draw(ui_surf)
+            self._upload_overlay_surface("fallback_ui", ui_surf, content_key=("fallback_ui_help", time.perf_counter_ns()))
+            self._draw_overlay_texture("fallback_ui", pygame.Rect(0, 0, self.display_width, self.display_height), viewport=(self.display_width, self.display_height))
+            timings["help_ms"] = (time.perf_counter() - t0) * 1000.0
+        if self.tutorial_overlay.visible or self.tutorial_overlay.fade > 0:
+            t0 = time.perf_counter()
+            self.tutorial_overlay.set_runtime_context(
+                hud_visible=self.hud.visible,
+                settings_visible=self.settings_overlay.visible,
+                help_visible=self.help_overlay.visible,
+                game_over_visible=simulation.predator_prey_game_over_active,
+            )
+            self.tutorial_overlay.update()
+            ui_surf = pygame.Surface((self.display_width, self.display_height), pygame.SRCALPHA)
+            self.tutorial_overlay.draw(ui_surf)
+            self._upload_overlay_surface("fallback_ui", ui_surf, content_key=("fallback_ui_tutorial", time.perf_counter_ns()))
+            self._draw_overlay_texture("fallback_ui", pygame.Rect(0, 0, self.display_width, self.display_height), viewport=(self.display_width, self.display_height))
+            timings["tutorial_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        t0 = time.perf_counter()
+        action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
+            (self.display_width, self.display_height),
+            action_bar_context,
+        )
+        timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
+        if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
+            self._upload_overlay_surface(
+                "action_bar",
+                action_bar_surface,
+                content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
+            )
+            self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha, viewport=(self.display_width, self.display_height))
+            timings["action_bar_count"] += 1.0
+        return timings
+
+    def _draw_ui_overlay_textures(self, simulation, timings: dict[str, float], action_bar_context) -> dict[str, float]:
+        current_tick = int(getattr(simulation, "_frame", 0))
+        debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
+        hud_refresh_bucket = current_tick // max(1, self._hud_refresh_interval_ticks(simulation))
+        t0 = time.perf_counter()
+        hud_surface, hud_pos = self.hud.build_panel_surface(
+            (self.width, self.height),
+            simulation,
+            self.fps,
+            debug_lines=debug_lines,
+            refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
+        )
+        timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
+        if self.hud.visible and hud_surface.get_width() > 1 and hud_surface.get_height() > 1:
+            timings["ui_upload_ms"] += self._upload_overlay_surface(
+                "hud",
+                hud_surface,
+                content_key=("hud", id(hud_surface), hud_surface.get_size()),
+            )
+            self._draw_overlay_texture(
+                "hud",
+                pygame.Rect(hud_pos[0], hud_pos[1], hud_surface.get_width(), hud_surface.get_height()),
+            )
+            timings["ui_overlay_count"] += 1.0
+            zone_label_surface = self._draw_zone_labels(simulation, target=None)
+            if zone_label_surface is not None:
+                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                    "zone_labels",
+                    zone_label_surface,
+                    content_key=("zone_labels", id(zone_label_surface), zone_label_surface.get_size()),
+                )
+                self._draw_overlay_texture(
+                    "zone_labels",
+                    pygame.Rect(0, 0, zone_label_surface.get_width(), zone_label_surface.get_height()),
+                )
+                timings["ui_overlay_count"] += 1.0
+        t0 = time.perf_counter()
+        inspect_overlay = build_inspect_overlay_surfaces(
+            target_width=self.width,
+            target_height=self.height,
+            inspect_mode=self.inspect_mode,
+            simulation=simulation,
+        ) if self.inspect_mode.enabled else None
+        timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
+        if inspect_overlay is not None:
+            timings.update(inspect_overlay["timings"])
+            panel_surface = inspect_overlay["panel_surface"]
+            panel_rect = inspect_overlay["panel_rect"]
+            graph_surface = inspect_overlay["graph_surface"]
+            graph_rect = inspect_overlay["graph_rect"]
+            if panel_surface is not None:
+                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                    "inspect_panel",
+                    panel_surface,
+                    content_key=("inspect_panel", id(panel_surface), panel_surface.get_size()),
+                )
+                self._draw_overlay_texture("inspect_panel", panel_rect)
+                timings["ui_overlay_count"] += 1.0
+            if graph_surface is not None:
+                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                    "inspect_graph",
+                    graph_surface,
+                    content_key=("inspect_graph", id(graph_surface), graph_surface.get_size()),
+                )
+                self._draw_overlay_texture("inspect_graph", graph_rect)
+                timings["ui_overlay_count"] += 1.0
+        t0 = time.perf_counter()
+        action_bar_surface, action_bar_rect, action_bar_alpha = self.action_bar.overlay_state(
+            (self.width, self.height),
+            action_bar_context,
+        )
+        timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
+        if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
+            timings["ui_upload_ms"] += self._upload_overlay_surface(
+                "action_bar",
+                action_bar_surface,
+                content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
+            )
+            self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha)
+            timings["ui_overlay_count"] += 1.0
+        return timings
+
+    def _draw_ui_fallback(self, simulation, timings: dict[str, float], action_bar_context) -> dict[str, float]:
         self._ui_surface.fill((0, 0, 0, 0))
         if self.hud.visible:
             self._draw_zone_labels(simulation, target=self._ui_surface)
@@ -1739,20 +1991,20 @@ class PredatorPreyGpuRenderer:
         rect: pygame.Rect,
         *,
         alpha: float = 1.0,
+        viewport: tuple[int, int] | None = None,
     ) -> None:
         slot = self._overlay_textures.get(name)
         if slot is None or slot.texture is None:
             return
-        from OpenGL.GL import glGetUniformLocation, glUniform1f, glUniform4f
-
+        vp = viewport or (self.width, self.height)
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, slot.texture)
         glUseProgram(self._overlay_texture_program.program)
         glUniform1i(glGetUniformLocation(self._overlay_texture_program.program, "u_texture"), 0)
         glUniform2f(
             glGetUniformLocation(self._overlay_texture_program.program, "u_viewport"),
-            float(self.width),
-            float(self.height),
+            float(vp[0]),
+            float(vp[1]),
         )
         glUniform4f(
             glGetUniformLocation(self._overlay_texture_program.program, "u_rect"),

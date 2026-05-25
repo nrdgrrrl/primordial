@@ -202,6 +202,8 @@ class RendererBackendTests(unittest.TestCase):
             "inspect_graph": _OverlayTextureSlot(),
             "action_bar": _OverlayTextureSlot(),
             "fallback_ui": _OverlayTextureSlot(),
+            "gutter_right": _OverlayTextureSlot(),
+            "gutter_bottom": _OverlayTextureSlot(),
         }
         renderer.hud = SimpleNamespace(
             visible=False,
