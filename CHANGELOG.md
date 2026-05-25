@@ -2,6 +2,50 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — feat: add reserved dashboard gutters for Inspect mode
+
+### PresentationLayout (primordial/rendering/presentation_layout.py)
+- New `PresentationLayout` frozen dataclass computing play viewport, right gutter, bottom gutter, HUD, graph, and action bar rects
+- `compute_layout()` factory: switches between fullscreen (no gutters) and analysis layout based on `inspect_active` flag
+- Graceful degradation: falls back to fullscreen when screen is too small for gutters
+- `world_to_screen()`, `screen_to_world()`, `contains_play_viewport()`, `contains_gutter()` coordinate methods
+- 45 tests covering computation, coordinate mapping, mode transitions, small windows, aspect ratio
+
+### Software renderer (primordial/rendering/renderer.py)
+- `layout` cached property recomputes on (display_width, display_height, width, height, inspect_mode.enabled) change
+- When `layout.is_gutter_layout`: renders sim content to `_play_surface`, composites into play viewport rect with aspect-preserving scale/offset
+- Opaque gutter backgrounds for right gutter (inspect panel) and bottom gutter (HUD + graphs)
+- Inspect panel built via `build_inspect_overlay_surfaces` for right-gutter-sized surface
+- Graph strip built for bottom-gutter graph rect dimensions
+- HUD rendered in bottom-left gutter rect
+- Action bar positioned above bottom gutter
+- Fullscreen overlays (settings, help, tutorial) drawn on top of gutter layout
+- Non-gutter (normal) rendering path preserved exactly
+
+### GPU renderer (primordial/rendering/gpu_renderer.py)
+- Same `layout` cached property and cache invalidation pattern
+- `u_play_scale`, `u_play_offset_x`, `u_play_offset_y` uniforms added to radial, glyph, and line vertex shaders
+- `_play_transform()` method returns (scale, offset_x, offset_y, viewport_w, viewport_h) for gutter vs normal mode
+- `_set_play_uniforms()` helper sets all shader uniforms and `glViewport` before world-content drawing
+- `_draw_ui_gutter_overlay()`: positions HUD, panel, and graph overlay textures at layout rects
+- `_draw_ui_gutter_fallback()`: fallback path with pygame surface composition at layout rects
+- `_draw_gutter_rect()`: draws opaque gutter backgrounds as overlay textures
+- Non-gutter rendering path preserved exactly; layout collapses to fullscreen when Inspect is off
+
+### Coordinate mapping (primordial/display/coordinates.py)
+- `window_to_world_with_layout()` uses `PresentationLayout.screen_to_world()` in gutter mode, falls back to `window_to_world()` in normal mode
+- Click selection in gutters: main.py click handler skips selection if `layout.contains_gutter(event.pos)`
+- HUD focus click selection in normal mode uses `window_to_world_with_layout()` for correct play-viewport mapping
+
+### Keyboard/mouse integration
+- Inspect-mode gutter click: maps through play viewport, skips gutter clicks
+- HUD focus click: maps through layout, only selects if click is in play viewport
+
+### Fullscreen/windowed transitions
+- `renderer.resize()` invalidates layout cache on both software and GPU renderers
+- Layout recomputes from display_width, display_height, width, height, and inspect state
+- Simulation world size unchanged — gutters are presentation-only
+
 ## [2026-05-25] — feat: add HUD focus selection and attention line
 
 - Added `PresentationLayout` integration to `PredatorPreyGpuRenderer` for Inspect-mode gutter layout

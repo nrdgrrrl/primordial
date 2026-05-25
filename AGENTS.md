@@ -59,7 +59,9 @@ primordial/                  ← project root
         ├── animations.py    # AnimationManager — death/birth animations, decoupled from sim
         ├── themes.py        # Theme ABC and implementations (OceanTheme, StubTheme)
         ├── hud.py           # HUD overlay for simulation stats
+        ├── hud_focus.py     # HUDFocus — lightweight organism-focus selection outside Inspect
         ├── inspect_mode.py  # Inspect Mode — creature card with phenotype observability
+        ├── presentation_layout.py  # PresentationLayout — reserved dashboard gutters for Inspect
         ├── help_overlay.py  # In-app help browser with section nav, search
         ├── help_layout.py   # Layout geometry for help overlay
         ├── help_navigation.py # Section selection, search, scroll state
@@ -123,6 +125,7 @@ All four simulation modes (`energy`, `predator_prey`, `boids`, `drift`) are now 
 10. **Event queue ownership** — `death_events` and `birth_events` are populated by simulation, cleared by renderer after processing
 11. **Glyph morphology is semantically meaningful** — creature visual traits (complexity, symmetry, stroke_scale, appendages, rotation_speed) are heritable genome traits that mutate, drift, and mark ancestry. Glyph appearance is the organism's phenotype. Do not treat glyph rendering as purely decorative or decoupled from simulation meaning. Changes to glyph generation must preserve determinism and recognizability of lineage resemblance. Visual changes that would make related organisms look unrelated, or that would add cosmetic effects not traceable to genome traits, break the visual-evolution contract.
 12. **Raw genome vs effective phenotype stays separate** — inherited values remain the authoritative genome. Ecological consequences from trait interactions must flow through the phenotype translation layer (`primordial/simulation/phenotype.py`), not by mutating genome values or smearing ad hoc epistasis math across the simulation loop. Inspect Mode must show both raw genome and effective phenotype; the `describe_phenotype_effect()` and `format_phenotype_modifiers()` helpers in `phenotype.py` are the canonical observability surface for UI code.
+13. **Presentation gutters do not resize the simulation** — `PresentationLayout` computes reserved dashboard gutters for Inspect mode, but the simulation world size is never changed by layout. The simulation continues to believe it runs at the same dimensions. All coordinate mapping between screen, viewport, and world uses `PresentationLayout.world_to_screen()` and `screen_to_world()`. Clicks in gutters must not select creatures. When Inspect mode exits, gutters disappear and the normal fullscreen playfield is restored.
 
 ## Config file and settings overlay
 
