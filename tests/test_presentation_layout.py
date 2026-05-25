@@ -283,3 +283,88 @@ class TestGraphStripRect:
     def test_empty_graph_area(self):
         gx, gy, gw, gh = compute_graph_strip_rect((0, 0, 0, 0))
         assert (gx, gy, gw, gh) == (0, 0, 0, 0)
+
+
+class TestCoordinateMappingWithLayout:
+    """window_to_world_with_layout and layout-aware coordinate mapping."""
+
+    def test_fallback_when_layout_is_none(self):
+        from primordial.display.coordinates import (
+            window_to_world,
+            window_to_world_with_layout,
+        )
+        from unittest.mock import MagicMock
+
+        sim = MagicMock()
+        sim.width = 1920
+        sim.height = 1080
+        result = window_to_world_with_layout(960.0, 540.0, sim, None)
+        expected = window_to_world(960.0, 540.0, sim)
+        assert result[0] == pytest.approx(expected[0])
+        assert result[1] == pytest.approx(expected[1])
+
+    def test_layout_normal_mode_uses_proportional(self):
+        from primordial.display.coordinates import (
+            window_to_world,
+            window_to_world_with_layout,
+        )
+        from unittest.mock import MagicMock
+
+        sim = MagicMock()
+        sim.width = 1920
+        sim.height = 1080
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=False)
+        result = window_to_world_with_layout(960.0, 540.0, sim, layout)
+        expected = window_to_world(960.0, 540.0, sim)
+        assert result[0] == pytest.approx(expected[0])
+        assert result[1] == pytest.approx(expected[1])
+
+    def test_layout_gutter_mode_uses_screen_to_world(self):
+        from primordial.display.coordinates import window_to_world_with_layout
+        from unittest.mock import MagicMock
+
+        sim = MagicMock()
+        sim.width = 1920
+        sim.height = 1080
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        result = window_to_world_with_layout(480.0, 270.0, sim, layout)
+        wx, wy = layout.screen_to_world(480.0, 270.0)
+        assert result[0] == pytest.approx(wx)
+        assert result[1] == pytest.approx(wy)
+
+
+class TestLayoutProperties:
+    """Layout property caching and invalidation."""
+
+    def test_layout_caches_on_same_parameters(self):
+        layout1 = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        layout2 = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        assert layout1 == layout2
+
+    def test_layout_changes_with_inspect_state(self):
+        layout_normal = compute_layout(1920, 1080, 1920, 1080, inspect_active=False)
+        layout_inspect = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        assert layout_normal.is_gutter_layout is False
+        assert layout_inspect.is_gutter_layout is True
+
+    def test_layout_changes_with_screen_size(self):
+        layout_a = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        layout_b = compute_layout(1280, 720, 1280, 720, inspect_active=True)
+        assert layout_a.play_viewport_rect != layout_b.play_viewport_rect
+        assert layout_a.scale != layout_b.scale
+
+    def test_very_small_window_graceful_degradation(self):
+        layout = compute_layout(400, 300, 400, 300, inspect_active=True)
+        if layout.is_gutter_layout:
+            vx, vy, vw, vh = layout.play_viewport_rect
+            assert vw >= 200
+            assert vh >= 150
+        else:
+            assert layout.play_viewport_rect == (0, 0, 400, 300)
+
+    def test_scale_preserves_aspect_ratio_in_gutter(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        vx, vy, vw, vh = layout.play_viewport_rect
+        aspect_viewport = vw / vh
+        aspect_world = 1920 / 1080
+        assert aspect_viewport == pytest.approx(aspect_world, abs=0.05)
