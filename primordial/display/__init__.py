@@ -6,6 +6,7 @@ from .coordinates import (
     _get_window_size,
     _log_inspect_click_diagnostics,
     window_to_world,
+    window_to_world_with_layout,
     world_to_window,
 )
 from .cursor import hide_runtime_cursor, restore_system_cursor, show_interactive_cursor
@@ -39,5 +40,6 @@ __all__ = [
     "restore_system_cursor",
     "show_interactive_cursor",
     "window_to_world",
+    "window_to_world_with_layout",
     "world_to_window",
 ]

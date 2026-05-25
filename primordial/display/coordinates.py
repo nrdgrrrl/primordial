@@ -8,6 +8,7 @@ import logging
 import pygame
 
 from primordial.rendering import renderer_backend_name
+from primordial.rendering.presentation_layout import PresentationLayout
 from primordial.simulation import Simulation
 
 from .mode import DEFAULT_WINDOWED_SIZE
@@ -42,6 +43,23 @@ def window_to_world(
         event_x * simulation.width / max(1, window_w),
         event_y * simulation.height / max(1, window_h),
     )
+
+
+def window_to_world_with_layout(
+    event_x: float,
+    event_y: float,
+    simulation: Simulation,
+    layout: PresentationLayout | None,
+) -> tuple[float, float]:
+    """Map SDL mouse-event coordinates into simulation world coordinates.
+
+    When a gutter layout is active, uses the play viewport coordinate transform
+    to map the click through the scaled/offset viewport. When the layout is
+    None or not in gutter mode, falls back to simple proportional mapping.
+    """
+    if layout is not None and layout.is_gutter_layout:
+        return layout.screen_to_world(event_x, event_y)
+    return window_to_world(event_x, event_y, simulation)
 
 
 def world_to_window(

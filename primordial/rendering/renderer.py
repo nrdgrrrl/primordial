@@ -664,14 +664,29 @@ class Renderer:
                     1,
                 )
 
-                from .inspect_mode import draw_inspect_overlay
-                inspect_target = pygame.Surface((right_gw, right_gh), pygame.SRCALPHA)
-                inspect_target.fill((0, 0, 0, 0))
-                inspect_result = draw_inspect_overlay(
-                    inspect_target, self.inspect_mode, simulation,
+                from .inspect_mode import build_inspect_overlay_surfaces
+                from .presentation_layout import compute_inspect_panel_placement as _compute_panel_place
+
+                creature = self.inspect_mode.get_focus_creature(simulation)
+                inspect_panel_t0 = time.perf_counter()
+                panel_overlay = build_inspect_overlay_surfaces(
+                    target_width=right_gw,
+                    target_height=right_gh,
+                    inspect_mode=self.inspect_mode,
+                    simulation=simulation,
+                    focus_creature=creature,
                 )
-                timings.update(inspect_result or {})
-                self.screen.blit(inspect_target, (right_gx, right_gy))
+                panel_surface = panel_overlay.get("panel_surface")
+                if panel_surface is not None:
+                    placement = _compute_panel_place(
+                        right_gw, right_gh,
+                        panel_surface.get_width(), panel_surface.get_height(),
+                    )
+                    self.screen.blit(
+                        panel_surface,
+                        (right_gx + placement[0], right_gy + placement[1]),
+                    )
+                timings["inspect_panel_ms"] = (time.perf_counter() - inspect_panel_t0) * 1000.0
             else:
                 timings.update(self._draw_inspect_overlay(simulation, self.screen) or {})
 
@@ -708,12 +723,20 @@ class Renderer:
                     )
                     self.screen.blit(hud_target, (hud_x, hud_y))
 
-                # Graph placeholder in gutter
                 graph_x, graph_y, graph_w, graph_h = layout.graph_rect
-                if graph_w > 0 and graph_h > 0:
-                    graph_target = pygame.Surface((graph_w, graph_h), pygame.SRCALPHA)
-                    graph_target.fill((0, 0, 0, 0))
-                    self.screen.blit(graph_target, (graph_x, graph_y))
+                if graph_w > 0 and graph_h > 0 and self.inspect_mode.enabled:
+                    from .inspect_mode import build_inspect_overlay_surfaces as _build_inspect_graphs
+                    graph_overlay = _build_inspect_graphs(
+                        target_width=graph_w,
+                        target_height=graph_h,
+                        inspect_mode=self.inspect_mode,
+                        simulation=simulation,
+                        focus_creature=creature if 'creature' in dir() else None,
+                    )
+                    graph_surface = graph_overlay.get("graph_surface")
+                    if graph_surface is not None:
+                        self.screen.blit(graph_surface, (graph_x, graph_y))
+                    timings.update(graph_overlay.get("timings", {}))
 
             # Action bar
             t0_action = time.perf_counter()

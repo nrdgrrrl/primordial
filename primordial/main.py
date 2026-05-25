@@ -36,6 +36,7 @@ from .display import (
     restore_system_cursor,
     show_interactive_cursor,
     window_to_world,
+    window_to_world_with_layout,
 )
 from .input import handle_keydown
 from .rendering import create_renderer, display_flags_for_settings
@@ -382,21 +383,31 @@ def main(
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if renderer.inspect_mode.enabled and scr_args.mode == "normal":
-                    world_x, world_y = window_to_world(event.pos[0], event.pos[1], simulation)
-                    renderer.inspect_mode.select_at_world_pos(world_x, world_y, simulation)
-                    mark_debug_click = getattr(renderer, "mark_debug_inspect_click", None)
-                    if callable(mark_debug_click):
-                        mark_debug_click(world_x, world_y)
-                    if logger.isEnabledFor(logging.DEBUG):
-                        _log_inspect_click_diagnostics(
-                            event.pos,
-                            (world_x, world_y),
-                            simulation,
-                            renderer,
-                        )
+                    layout = getattr(renderer, "layout", None)
+                    world_x, world_y = window_to_world_with_layout(
+                        event.pos[0], event.pos[1], simulation, layout
+                    )
+                    if layout is not None and layout.is_gutter_layout and layout.contains_gutter(event.pos[0], event.pos[1]):
+                        pass
+                    else:
+                        renderer.inspect_mode.select_at_world_pos(world_x, world_y, simulation)
+                        mark_debug_click = getattr(renderer, "mark_debug_inspect_click", None)
+                        if callable(mark_debug_click):
+                            mark_debug_click(world_x, world_y)
+                        if logger.isEnabledFor(logging.DEBUG):
+                            _log_inspect_click_diagnostics(
+                                event.pos,
+                                (world_x, world_y),
+                                simulation,
+                                renderer,
+                            )
                 elif renderer.hud.visible and scr_args.mode == "normal":
-                    world_x, world_y = window_to_world(event.pos[0], event.pos[1], simulation)
-                    renderer.hud_focus.select_at_world_pos(world_x, world_y, simulation)
+                    layout = getattr(renderer, "layout", None)
+                    world_x, world_y = window_to_world_with_layout(
+                        event.pos[0], event.pos[1], simulation, layout
+                    )
+                    if layout is None or not layout.is_gutter_layout or layout.contains_play_viewport(event.pos[0], event.pos[1]):
+                        renderer.hud_focus.select_at_world_pos(world_x, world_y, simulation)
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_p:
