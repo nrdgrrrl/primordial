@@ -2,17 +2,17 @@
 
 All notable changes to Primordial are documented in this file.
 
-## [2026-05-25] — feat: add PresentationLayout gutter rendering to software renderer
+## [2026-05-25] — feat: add HUD focus selection and attention line
 
-- Added `PresentationLayout` integration to the software renderer (`renderer.py`). When Inspect mode is active and `layout.is_gutter_layout` is True, the draw method now:
-  - Renders all simulation content (background, zones, food, trails, creatures, animations) onto an intermediate `_play_surface` at world dimensions
-  - Composites the play surface into the play viewport rect on screen with aspect-ratio–preserving scaling
-  - Draws opaque gutter backgrounds for the right gutter (inspect panel) and bottom gutter (HUD, graphs)
-  - Draws the inspect panel in the right gutter, HUD in the bottom-left gutter, and a graph placeholder in the bottom-center/right gutter
-  - Draws the action bar and fullscreen overlays (settings, help, tutorial) directly on screen
-- The normal (non-gutter) rendering path is preserved exactly as before — no behavior change when Inspect is off
-- Added `layout` cached property to `Renderer` that recomputes when screen size, world size, or inspect state changes
-- Simulation world size is not modified — the layout is purely presentational
+- Added `HUDFocus` dataclass for lightweight organism-focus selection outside Inspect mode
+- Click-to-select nearest organism when HUD is visible and Inspect is not active
+- `C` key clears HUD focus; HUD toggle (`U`) clears focus when hiding
+- Attention line drawn for HUD-focus creatures (cached 8-tick interval)
+- GPU renderer: `LineSprite`-based HUD focus highlight
+- Action bar shows "Click: Focus organism" and "C: Clear focus" when HUD is visible
+- Cursor shows/hides on HUD toggle, shows on Inspect entry, hides on exit
+- Inspect mode clears HUD focus on entry
+- 21 tests for focus selection, attention cache, and action bar context
 
 ## [2026-05-25] — feat: add HUD focus selection and attention line
 
