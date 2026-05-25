@@ -569,9 +569,11 @@ class PredatorPreyGpuRenderer:
     def set_theme(self, theme_name: str) -> None:
         self.theme = OceanTheme()
         self.ambient_particles = self.theme.create_ambient_particles(self.width, self.height, 30)
+        self.inspect_mode.invalidate_render_caches()
 
     def set_mode(self, mode_name: str) -> None:
         _ = mode_name
+        self.inspect_mode.invalidate_render_caches()
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         self._external_debug_metrics = metrics
@@ -600,6 +602,7 @@ class PredatorPreyGpuRenderer:
         self._zone_cache = ()
         self._zone_label_cache_key = None
         self._zone_label_surface = None
+        self.inspect_mode.invalidate_render_caches()
         self._initialize_gl()
         self._log_gpu_coordinate_diagnostics("resize")
 
@@ -612,6 +615,7 @@ class PredatorPreyGpuRenderer:
         self._zone_label_cache_key = None
         self._zone_label_surface = None
         self._debug_inspect_click_marker = None
+        self.inspect_mode.invalidate_render_caches()
         self.predation_effect_manager = PredationEffectManager(
             enabled=bool(getattr(self.settings, "predation_kill_effects_enabled", True)),
             intensity=float(getattr(self.settings, "predation_kill_effect_intensity", 1.0)),
@@ -662,7 +666,7 @@ class PredatorPreyGpuRenderer:
         self._update_fps(current_time)
         observe_inspect = getattr(self.inspect_mode, "observe_simulation", None)
         if callable(observe_inspect):
-            observe_inspect(simulation)
+            timings.update(observe_inspect(simulation) or {})
         resolve_death_color = lambda event: self.theme.resolve_color_for_species(
             str(event.get("species", "none")),
             float(event["genome"].hue),
@@ -764,8 +768,8 @@ class PredatorPreyGpuRenderer:
         timings["inspect_highlight_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
-        self._draw_ui(simulation)
-        timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
+        timings.update(self._draw_ui(simulation))
+        timings["ui_ms"] = (time.perf_counter() - t0) * 1000.0
 
         self._drain_visual_events(simulation)
         timings.setdefault("events_ms", 0.0)
@@ -1089,7 +1093,22 @@ class PredatorPreyGpuRenderer:
         glLineWidth(width)
         glDrawArrays(GL_LINES, 0, len(lines) * 2)
 
-    def _draw_ui(self, simulation) -> None:
+    def _draw_ui(self, simulation) -> dict[str, float]:
+        timings = {
+            "hud_ms": 0.0,
+            "overlay_ms": 0.0,
+            "inspect_ms": 0.0,
+            "inspect_panel_ms": 0.0,
+            "inspect_panel_layout_ms": 0.0,
+            "inspect_graph_ms": 0.0,
+            "inspect_graph_static_ms": 0.0,
+            "inspect_graph_dynamic_ms": 0.0,
+            "settings_ms": 0.0,
+            "help_ms": 0.0,
+            "tutorial_ms": 0.0,
+            "action_bar_ms": 0.0,
+            "ui_upload_ms": 0.0,
+        }
         action_bar_context = self.action_bar.build_context(
             simulation,
             inspect_enabled=self.inspect_mode.enabled,
@@ -1110,22 +1129,33 @@ class PredatorPreyGpuRenderer:
             or self.action_bar.opacity(action_bar_context) > 0.0
         )
         if not should_draw:
-            return
+            return timings
         self._ui_surface.fill((0, 0, 0, 0))
         if self.hud.visible:
             self._draw_zone_labels(simulation)
         debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
+        t0 = time.perf_counter()
         self.hud.render(self._ui_surface, simulation, self.fps, debug_lines=debug_lines)
+        timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
         if simulation.predator_prey_game_over_active:
+            t0 = time.perf_counter()
             self._draw_game_over_overlay(simulation)
-        self._draw_inspect_overlay(simulation)
+            timings["overlay_ms"] = (time.perf_counter() - t0) * 1000.0
+        t0 = time.perf_counter()
+        timings.update(self._draw_inspect_overlay(simulation) or {})
+        timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
+            t0 = time.perf_counter()
             self.settings_overlay.update()
             self.settings_overlay.draw(self._ui_surface)
+            timings["settings_ms"] = (time.perf_counter() - t0) * 1000.0
         if self.help_overlay.visible or self.help_overlay.fade > 0:
+            t0 = time.perf_counter()
             self.help_overlay.update()
             self.help_overlay.draw(self._ui_surface)
+            timings["help_ms"] = (time.perf_counter() - t0) * 1000.0
         if self.tutorial_overlay.visible or self.tutorial_overlay.fade > 0:
+            t0 = time.perf_counter()
             self.tutorial_overlay.set_runtime_context(
                 hud_visible=self.hud.visible,
                 settings_visible=self.settings_overlay.visible,
@@ -1134,8 +1164,14 @@ class PredatorPreyGpuRenderer:
             )
             self.tutorial_overlay.update()
             self.tutorial_overlay.draw(self._ui_surface)
+            timings["tutorial_ms"] = (time.perf_counter() - t0) * 1000.0
+        t0 = time.perf_counter()
         self.action_bar.draw(self._ui_surface, action_bar_context)
+        timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
+        t0 = time.perf_counter()
         self._draw_surface_texture(self._ui_surface)
+        timings["ui_upload_ms"] = (time.perf_counter() - t0) * 1000.0
+        return timings
 
     def _draw_zone_labels(self, simulation) -> None:
         """Draw the recovered HUD-gated environmental zone labels on the UI layer."""
@@ -1165,11 +1201,11 @@ class PredatorPreyGpuRenderer:
         if self._zone_label_surface is not None:
             self._ui_surface.blit(self._zone_label_surface, (0, 0))
 
-    def _draw_inspect_overlay(self, simulation) -> None:
+    def _draw_inspect_overlay(self, simulation) -> dict[str, float]:
         """Draw the creature card overlay on the UI surface."""
         from .inspect_mode import draw_inspect_overlay
 
-        draw_inspect_overlay(self._ui_surface, self.inspect_mode, simulation)
+        return draw_inspect_overlay(self._ui_surface, self.inspect_mode, simulation)
 
     def _build_inspect_highlight(self, simulation, anim_time: float) -> list[LineSprite]:
         """Build line sprites for the inspect selection ring and attention target."""
@@ -1292,6 +1328,14 @@ class PredatorPreyGpuRenderer:
                 creatures=timings.get("creatures_ms", 0.0),
                 attacks=timings.get("attacks_ms", 0.0),
                 hud=timings.get("hud_ms", 0.0),
+            ),
+            "Dbg ui: inspect {inspect:.2f}  panel {panel:.2f}  graph {graph:.2f}  "
+            "sample {sample:.2f}  upload {upload:.2f}".format(
+                inspect=timings.get("inspect_ms", 0.0),
+                panel=timings.get("inspect_panel_ms", 0.0),
+                graph=timings.get("inspect_graph_ms", 0.0),
+                sample=timings.get("inspect_lineage_sample_ms", 0.0),
+                upload=timings.get("ui_upload_ms", 0.0),
             ),
         ]
         kin_count = int(timings.get("kin_line_count", 0.0))

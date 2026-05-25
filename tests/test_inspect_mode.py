@@ -10,6 +10,8 @@ import pygame
 
 from primordial.rendering.inspect_mode import (
     InspectMode,
+    _build_graph_strip_surface,
+    _build_inspect_panel_surface,
     build_creature_card,
     build_creature_summary,
     build_inspect_panel_lines,
@@ -523,6 +525,98 @@ class TestInspectHistoryAndDeathHandling(unittest.TestCase):
         draw_inspect_overlay(surface, mode, sim)
 
         self.assertGreater(surface.get_bounding_rect(min_alpha=1).width, 0)
+
+    def test_graph_surface_cache_reuses_until_history_changes(self):
+        creature = _make_creature(energy=0.4, lineage_id=5)
+        sim = _make_simulation([creature])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(creature.x, creature.y, sim)
+        sim._frame = 8
+        mode.observe_simulation(sim)
+
+        first_surface, _first_rect, first_metrics = _build_graph_strip_surface(
+            target_width=960,
+            target_height=540,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+        second_surface, _second_rect, second_metrics = _build_graph_strip_surface(
+            target_width=960,
+            target_height=540,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+
+        self.assertIs(first_surface, second_surface)
+        self.assertEqual(first_metrics["inspect_graph_cache_hit"], 0.0)
+        self.assertEqual(second_metrics["inspect_graph_cache_hit"], 1.0)
+
+        sim._frame = 16
+        creature.energy = 0.7
+        mode.observe_simulation(sim)
+        third_surface, _third_rect, third_metrics = _build_graph_strip_surface(
+            target_width=960,
+            target_height=540,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+
+        self.assertIsNot(third_surface, second_surface)
+        self.assertGreater(third_metrics["inspect_graph_dynamic_ms"], 0.0)
+
+    def test_panel_surface_cache_reuses_until_refresh_bucket_changes(self):
+        creature = _make_creature(energy=0.4, lineage_id=7)
+        sim = _make_simulation([creature])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(creature.x, creature.y, sim)
+        sim._frame = 12
+        mode.observe_simulation(sim)
+
+        first_surface, first_metrics = _build_inspect_panel_surface(
+            target_width=960,
+            target_height=540,
+            inspect_mode=mode,
+            simulation=sim,
+            focus_creature=creature,
+        )
+        second_surface, second_metrics = _build_inspect_panel_surface(
+            target_width=960,
+            target_height=540,
+            inspect_mode=mode,
+            simulation=sim,
+            focus_creature=creature,
+        )
+
+        self.assertIs(first_surface, second_surface)
+        self.assertGreater(first_metrics["inspect_panel_layout_ms"], 0.0)
+        self.assertEqual(second_metrics["inspect_panel_layout_ms"], 0.0)
+
+        resized_surface, resized_metrics = _build_inspect_panel_surface(
+            target_width=1280,
+            target_height=720,
+            inspect_mode=mode,
+            simulation=sim,
+            focus_creature=creature,
+        )
+
+        self.assertIsNot(resized_surface, second_surface)
+        self.assertGreater(resized_metrics["inspect_panel_layout_ms"], 0.0)
+
+    def test_disabled_inspect_does_not_update_histories_or_caches(self):
+        creature = _make_creature()
+        sim = _make_simulation([creature])
+        mode = InspectMode(enabled=False)
+        mode.selected_creature_id = id(creature)
+        mode.selected_lineage_id = creature.lineage_id
+
+        metrics = mode.observe_simulation(sim)
+
+        self.assertEqual(len(mode._energy_history), 0)
+        self.assertEqual(len(mode._lineage_population_history), 0)
+        self.assertIsNone(mode._panel_surface_cache)
+        self.assertIsNone(mode._graph_surface_cache)
+        self.assertGreaterEqual(metrics["inspect_observe_ms"], 0.0)
+        self.assertEqual(metrics["inspect_lineage_sample_ms"], 0.0)
 
 
 class TestBuildCreatureCard(unittest.TestCase):

@@ -108,6 +108,11 @@ class ActionBar:
         self.last_mouse_motion_time: float | None = None
         self._font = pygame.font.Font(None, 22)
         self._badge_font = pygame.font.Font(None, 22)
+        self._panel_surface_cache: pygame.Surface | None = None
+        self._panel_surface_cache_key: tuple[object, ...] | None = None
+        self._layout_cache: ActionBarLayout | None = None
+        self._layout_cache_key: tuple[object, ...] | None = None
+        self._item_surface_cache: dict[tuple[str, str], tuple[pygame.Surface, int]] = {}
 
     def set_runtime_mode(self, mode: str) -> None:
         """Store the high-level runtime mode for suppression decisions."""
@@ -186,6 +191,12 @@ class ActionBar:
         items: tuple[ShortcutHint, ...],
     ) -> ActionBarLayout:
         """Compute the panel and row geometry for the current command set."""
+        cache_key = (
+            screen_size,
+            tuple((item.key_label, item.action_label) for item in items),
+        )
+        if cache_key == self._layout_cache_key and self._layout_cache is not None:
+            return self._layout_cache
         screen_width, screen_height = screen_size
         max_width = max(_BAR_MIN_WIDTH, int(screen_width * _BAR_MAX_WIDTH_RATIO))
         available_width = max(_BAR_MIN_WIDTH, max_width - (_BAR_PADDING_X * 2))
@@ -238,7 +249,10 @@ class ActionBar:
             )
             y += row_height + _ROW_GAP
 
-        return ActionBarLayout(panel_rect=panel_rect, row_rects=tuple(row_rects))
+        layout = ActionBarLayout(panel_rect=panel_rect, row_rects=tuple(row_rects))
+        self._layout_cache_key = cache_key
+        self._layout_cache = layout
+        return layout
 
     def draw(
         self,
@@ -254,10 +268,25 @@ class ActionBar:
             return
 
         layout = self.calculate_layout(surface.get_size(), items)
-        panel_surface = pygame.Surface(layout.panel_rect.size, pygame.SRCALPHA)
-        self._draw_panel(panel_surface, layout, items)
+        panel_surface = self._get_panel_surface(layout, items)
         panel_surface.set_alpha(int(round(255 * alpha)))
         surface.blit(panel_surface, layout.panel_rect.topleft)
+
+    def _get_panel_surface(
+        self,
+        layout: ActionBarLayout,
+        items: tuple[ShortcutHint, ...],
+    ) -> pygame.Surface:
+        cache_key = (
+            layout.panel_rect.size,
+            tuple((item.key_label, item.action_label) for item in items),
+        )
+        if cache_key != self._panel_surface_cache_key or self._panel_surface_cache is None:
+            panel_surface = pygame.Surface(layout.panel_rect.size, pygame.SRCALPHA)
+            self._draw_panel(panel_surface, layout, items)
+            self._panel_surface_cache = panel_surface
+            self._panel_surface_cache_key = cache_key
+        return self._panel_surface_cache
 
     def _draw_panel(
         self,
@@ -309,38 +338,68 @@ class ActionBar:
         item: ShortcutHint,
         rect: pygame.Rect,
     ) -> None:
-        badge_surface = self._badge_font.render(item.key_label, True, (222, 250, 255))
-        label_surface = self._font.render(item.action_label, True, (214, 228, 235))
+        item_surface, badge_width = self._get_item_surface(item)
         badge_rect = pygame.Rect(
             rect.x,
-            rect.y + max(0, (rect.height - (badge_surface.get_height() + _BADGE_PAD_Y * 2)) // 2),
-            badge_surface.get_width() + (_BADGE_PAD_X * 2),
+            rect.y + max(0, (rect.height - item_surface.get_height()) // 2),
+            badge_width,
+            item_surface.get_height(),
+        )
+        surface.blit(item_surface, (rect.x, badge_rect.y))
+
+    def _get_item_surface(self, item: ShortcutHint) -> tuple[pygame.Surface, int]:
+        cache_key = (item.key_label, item.action_label)
+        cached = self._item_surface_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        badge_surface = self._badge_font.render(item.key_label, True, (222, 250, 255))
+        label_surface = self._font.render(item.action_label, True, (214, 228, 235))
+        badge_width = badge_surface.get_width() + (_BADGE_PAD_X * 2)
+        item_surface = pygame.Surface(
+            (
+                badge_width + _ITEM_GAP + label_surface.get_width(),
+                max(
+                    badge_surface.get_height() + (_BADGE_PAD_Y * 2),
+                    label_surface.get_height(),
+                ),
+            ),
+            pygame.SRCALPHA,
+        )
+        badge_rect = pygame.Rect(
+            0,
+            max(0, (item_surface.get_height() - (badge_surface.get_height() + _BADGE_PAD_Y * 2)) // 2),
+            badge_width,
             badge_surface.get_height() + (_BADGE_PAD_Y * 2),
         )
         pygame.draw.rect(
-            surface,
+            item_surface,
             (28, 84, 96, 220),
             badge_rect,
             border_radius=10,
         )
         pygame.draw.rect(
-            surface,
+            item_surface,
             (118, 236, 255, 140),
             badge_rect,
             width=1,
             border_radius=10,
         )
-        surface.blit(
+        item_surface.blit(
             badge_surface,
             (
                 badge_rect.x + _BADGE_PAD_X,
                 badge_rect.y + _BADGE_PAD_Y,
             ),
         )
-
         label_x = badge_rect.right + _ITEM_GAP
-        label_y = rect.y + max(0, (rect.height - label_surface.get_height()) // 2)
-        surface.blit(label_surface, (label_x, label_y))
+        label_y = max(0, (item_surface.get_height() - label_surface.get_height()) // 2)
+        item_surface.blit(label_surface, (label_x, label_y))
+        if len(self._item_surface_cache) >= 48:
+            first_key = next(iter(self._item_surface_cache))
+            self._item_surface_cache.pop(first_key)
+        cached = (item_surface, badge_width)
+        self._item_surface_cache[cache_key] = cached
+        return cached
 
     def _item_width(self, item: ShortcutHint) -> int:
         badge_width = self._badge_font.size(item.key_label)[0] + (_BADGE_PAD_X * 2)

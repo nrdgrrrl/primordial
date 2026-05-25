@@ -74,6 +74,25 @@ class RendererCacheTests(unittest.TestCase):
         self.assertIsNone(renderer._zone_label_surf_cached)
         self.assertIsNone(renderer._static_background_surf_cached)
 
+    def test_renderer_resize_clears_inspect_panel_and_graph_caches(self) -> None:
+        settings = self._build_settings()
+        screen = pygame.display.set_mode((320, 180))
+        simulation = Simulation(320, 180, settings, seed=12345)
+        renderer = Renderer(screen, settings)
+        renderer.inspect_mode.enabled = True
+        renderer.inspect_mode._panel_surface_cache = pygame.Surface((10, 10), pygame.SRCALPHA)
+        renderer.inspect_mode._panel_cache_key = ("panel",)
+        renderer.inspect_mode._graph_surface_cache = pygame.Surface((10, 10), pygame.SRCALPHA)
+        renderer.inspect_mode._graph_cache_key = ("graph",)
+
+        resized_screen = pygame.display.set_mode((400, 240))
+        renderer.resize(400, 240, screen=resized_screen)
+
+        self.assertIsNone(renderer.inspect_mode._panel_surface_cache)
+        self.assertIsNone(renderer.inspect_mode._panel_cache_key)
+        self.assertIsNone(renderer.inspect_mode._graph_surface_cache)
+        self.assertIsNone(renderer.inspect_mode._graph_cache_key)
+
     def test_rotated_glyph_cache_reuses_steady_state_rotation(self) -> None:
         theme = OceanTheme()
         creature = Creature(x=80.0, y=60.0, genome=Genome.random())

@@ -287,12 +287,14 @@ class Renderer:
         )
         self._is_stub_theme = theme_name != "ocean"
         self._invalidate_static_caches()
+        self.inspect_mode.invalidate_render_caches()
 
     def set_mode(self, mode_name: str) -> None:
         """Update stub detection when sim mode changes."""
         _IMPLEMENTED_MODES = {"energy", "predator_prey", "boids", "drift"}
         self._is_stub_mode = mode_name not in _IMPLEMENTED_MODES
         self._invalidate_static_caches()
+        self.inspect_mode.invalidate_render_caches()
 
     def set_external_debug_metrics(self, metrics: dict[str, float]) -> None:
         """Attach outer-loop timing metrics for debug and summary consumers."""
@@ -319,6 +321,7 @@ class Renderer:
         self._trail_layer = TrailLayer(self.width, self.height)
         self._shimmer_states.clear()
         self._invalidate_static_caches()
+        self.inspect_mode.invalidate_render_caches()
         self.ambient_particles = self.theme.create_ambient_particles(
             self.width, self.height, 30
         )
@@ -343,6 +346,7 @@ class Renderer:
         self._population_history.clear()
         self._external_debug_metrics = {}
         self._invalidate_static_caches()
+        self.inspect_mode.invalidate_render_caches()
         if isinstance(self.theme, OceanTheme):
             self.theme.invalidate_runtime_caches()
             self.theme._trail_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -412,7 +416,7 @@ class Renderer:
         self._population_history.append(simulation.population)
         observe_inspect = getattr(self.inspect_mode, "observe_simulation", None)
         if callable(observe_inspect):
-            observe_inspect(simulation)
+            timings.update(observe_inspect(simulation) or {})
         is_frozen_world = simulation.paused or simulation.predator_prey_game_over_active
         if not is_frozen_world:
             self._frozen_link_surf_cached = None
@@ -579,7 +583,7 @@ class Renderer:
         timings["overlay_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
-        self._draw_inspect_overlay(simulation, target)
+        timings.update(self._draw_inspect_overlay(simulation, target) or {})
         timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
@@ -716,11 +720,11 @@ class Renderer:
 
     def _draw_inspect_overlay(
         self, simulation: "Simulation", target: pygame.Surface,
-    ) -> None:
+    ) -> dict[str, float]:
         """Draw the creature card overlay when inspect mode is active."""
         from .inspect_mode import draw_inspect_overlay
 
-        draw_inspect_overlay(target, self.inspect_mode, simulation)
+        return draw_inspect_overlay(target, self.inspect_mode, simulation)
 
     def _draw_predator_prey_game_over_overlay(self, simulation: "Simulation") -> None:
         """Tint the screen red and present restart details after ecological collapse."""
@@ -1540,6 +1544,14 @@ class Renderer:
                 attacks=timings.get("attacks_ms", 0.0),
                 anim=timings.get("anim_ms", 0.0),
                 hud=timings.get("hud_ms", 0.0),
+            ),
+            "Dbg ui: inspect {inspect:.2f}  panel {panel:.2f}  graph {graph:.2f}  "
+            "sample {sample:.2f}  bar {bar:.2f}".format(
+                inspect=timings.get("inspect_ms", 0.0),
+                panel=timings.get("inspect_panel_ms", 0.0),
+                graph=timings.get("inspect_graph_ms", 0.0),
+                sample=timings.get("inspect_lineage_sample_ms", 0.0),
+                bar=timings.get("action_bar_ms", 0.0),
             ),
         ]
 

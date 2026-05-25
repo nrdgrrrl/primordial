@@ -680,7 +680,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-25] — feat: add inspect follow modes and lineage graphs",
+            "## [2026-05-25] — perf: cache inspect UI surfaces and add fine-grained timings",
         )
         self.assertEqual(
             changelog.count("## [2026-05-25] — feat: add inspect follow modes and lineage graphs"),

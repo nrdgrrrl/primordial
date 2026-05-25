@@ -2,6 +2,13 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — perf: cache inspect UI surfaces and add fine-grained timings
+
+- Added fine-grained Inspect/UI timing breakdowns in both renderer paths so debug output and profiling runs can separate simulation stepping, inspect lineage sampling, inspect panel layout, inspect graph rendering, HUD work, action-bar work, and GPU UI upload/compositing cost.
+- Reworked Inspect Mode rendering to cache the side panel and split the bottom graph strip into static and dynamic surfaces, with bounded histories, pixel-width downsampling, and targeted invalidation on selection, lineage, sample, resize, and mode changes.
+- Cached action-bar panel/item surfaces to avoid repeated font work for static shortcut labels, and cleared inspect render caches on renderer resize/reset so windowed/fullscreen transitions stay correct.
+- Added focused tests for graph/panel cache reuse and invalidation, bounded history guardrails, disabled-inspect no-op behavior, and renderer resize clearing inspect caches.
+
 ## [2026-05-25] — feat: add inspect follow modes and lineage graphs
 
 - Expanded Inspect Mode playback into three explicit sub-modes: `Paused`, `Slow follow`, and `Normal follow`, with `M` preserving pause/slow behavior and `N` adding normal-speed follow without dropping the selected organism.

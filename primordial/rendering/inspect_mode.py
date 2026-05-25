@@ -9,6 +9,7 @@ display purposes.
 from __future__ import annotations
 
 import math
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Mapping
@@ -38,6 +39,7 @@ _PLAYBACK_SLOW = "slow"
 _PLAYBACK_NORMAL = "normal"
 _INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS = 8
 _INSPECT_HISTORY_MAX_SAMPLES = 180
+_INSPECT_PANEL_REFRESH_INTERVAL_TICKS = 6
 
 
 @dataclass
@@ -81,8 +83,14 @@ class InspectMode:
         default_factory=lambda: deque(maxlen=_INSPECT_HISTORY_MAX_SAMPLES),
         repr=False,
     )
+    _panel_surface_cache: object | None = field(default=None, repr=False)
+    _panel_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
     _graph_surface_cache: object | None = field(default=None, repr=False)
     _graph_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
+    _graph_static_surface_cache: object | None = field(default=None, repr=False)
+    _graph_static_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
+    _graph_dynamic_surface_cache: object | None = field(default=None, repr=False)
+    _graph_dynamic_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
 
     # ── toggle ───────────────────────────────────────────────────────
 
@@ -117,6 +125,7 @@ class InspectMode:
         else:
             self.pause_mode = _PLAYBACK_SLOW
         self._slow_accumulator = 0.0
+        self._invalidate_panel_cache()
 
     def set_normal_follow(self) -> None:
         """Run the inspected simulation at full speed without leaving inspect."""
@@ -124,12 +133,14 @@ class InspectMode:
             return
         self.pause_mode = _PLAYBACK_NORMAL
         self._slow_accumulator = 0.0
+        self._invalidate_panel_cache()
 
     def toggle_detail_level(self) -> None:
         """Switch between compact and detailed inspect-card presentation."""
         if not self.enabled:
             return
         self.detail_mode = "detail" if self.detail_mode == "compact" else "compact"
+        self._invalidate_panel_cache()
 
     # ── query helpers ────────────────────────────────────────────────
 
@@ -161,15 +172,32 @@ class InspectMode:
         """Return whether inspect mode is anchored to an organism or lineage."""
         return self.selected_creature_id is not None or self.selected_lineage_id is not None
 
-    def _invalidate_graph_cache(self) -> None:
+    def invalidate_render_caches(self) -> None:
+        """Drop all cached inspect UI surfaces."""
+        self._invalidate_panel_cache()
+        self._invalidate_graph_cache()
+
+    def _invalidate_panel_cache(self) -> None:
+        self._panel_surface_cache = None
+        self._panel_cache_key = None
+
+    def _invalidate_graph_dynamic_cache(self) -> None:
+        self._graph_dynamic_surface_cache = None
+        self._graph_dynamic_cache_key = None
         self._graph_surface_cache = None
         self._graph_cache_key = None
+
+    def _invalidate_graph_cache(self) -> None:
+        self._graph_static_surface_cache = None
+        self._graph_static_cache_key = None
+        self._invalidate_graph_dynamic_cache()
 
     def _reset_histories(self) -> None:
         self._last_history_sample_tick = None
         self._energy_history.clear()
         self._lineage_population_history.clear()
         self._lineage_trait_history.clear()
+        self._invalidate_panel_cache()
         self._invalidate_graph_cache()
 
     def _simulation_mode(self, simulation: Simulation) -> str:
@@ -235,7 +263,8 @@ class InspectMode:
         if y is not None:
             self.selected_last_known_y = float(y)
         self.follow_creature_id = None
-        self._invalidate_graph_cache()
+        self._invalidate_panel_cache()
+        self._invalidate_graph_dynamic_cache()
 
     def _find_lineage_proxy(self, simulation: Simulation) -> Creature | None:
         if self.selected_lineage_id is None:
@@ -352,10 +381,14 @@ class InspectMode:
         self.follow_creature_id = id(proxy)
         return proxy
 
-    def observe_simulation(self, simulation: Simulation) -> None:
+    def observe_simulation(self, simulation: Simulation) -> dict[str, float]:
         """Refresh selection state and bounded history from the latest sim tick."""
+        observe_t0 = time.perf_counter()
         if not self.enabled or not self.has_selection:
-            return
+            return {
+                "inspect_observe_ms": (time.perf_counter() - observe_t0) * 1000.0,
+                "inspect_lineage_sample_ms": 0.0,
+            }
 
         current_tick = int(getattr(simulation, "_frame", 0))
         for event in getattr(simulation, "death_events", ()):
@@ -378,8 +411,12 @@ class InspectMode:
             self._last_history_sample_tick is not None
             and (current_tick - self._last_history_sample_tick) < _INSPECT_HISTORY_SAMPLE_INTERVAL_TICKS
         ):
-            return
+            return {
+                "inspect_observe_ms": (time.perf_counter() - observe_t0) * 1000.0,
+                "inspect_lineage_sample_ms": 0.0,
+            }
 
+        sample_t0 = time.perf_counter()
         self._last_history_sample_tick = current_tick
         if selected is not None:
             self._energy_history.append((current_tick, float(selected.energy)))
@@ -387,7 +424,12 @@ class InspectMode:
         if self.selected_lineage_id is not None:
             self._lineage_population_history.append((current_tick, lineage_count))
             self._lineage_trait_history.append((current_tick, lineage_trait_value))
-        self._invalidate_graph_cache()
+        sample_ms = (time.perf_counter() - sample_t0) * 1000.0
+        self._invalidate_graph_dynamic_cache()
+        return {
+            "inspect_observe_ms": (time.perf_counter() - observe_t0) * 1000.0,
+            "inspect_lineage_sample_ms": sample_ms,
+        }
 
     def clear_selection(self) -> None:
         """Clear the selected creature without exiting inspect mode."""
@@ -1106,33 +1148,35 @@ def _graph_trait_title(trait_key: str | None) -> str:
     return "Lineage efficiency"
 
 
-def _build_graph_strip_surface(
+def _graph_layout_rects(strip_rect) -> tuple[int, list[object]]:
+    import pygame
+
+    graph_count = 3 if strip_rect.width >= 900 else 2
+    gap = 12
+    card_width = (strip_rect.width - ((graph_count + 1) * gap)) // graph_count
+    card_height = strip_rect.height - (gap * 2)
+    graph_rects: list[pygame.Rect] = []
+    for index in range(graph_count):
+        graph_rects.append(
+            pygame.Rect(
+                gap + index * (card_width + gap),
+                gap,
+                card_width,
+                card_height,
+            )
+        )
+    return graph_count, graph_rects
+
+
+def _build_graph_static_surface(
     *,
-    target_width: int,
-    target_height: int,
+    strip_rect,
     inspect_mode: InspectMode,
-    simulation: Simulation,
+    title_font,
 ):
     import pygame
 
-    strip_rect = _compute_graph_strip_rect(target_width, target_height)
-    cache_key = (
-        strip_rect.width,
-        strip_rect.height,
-        inspect_mode.selected_creature_id,
-        inspect_mode.selected_lineage_id,
-        inspect_mode.follow_creature_id,
-        inspect_mode.selected_dead,
-        inspect_mode.selected_death_cause,
-        tuple(inspect_mode._energy_history),
-        tuple(inspect_mode._lineage_population_history),
-        tuple(inspect_mode._lineage_trait_history),
-        inspect_mode.selected_graph_trait_key,
-        inspect_mode.selected_graph_trait_initial_value,
-    )
-    if cache_key == inspect_mode._graph_cache_key and inspect_mode._graph_surface_cache is not None:
-        return inspect_mode._graph_surface_cache, strip_rect
-
+    graph_count, graph_rects = _graph_layout_rects(strip_rect)
     surface = pygame.Surface(strip_rect.size, pygame.SRCALPHA)
     pygame.draw.rect(
         surface,
@@ -1147,10 +1191,6 @@ def _build_graph_strip_surface(
         1,
         border_radius=14,
     )
-
-    title_font = pygame.font.Font(None, 22)
-    body_font = pygame.font.Font(None, 20)
-    value_font = pygame.font.Font(None, 24)
     if not inspect_mode.has_selection:
         prompt = title_font.render(
             "Select a creature to plot organism and lineage history.",
@@ -1161,121 +1201,211 @@ def _build_graph_strip_surface(
             prompt,
             ((strip_rect.width - prompt.get_width()) // 2, (strip_rect.height - prompt.get_height()) // 2),
         )
-        inspect_mode._graph_cache_key = cache_key
-        inspect_mode._graph_surface_cache = surface
-        return surface, strip_rect
+        return surface
 
-    graph_count = 3 if strip_rect.width >= 900 else 2
-    gap = 12
-    card_width = (strip_rect.width - ((graph_count + 1) * gap)) // graph_count
-    card_height = strip_rect.height - (gap * 2)
-    graph_rects = []
-    for index in range(graph_count):
-        graph_rects.append(
-            pygame.Rect(
-                gap + index * (card_width + gap),
-                gap,
-                card_width,
-                card_height,
-            )
-        )
-
-    species = str(inspect_mode.selected_species or "prey").lower()
-    organism_color = (245, 140, 108) if species == "predator" else (108, 212, 232)
-    lineage_color = (126, 196, 248)
-    trait_color = (123, 217, 176)
-
-    energy_series = [(tick, value) for tick, value in inspect_mode._energy_history]
-    lineage_series = [(tick, float(value)) for tick, value in inspect_mode._lineage_population_history]
-    trait_series = [(tick, value) for tick, value in inspect_mode._lineage_trait_history]
-    lineage_status_text = _lineage_status_label(
-        int(lineage_series[-1][1]) if lineage_series else 0
-    )
-
-    _draw_sparkline_card(
-        surface,
-        graph_rects[0],
-        title="Selected energy",
-        current_text=(
-            f"{int(round((inspect_mode.selected_last_known_energy or 0.0) * 100.0))}%"
-            if not inspect_mode.selected_dead and inspect_mode.selected_last_known_energy is not None
-            else "Dead"
-        ),
-        range_text="0-100%",
-        series=energy_series,
-        color=organism_color,
-        y_min=0.0,
-        y_max=1.0,
-        empty_text="No organism samples yet",
-        body_font=body_font,
-        title_font=title_font,
-        value_font=value_font,
-        baseline=None,
-        value_suffix="",
-    )
-    _draw_sparkline_card(
-        surface,
-        graph_rects[1],
-        title="Selected lineage population",
-        current_text=lineage_status_text,
-        range_text=(
-            f"0-{int(max((point[1] for point in lineage_series), default=1.0))}"
-        ),
-        series=lineage_series,
-        color=lineage_color,
-        y_min=0.0,
-        y_max=max(1.0, max((point[1] for point in lineage_series), default=1.0)),
-        empty_text="No lineage samples yet",
-        body_font=body_font,
-        title_font=title_font,
-        value_font=value_font,
-        baseline=None,
-        value_suffix="",
-    )
+    titles = ["Selected energy", "Selected lineage population"]
     if graph_count >= 3:
-        current_trait = next(
-            (value for _tick, value in reversed(trait_series) if value is not None),
-            None,
+        titles.append(_graph_trait_title(inspect_mode.selected_graph_trait_key))
+    for rect, title in zip(graph_rects, titles, strict=False):
+        pygame.draw.rect(surface, (10, 20, 31, 118), rect, border_radius=12)
+        pygame.draw.rect(surface, (64, 98, 122, 144), rect, 1, border_radius=12)
+        title_surf = title_font.render(title, True, (214, 228, 237))
+        surface.blit(title_surf, (rect.x + 10, rect.y + 8))
+        plot_rect = pygame.Rect(rect.x + 10, rect.y + 34, rect.width - 20, rect.height - 58)
+        pygame.draw.line(
+            surface,
+            (34, 52, 67),
+            (plot_rect.x, plot_rect.bottom),
+            (plot_rect.right, plot_rect.bottom),
+            1,
         )
-        baseline = inspect_mode.selected_graph_trait_initial_value
-        trait_delta = (
-            current_trait - baseline
-            if current_trait is not None and baseline is not None
-            else None
+    return surface
+
+
+def _downsample_series_to_width(
+    series: list[tuple[int, float | None]],
+    max_points: int,
+) -> list[tuple[int, float | None]]:
+    if max_points <= 1 or len(series) <= max_points:
+        return list(series)
+    buckets: list[tuple[int, float | None]] = []
+    last_bucket = -1
+    for index, item in enumerate(series):
+        bucket = int(round((index / max(1, len(series) - 1)) * (max_points - 1)))
+        if bucket != last_bucket:
+            buckets.append(item)
+            last_bucket = bucket
+        else:
+            buckets[-1] = item
+    return buckets
+
+
+def _build_graph_strip_surface(
+    *,
+    target_width: int,
+    target_height: int,
+    inspect_mode: InspectMode,
+    simulation: Simulation,
+):
+    import pygame
+
+    strip_rect = _compute_graph_strip_rect(target_width, target_height)
+    title_font = pygame.font.Font(None, 22)
+    body_font = pygame.font.Font(None, 20)
+    value_font = pygame.font.Font(None, 24)
+    static_key = (
+        strip_rect.width,
+        strip_rect.height,
+        inspect_mode.has_selection,
+        inspect_mode.selected_graph_trait_key,
+    )
+    cache_key = (
+        static_key,
+        inspect_mode.selected_creature_id,
+        inspect_mode.selected_lineage_id,
+        inspect_mode.follow_creature_id,
+        inspect_mode.selected_dead,
+        inspect_mode.selected_death_cause,
+        inspect_mode.selected_species,
+        inspect_mode.selected_last_known_energy,
+        tuple(inspect_mode._energy_history),
+        tuple(inspect_mode._lineage_population_history),
+        tuple(inspect_mode._lineage_trait_history),
+        inspect_mode.selected_graph_trait_initial_value,
+    )
+    timings = {
+        "inspect_graph_static_ms": 0.0,
+        "inspect_graph_dynamic_ms": 0.0,
+        "inspect_graph_cache_hit": 0.0,
+    }
+    if cache_key == inspect_mode._graph_cache_key and inspect_mode._graph_surface_cache is not None:
+        timings["inspect_graph_cache_hit"] = 1.0
+        return inspect_mode._graph_surface_cache, strip_rect, timings
+
+    if static_key != inspect_mode._graph_static_cache_key or inspect_mode._graph_static_surface_cache is None:
+        static_t0 = time.perf_counter()
+        inspect_mode._graph_static_surface_cache = _build_graph_static_surface(
+            strip_rect=strip_rect,
+            inspect_mode=inspect_mode,
+            title_font=title_font,
         )
-        trait_text = (
-            f"{current_trait:.2f} ({trait_delta:+.2f})"
-            if current_trait is not None and trait_delta is not None
-            else "No lineage data"
+        inspect_mode._graph_static_cache_key = static_key
+        timings["inspect_graph_static_ms"] = (time.perf_counter() - static_t0) * 1000.0
+
+    if not inspect_mode.has_selection:
+        inspect_mode._graph_cache_key = cache_key
+        inspect_mode._graph_surface_cache = inspect_mode._graph_static_surface_cache
+        return inspect_mode._graph_surface_cache, strip_rect, timings
+
+    graph_count, graph_rects = _graph_layout_rects(strip_rect)
+    dynamic_key = cache_key[1:]
+    if (
+        dynamic_key != inspect_mode._graph_dynamic_cache_key
+        or inspect_mode._graph_dynamic_surface_cache is None
+    ):
+        dynamic_t0 = time.perf_counter()
+        surface = pygame.Surface(strip_rect.size, pygame.SRCALPHA)
+
+        species = str(inspect_mode.selected_species or "prey").lower()
+        organism_color = (245, 140, 108) if species == "predator" else (108, 212, 232)
+        lineage_color = (126, 196, 248)
+        trait_color = (123, 217, 176)
+
+        energy_series = _downsample_series_to_width(
+            [(tick, value) for tick, value in inspect_mode._energy_history],
+            max(2, graph_rects[0].width - 20),
+        )
+        lineage_series = _downsample_series_to_width(
+            [(tick, float(value)) for tick, value in inspect_mode._lineage_population_history],
+            max(2, graph_rects[1].width - 20),
+        )
+        trait_series = _downsample_series_to_width(
+            [(tick, value) for tick, value in inspect_mode._lineage_trait_history],
+            max(2, graph_rects[min(2, len(graph_rects) - 1)].width - 20),
+        )
+        lineage_status_text = _lineage_status_label(
+            int(lineage_series[-1][1]) if lineage_series else 0
+        )
+
+        _draw_sparkline_card(
+            surface,
+            graph_rects[0],
+            current_text=(
+                f"{int(round((inspect_mode.selected_last_known_energy or 0.0) * 100.0))}%"
+                if not inspect_mode.selected_dead and inspect_mode.selected_last_known_energy is not None
+                else "Dead"
+            ),
+            range_text="0-100%",
+            series=energy_series,
+            color=organism_color,
+            y_min=0.0,
+            y_max=1.0,
+            empty_text="No organism samples yet",
+            body_font=body_font,
+            value_font=value_font,
+            baseline=None,
         )
         _draw_sparkline_card(
             surface,
-            graph_rects[2],
-            title=_graph_trait_title(inspect_mode.selected_graph_trait_key),
-            current_text=trait_text,
-            range_text="0.00-1.00",
-            series=trait_series,
-            color=trait_color,
+            graph_rects[1],
+            current_text=lineage_status_text,
+            range_text=(
+                f"0-{int(max((point[1] for point in lineage_series), default=1.0))}"
+            ),
+            series=lineage_series,
+            color=lineage_color,
             y_min=0.0,
-            y_max=1.0,
-            empty_text="Lineage extinct",
+            y_max=max(1.0, max((point[1] for point in lineage_series), default=1.0)),
+            empty_text="No lineage samples yet",
             body_font=body_font,
-            title_font=title_font,
             value_font=value_font,
-            baseline=baseline,
-            value_suffix="",
+            baseline=None,
         )
+        if graph_count >= 3:
+            current_trait = next(
+                (value for _tick, value in reversed(trait_series) if value is not None),
+                None,
+            )
+            baseline = inspect_mode.selected_graph_trait_initial_value
+            trait_delta = (
+                current_trait - baseline
+                if current_trait is not None and baseline is not None
+                else None
+            )
+            trait_text = (
+                f"{current_trait:.2f} ({trait_delta:+.2f})"
+                if current_trait is not None and trait_delta is not None
+                else "No lineage data"
+            )
+            _draw_sparkline_card(
+                surface,
+                graph_rects[2],
+                current_text=trait_text,
+                range_text="0.00-1.00",
+                series=trait_series,
+                color=trait_color,
+                y_min=0.0,
+                y_max=1.0,
+                empty_text="Lineage extinct",
+                body_font=body_font,
+                value_font=value_font,
+                baseline=baseline,
+            )
+        inspect_mode._graph_dynamic_surface_cache = surface
+        inspect_mode._graph_dynamic_cache_key = dynamic_key
+        timings["inspect_graph_dynamic_ms"] = (time.perf_counter() - dynamic_t0) * 1000.0
 
-    inspect_mode._graph_cache_key = cache_key
+    surface = inspect_mode._graph_static_surface_cache.copy()
+    surface.blit(inspect_mode._graph_dynamic_surface_cache, (0, 0))
     inspect_mode._graph_surface_cache = surface
-    return surface, strip_rect
+    inspect_mode._graph_cache_key = cache_key
+    return surface, strip_rect, timings
 
 
 def _draw_sparkline_card(
     target,
     rect,
     *,
-    title: str,
     current_text: str,
     range_text: str,
     series: list[tuple[int, float | None]],
@@ -1284,19 +1414,12 @@ def _draw_sparkline_card(
     y_max: float,
     empty_text: str,
     body_font,
-    title_font,
     value_font,
     baseline: float | None,
-    value_suffix: str,
 ) -> None:
     import pygame
 
-    pygame.draw.rect(target, (10, 20, 31, 118), rect, border_radius=12)
-    pygame.draw.rect(target, (64, 98, 122, 144), rect, 1, border_radius=12)
-
-    title_surf = title_font.render(title, True, (214, 228, 237))
-    target.blit(title_surf, (rect.x + 10, rect.y + 8))
-    current_surf = value_font.render(current_text + value_suffix, True, color)
+    current_surf = value_font.render(current_text, True, color)
     target.blit(current_surf, (rect.right - current_surf.get_width() - 10, rect.y + 6))
     range_surf = body_font.render(range_text, True, (140, 166, 184))
     target.blit(range_surf, (rect.x + 10, rect.bottom - range_surf.get_height() - 8))
@@ -1351,26 +1474,36 @@ def draw_inspect_overlay(
     target,
     inspect_mode: InspectMode,
     simulation: Simulation,
-) -> None:
+) -> dict[str, float]:
     """Draw the shared inspect overlay onto a pygame-compatible surface."""
     if not inspect_mode.enabled:
-        return
+        return {
+            "inspect_panel_ms": 0.0,
+            "inspect_panel_layout_ms": 0.0,
+            "inspect_graph_ms": 0.0,
+            "inspect_graph_static_ms": 0.0,
+            "inspect_graph_dynamic_ms": 0.0,
+        }
 
+    timings = {
+        "inspect_panel_ms": 0.0,
+        "inspect_panel_layout_ms": 0.0,
+        "inspect_graph_ms": 0.0,
+        "inspect_graph_static_ms": 0.0,
+        "inspect_graph_dynamic_ms": 0.0,
+        "inspect_graph_cache_hit": 0.0,
+    }
     creature = inspect_mode.get_focus_creature(simulation)
-    card = build_creature_card(creature, simulation) if creature is not None else None
-    selection_display = _build_selection_display(
-        inspect_mode,
-        simulation,
-        focus_creature=creature,
-        card=card,
-    )
-    panel_surface = _build_inspect_panel_surface(
+    panel_t0 = time.perf_counter()
+    panel_surface, panel_metrics = _build_inspect_panel_surface(
         target_width=target.get_width(),
         target_height=target.get_height(),
         inspect_mode=inspect_mode,
-        card=card,
-        selection_display=selection_display,
+        simulation=simulation,
+        focus_creature=creature,
     )
+    timings["inspect_panel_ms"] = (time.perf_counter() - panel_t0) * 1000.0
+    timings.update(panel_metrics)
     placement = compute_inspect_panel_placement(
         target.get_width(),
         target.get_height(),
@@ -1378,13 +1511,17 @@ def draw_inspect_overlay(
         panel_surface.get_height(),
     )
     target.blit(panel_surface, (placement.x, placement.y))
-    graph_surface, graph_rect = _build_graph_strip_surface(
+    graph_t0 = time.perf_counter()
+    graph_surface, graph_rect, graph_metrics = _build_graph_strip_surface(
         target_width=target.get_width(),
         target_height=target.get_height(),
         inspect_mode=inspect_mode,
         simulation=simulation,
     )
+    timings["inspect_graph_ms"] = (time.perf_counter() - graph_t0) * 1000.0
+    timings.update(graph_metrics)
     target.blit(graph_surface, graph_rect.topleft)
+    return timings
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1512,13 +1649,37 @@ def _build_inspect_panel_surface(
     target_width: int,
     target_height: int,
     inspect_mode: InspectMode,
-    card: Mapping[str, str] | None,
-    selection_display: InspectSelectionDisplay | None,
+    simulation: Simulation,
+    focus_creature: Creature | None,
 ):
     import pygame
 
     panel_width = _inspect_panel_width(target_width)
     max_height = max(1, target_height - (_INSPECT_MARGIN * 2))
+    current_tick = int(getattr(simulation, "_frame", 0))
+    refresh_bucket = current_tick // _INSPECT_PANEL_REFRESH_INTERVAL_TICKS
+    cache_key = (
+        panel_width,
+        max_height,
+        inspect_mode.detail_mode,
+        inspect_mode.selected_creature_id,
+        inspect_mode.selected_lineage_id,
+        inspect_mode.follow_creature_id,
+        inspect_mode.selected_dead,
+        inspect_mode.selected_death_cause,
+        refresh_bucket,
+    )
+    if cache_key == inspect_mode._panel_cache_key and inspect_mode._panel_surface_cache is not None:
+        return inspect_mode._panel_surface_cache, {"inspect_panel_layout_ms": 0.0}
+
+    layout_t0 = time.perf_counter()
+    card = build_creature_card(focus_creature, simulation) if focus_creature is not None else None
+    selection_display = _build_selection_display(
+        inspect_mode,
+        simulation,
+        focus_creature=focus_creature,
+        card=card,
+    )
     line_candidates = [
         build_inspect_panel_lines(
             card,
@@ -1543,8 +1704,16 @@ def _build_inspect_panel_surface(
         panel_surface = _render_inspect_panel_surface(panel_width, max_height, fitted_lines)
         last_surface = panel_surface
         if panel_surface.get_height() <= max_height:
-            return panel_surface
-    return last_surface
+            inspect_mode._panel_cache_key = cache_key
+            inspect_mode._panel_surface_cache = panel_surface
+            return panel_surface, {
+                "inspect_panel_layout_ms": (time.perf_counter() - layout_t0) * 1000.0,
+            }
+    inspect_mode._panel_cache_key = cache_key
+    inspect_mode._panel_surface_cache = last_surface
+    return last_surface, {
+        "inspect_panel_layout_ms": (time.perf_counter() - layout_t0) * 1000.0,
+    }
 
 
 def _fit_inspect_panel_lines(
