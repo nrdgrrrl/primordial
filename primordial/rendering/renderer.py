@@ -650,6 +650,10 @@ class Renderer:
             scaled_play = pygame.transform.scale(sim_target, (vw, vh))
             self.screen.blit(scaled_play, (vx, vy))
 
+            # Subtle play viewport border
+            border_color = (24, 48, 68)
+            pygame.draw.rect(self.screen, border_color, (vx, vy, vw, vh), 1)
+
             # Right gutter: background + inspect panel
             right_gx, right_gy, right_gw, right_gh = layout.right_gutter_rect
             if right_gw > 0 and right_gh > 0:
@@ -658,10 +662,10 @@ class Renderer:
                 self.screen.blit(gutter_panel, (right_gx, right_gy))
                 pygame.draw.line(
                     self.screen,
-                    (30, 60, 80),
+                    (32, 64, 88),
                     (right_gx, right_gy),
                     (right_gx, right_gy + right_gh),
-                    1,
+                    2,
                 )
 
                 from .inspect_mode import build_inspect_overlay_surfaces
@@ -698,11 +702,32 @@ class Renderer:
                 self.screen.blit(gutter_panel, (bot_gx, bot_gy))
                 pygame.draw.line(
                     self.screen,
-                    (30, 60, 80),
+                    (32, 64, 88),
                     (bot_gx, bot_gy),
                     (bot_gx + bot_gw, bot_gy),
-                    1,
+                    2,
                 )
+
+                # Corner gutter where right and bottom meet
+                cx, cy, cw, ch = layout.corner_gutter_rect
+                if cw > 0 and ch > 0:
+                    corner_panel = pygame.Surface((cw, ch), pygame.SRCALPHA)
+                    corner_panel.fill((10, 18, 28, 240))
+                    self.screen.blit(corner_panel, (cx, cy))
+                    pygame.draw.line(
+                        self.screen,
+                        (28, 52, 72),
+                        (cx, cy),
+                        (cx + cw, cy),
+                        1,
+                    )
+                    pygame.draw.line(
+                        self.screen,
+                        (28, 52, 72),
+                        (cx, cy),
+                        (cx, cy + ch),
+                        1,
+                    )
 
                 # HUD in gutter
                 hud_x, hud_y, hud_w, hud_h = layout.hud_rect
@@ -721,7 +746,15 @@ class Renderer:
                         debug_lines=debug_lines,
                         refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
                     )
-                    self.screen.blit(hud_target, (hud_x, hud_y))
+                    docked_surface, _ = self.hud.build_panel_surface(
+                        (hud_w, hud_h),
+                        simulation,
+                        self.fps,
+                        debug_lines=debug_lines,
+                        refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
+                        docked=True,
+                    )
+                    self.screen.blit(docked_surface, (hud_x, hud_y))
 
                 graph_x, graph_y, graph_w, graph_h = layout.graph_rect
                 if graph_w > 0 and graph_h > 0 and self.inspect_mode.enabled:

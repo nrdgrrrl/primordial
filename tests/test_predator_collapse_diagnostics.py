@@ -680,7 +680,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-25] — feat: add reserved dashboard gutters for Inspect mode",
+            "## [2026-05-25] — refine: tighten inspect dashboard gutter layout",
         )
         self.assertEqual(
             changelog.count("## [2026-05-25] — feat: add inspect follow modes and lineage graphs"),

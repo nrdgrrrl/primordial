@@ -485,6 +485,7 @@ class PredatorPreyGpuRenderer:
             "fallback_ui": _OverlayTextureSlot(),
             "gutter_right": _OverlayTextureSlot(),
             "gutter_bottom": _OverlayTextureSlot(),
+            "gutter_corner": _OverlayTextureSlot(),
         }
         self._overlay_font = pygame.font.Font(None, 72)
         self._overlay_small_font = pygame.font.Font(None, 24)
@@ -1383,6 +1384,10 @@ class PredatorPreyGpuRenderer:
         if bot_gw > 0 and bot_gh > 0:
             self._draw_gutter_rect("gutter_bottom", layout.bottom_gutter_rect, (10, 18, 28, 240))
 
+        cx, cy, cw, ch = layout.corner_gutter_rect
+        if cw > 0 and ch > 0:
+            self._draw_gutter_rect("gutter_corner", layout.corner_gutter_rect, (10, 18, 28, 240))
+
         current_tick = int(getattr(simulation, "_frame", 0))
         debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
         hud_refresh_bucket = current_tick // max(1, self._hud_refresh_interval_ticks(simulation))
@@ -1396,6 +1401,7 @@ class PredatorPreyGpuRenderer:
                 self.fps,
                 debug_lines=debug_lines,
                 refresh_token=("hud", hud_refresh_bucket, tuple(debug_lines or ())),
+                docked=True,
             )
             timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
             if hud_surface.get_width() > 1 and hud_surface.get_height() > 1:
@@ -1482,6 +1488,13 @@ class PredatorPreyGpuRenderer:
             gutter_panel.fill((10, 18, 28, 240))
             self._upload_overlay_surface("gutter_bottom", gutter_panel, content_key=("gutter_bottom", bot_gw, bot_gh))
             self._draw_overlay_texture("gutter_bottom", pygame.Rect(bot_gx, bot_gy, bot_gw, bot_gh), viewport=(self.display_width, self.display_height))
+
+        cx, cy, cw, ch = layout.corner_gutter_rect
+        if cw > 0 and ch > 0:
+            corner_panel = pygame.Surface((cw, ch), pygame.SRCALPHA)
+            corner_panel.fill((10, 18, 28, 240))
+            self._upload_overlay_surface("gutter_corner", corner_panel, content_key=("gutter_corner", cw, ch))
+            self._draw_overlay_texture("gutter_corner", pygame.Rect(cx, cy, cw, ch), viewport=(self.display_width, self.display_height))
 
         if self.settings_overlay.visible or self.settings_overlay.fade > 0:
             t0 = time.perf_counter()

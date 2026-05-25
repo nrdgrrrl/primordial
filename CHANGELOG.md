@@ -2,6 +2,47 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — refine: tighten inspect dashboard gutter layout
+
+### Gutter proportion refinements
+- Right gutter width reduced from 28% to 23% of screen width, max cap from 460px to 400px
+- Bottom gutter height reduced from 25% to 18% of screen height, cap 150px, min 88px
+- Inspect panel margin reduced from 24px to 8px; panel width now uses ~94% of gutter width
+- Inspect panel max width reduced from 400px to 380px (tighter default)
+- HUD in bottom gutter uses compact multi-column docked layout instead of single vertical column
+- HUD width in bottom gutter adjusted to ~40% of bottom gutter width for balanced HUD/graph split
+
+### Graph area refinements
+- Graph strip rect now uses nearly all available graph rect space (6px margin) instead of centering a fixed strip
+- Graph layout threshold for 3 graphs lowered from 900px to 700px strip width
+- Graph card margins, border radii, and internal padding reduced for denser compact presentation
+- Dead/extinct lineage state shows compact "Lineage extinct" message instead of oversized empty graph cards
+- Sparkline card internals tightened: smaller title offsets, reduced plot padding
+
+### Bottom-right corner gutter
+- `corner_gutter_rect` added to `PresentationLayout` for explicit ownership of the right+bottom gutter intersection
+- Corner gutter rendered consistently with matching dark blue background and subtle dividers
+- `contains_gutter()` updated to include corner rect
+- 4 new corner gutter tests
+
+### Visual composition polish
+- Gutter divider lines thickened from 1px to 2px, color shifted to lighter blue (32, 64, 88)
+- Subtle play viewport border added (1px, color 24, 48, 68) to visually separate sim area from dashboard
+- Corner gutter has internal edge markers along its top and left edges
+
+### Layout constants changed
+- `_MAX_RIGHT_GUTTER_WIDTH`: 460 → 400
+- `_MAX_BOTTOM_GUTTER_HEIGHT_RATIO`: 0.25 → 0.18
+- `_MIN_BOTTOM_GUTTER_HEIGHT`: 92 → 88 (lower to allow tighter strip)
+- Bottom gutter height hard cap added at 150px
+- Right gutter screen proportion: 0.28 → 0.23
+- HUD bottom gutter width factor: 0.38 → 0.40
+
+### Test coverage
+- 27 new tests across: refined proportions, corner gutter, viewport minimums, round-trip at common resolutions, graph strip usage
+- Updated existing tests for new margins and panel widths
+- Total layout tests: 72 (was 45)
+
 ## [2026-05-25] — feat: add reserved dashboard gutters for Inspect mode
 
 ### PresentationLayout (primordial/rendering/presentation_layout.py)

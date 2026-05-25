@@ -23,9 +23,9 @@ from dataclasses import dataclass
 _MIN_VIEWPORT_WIDTH = 320
 _MIN_VIEWPORT_HEIGHT = 240
 _MIN_RIGHT_GUTTER_WIDTH = 200
-_MIN_BOTTOM_GUTTER_HEIGHT = 92
-_MAX_RIGHT_GUTTER_WIDTH = 460
-_MAX_BOTTOM_GUTTER_HEIGHT_RATIO = 0.25
+_MIN_BOTTOM_GUTTER_HEIGHT = 88
+_MAX_RIGHT_GUTTER_WIDTH = 400
+_MAX_BOTTOM_GUTTER_HEIGHT_RATIO = 0.18
 _GUTTER_PADDING = 4
 
 
@@ -58,6 +58,9 @@ class PresentationLayout:
 
     # Graph area inside the bottom gutter (center/right portion).
     graph_rect: tuple[int, int, int, int]  # (x, y, w, h)
+
+    # Bottom-right corner where right and bottom gutters meet.
+    corner_gutter_rect: tuple[int, int, int, int]  # (x, y, w, h)
 
     # Action bar area — sits above the bottom gutter or at screen bottom.
     action_bar_rect: tuple[int, int, int, int]  # (x, y, w, h)
@@ -101,10 +104,10 @@ class PresentationLayout:
         return vx <= sx < vx + vw and vy <= sy < vy + vh
 
     def contains_gutter(self, sx: float, sy: float) -> bool:
-        """Return True if (sx, sy) falls inside any gutter (right or bottom)."""
-        for rect in (self.right_gutter_rect, self.bottom_gutter_rect):
+        """Return True if (sx, sy) falls inside any gutter (right, bottom, or corner)."""
+        for rect in (self.right_gutter_rect, self.bottom_gutter_rect, self.corner_gutter_rect):
             rx, ry, rw, rh = rect
-            if rx <= sx < rx + rw and ry <= sy < ry + rh:
+            if rw > 0 and rh > 0 and rx <= sx < rx + rw and ry <= sy < ry + rh:
                 return True
         return False
 
@@ -154,6 +157,7 @@ def compute_layout(
             bottom_gutter_rect=(0, 0, 0, 0),
             hud_rect=(0, 0, 0, 0),
             graph_rect=(0, 0, 0, 0),
+            corner_gutter_rect=(0, 0, 0, 0),
             action_bar_rect=(0, 0, 0, 0),
             scale=scale,
             offset_x=offset_x,
@@ -168,14 +172,14 @@ def compute_layout(
     available_height = sh
 
     # Try right gutter first — if we can't fit it, fall back to no right gutter.
-    right_gutter_w = min(_MAX_RIGHT_GUTTER_WIDTH, max(_MIN_RIGHT_GUTTER_WIDTH, int(sw * 0.28)))
+    right_gutter_w = min(_MAX_RIGHT_GUTTER_WIDTH, max(_MIN_RIGHT_GUTTER_WIDTH, int(sw * 0.23)))
     if available_width - right_gutter_w < _MIN_VIEWPORT_WIDTH:
         right_gutter_w = 0
 
     # Try bottom gutter — if we can't fit it, fall back to no bottom gutter.
     bottom_gutter_h = min(
         max(_MIN_BOTTOM_GUTTER_HEIGHT, int(sh * _MAX_BOTTOM_GUTTER_HEIGHT_RATIO)),
-        _MAX_BOTTOM_GUTTER_HEIGHT_RATIO * sh,
+        int(150),
     )
     bottom_gutter_h = int(bottom_gutter_h)
     if available_height - bottom_gutter_h < _MIN_VIEWPORT_HEIGHT:
@@ -194,6 +198,7 @@ def compute_layout(
             bottom_gutter_rect=(0, 0, 0, 0),
             hud_rect=(0, 0, 0, 0),
             graph_rect=(0, 0, 0, 0),
+            corner_gutter_rect=(0, 0, 0, 0),
             action_bar_rect=(0, 0, 0, 0),
             scale=scale,
             offset_x=offset_x,
@@ -236,10 +241,18 @@ def compute_layout(
         bg_w = bg_h = 0
     bottom_gutter_rect = (bg_x, bg_y, bg_w, bg_h)
 
+    # Corner gutter — the intersection of right and bottom gutters.
+    if right_gutter_w > 0 and bottom_gutter_h > 0:
+        corner_rect = (sw - right_gutter_w, sh - bottom_gutter_h, right_gutter_w, bottom_gutter_h)
+    else:
+        corner_rect = (0, 0, 0, 0)
+
     # HUD area inside bottom gutter — left portion.
+    # In gutter mode, use multi-column layout: HUD width is ~40% of bottom gutter width
+    # to allow more horizontal space for graphs.
     pad = _GUTTER_PADDING
     if bottom_gutter_h > 0:
-        hud_w = max(220, min(int(bg_w * 0.38), bg_w - 300))
+        hud_w = max(180, min(int(bg_w * 0.40), bg_w - 200))
         hud_h = max(0, bg_h - 2 * pad)
         hud_rect = (bg_x + pad, bg_y + pad, hud_w, hud_h)
     else:
@@ -269,6 +282,7 @@ def compute_layout(
         bottom_gutter_rect=bottom_gutter_rect,
         hud_rect=hud_rect,
         graph_rect=graph_rect,
+        corner_gutter_rect=corner_rect,
         action_bar_rect=action_bar_rect,
         scale=scale,
         offset_x=offset_x,
@@ -283,7 +297,7 @@ def compute_inspect_panel_placement(
     panel_width: int,
     panel_height: int,
     *,
-    margin: int = 12,
+    margin: int = 8,
 ) -> tuple[int, int, int, int]:
     """Place the inspect detail panel within the right gutter.
 
@@ -299,17 +313,18 @@ def compute_inspect_panel_placement(
 def compute_graph_strip_rect(
     graph_rect: tuple[int, int, int, int],
     *,
-    margin: int = 8,
+    margin: int = 6,
 ) -> tuple[int, int, int, int]:
     """Compute the graph strip rect within the bottom gutter graph area.
 
     Returns (x, y, width, height) relative to screen coordinates.
+    Uses nearly all available vertical and horizontal space.
     """
     gx, gy, gw, gh = graph_rect
     if gw <= 0 or gh <= 0:
         return (0, 0, 0, 0)
-    strip_w = max(240, gw - 2 * margin)
-    strip_h = max(92, min(148, gh - 2 * margin))
-    strip_x = gx + (gw - strip_w) // 2
-    strip_y = gy + (gh - strip_h) // 2
+    strip_w = max(100, gw - 2 * margin)
+    strip_h = max(60, gh - 2 * margin)
+    strip_x = gx + margin
+    strip_y = gy + margin
     return (strip_x, strip_y, strip_w, strip_h)

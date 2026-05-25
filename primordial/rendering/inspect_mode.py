@@ -668,8 +668,8 @@ _BEHAVIOR_GOALS: dict[str, str] = {
     "flocking": "Hold with the flock",
 }
 
-_INSPECT_MARGIN = 24
-_INSPECT_PANEL_WIDTH = 400
+_INSPECT_MARGIN = 8
+_INSPECT_PANEL_WIDTH = 380
 _INSPECT_PANEL_BG = (7, 13, 24, 230)
 _INSPECT_PANEL_BORDER = (88, 156, 198, 168)
 _INSPECT_DIVIDER = (48, 78, 104, 164)
@@ -1269,10 +1269,10 @@ def _build_selection_display(
 def _compute_graph_strip_rect(surface_width: int, surface_height: int):
     import pygame
 
-    width = max(240, surface_width - (_INSPECT_MARGIN * 2))
-    height = max(92, min(148, int(surface_height * 0.19)))
+    width = max(100, surface_width - (_INSPECT_MARGIN * 2))
+    height = max(60, min(148, int(surface_height * 0.95)))
     rect = pygame.Rect(_INSPECT_MARGIN, 0, width, height)
-    rect.bottom = max(height + 8, surface_height - 18)
+    rect.bottom = max(height + 4, surface_height - 8)
     return rect
 
 
@@ -1287,8 +1287,8 @@ def _graph_trait_title(trait_key: str | None) -> str:
 def _graph_layout_rects(strip_rect) -> tuple[int, list[object]]:
     import pygame
 
-    graph_count = 3 if strip_rect.width >= 900 else 2
-    gap = 12
+    graph_count = 3 if strip_rect.width >= 700 else 2
+    gap = 8
     card_width = (strip_rect.width - ((graph_count + 1) * gap)) // graph_count
     card_height = strip_rect.height - (gap * 2)
     graph_rects: list[pygame.Rect] = []
@@ -1318,18 +1318,18 @@ def _build_graph_static_surface(
         surface,
         (6, 14, 24, 126),
         (0, 0, strip_rect.width, strip_rect.height),
-        border_radius=14,
+        border_radius=8,
     )
     pygame.draw.rect(
         surface,
         (84, 128, 152, 138),
         (0, 0, strip_rect.width, strip_rect.height),
         1,
-        border_radius=14,
+        border_radius=8,
     )
     if not inspect_mode.has_selection:
         prompt = title_font.render(
-            "Select a creature to plot organism and lineage history.",
+            "Select a creature to plot",
             True,
             (215, 228, 239),
         )
@@ -1339,15 +1339,27 @@ def _build_graph_static_surface(
         )
         return surface
 
-    titles = ["Selected energy", "Selected lineage population"]
+    if inspect_mode.selected_dead and inspect_mode._latest_lineage_count <= 0:
+        extinct_label = title_font.render(
+            "Lineage extinct — no graph data",
+            True,
+            (180, 140, 120),
+        )
+        surface.blit(
+            extinct_label,
+            ((strip_rect.width - extinct_label.get_width()) // 2, (strip_rect.height - extinct_label.get_height()) // 2),
+        )
+        return surface
+
+    titles = ["Selected energy", "Lineage pop"]
     if graph_count >= 3:
         titles.append(_graph_trait_title(inspect_mode.selected_graph_trait_key))
     for rect, title in zip(graph_rects, titles, strict=False):
-        pygame.draw.rect(surface, (10, 20, 31, 118), rect, border_radius=12)
-        pygame.draw.rect(surface, (64, 98, 122, 144), rect, 1, border_radius=12)
+        pygame.draw.rect(surface, (10, 20, 31, 118), rect, border_radius=6)
+        pygame.draw.rect(surface, (64, 98, 122, 144), rect, 1, border_radius=6)
         title_surf = title_font.render(title, True, (214, 228, 237))
-        surface.blit(title_surf, (rect.x + 10, rect.y + 8))
-        plot_rect = pygame.Rect(rect.x + 10, rect.y + 34, rect.width - 20, rect.height - 58)
+        surface.blit(title_surf, (rect.x + 6, rect.y + 4))
+        plot_rect = pygame.Rect(rect.x + 6, rect.y + 24, rect.width - 12, rect.height - 44)
         pygame.draw.line(
             surface,
             (34, 52, 67),
@@ -1556,11 +1568,11 @@ def _draw_sparkline_card(
     import pygame
 
     current_surf = value_font.render(current_text, True, color)
-    target.blit(current_surf, (rect.right - current_surf.get_width() - 10, rect.y + 6))
+    target.blit(current_surf, (rect.right - current_surf.get_width() - 6, rect.y + 3))
     range_surf = body_font.render(range_text, True, (140, 166, 184))
-    target.blit(range_surf, (rect.x + 10, rect.bottom - range_surf.get_height() - 8))
+    target.blit(range_surf, (rect.x + 6, rect.bottom - range_surf.get_height() - 4))
 
-    plot_rect = pygame.Rect(rect.x + 10, rect.y + 34, rect.width - 20, rect.height - 58)
+    plot_rect = pygame.Rect(rect.x + 6, rect.y + 22, rect.width - 12, rect.height - 36)
     pygame.draw.line(
         target,
         (34, 52, 67),
@@ -2217,8 +2229,8 @@ def _truncate_text(font, text: str, max_width: int) -> str:
 
 
 def _inspect_panel_width(target_width: int) -> int:
-    desired_width = min(_INSPECT_PANEL_WIDTH, max(280, int(target_width * 0.40)))
-    desired_width = min(desired_width, max(200, target_width - (_INSPECT_MARGIN * 2)))
+    desired_width = min(_INSPECT_PANEL_WIDTH, max(200, int(target_width * 0.94)))
+    desired_width = min(desired_width, max(160, target_width - (_INSPECT_MARGIN * 2)))
     return max(160, min(target_width, desired_width))
 
 

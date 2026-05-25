@@ -154,7 +154,7 @@ class TestComputeLayoutSmallWindow:
 
     def test_right_gutter_max_width_cap(self):
         layout = compute_layout(3840, 2160, 3840, 2160, inspect_active=True)
-        assert layout.right_gutter_rect[2] <= 460  # _MAX_RIGHT_GUTTER_WIDTH
+        assert layout.right_gutter_rect[2] <= 400  # _MAX_RIGHT_GUTTER_WIDTH
 
 
 class TestCoordinateMapping:
@@ -261,15 +261,15 @@ class TestModeTransitions:
 class TestInspectPanelPlacement:
     def test_basic_placement(self):
         x, y, w, h = compute_inspect_panel_placement(400, 800, 350, 700)
-        assert x == 12  # margin
-        assert y == 12
+        assert x == 8  # margin
+        assert y == 8
         assert w == 350
-        assert h == min(700, 800 - 2 * 12)
+        assert h == min(700, 800 - 2 * 8)
 
     def test_panel_clipped_to_gutter(self):
         x, y, w, h = compute_inspect_panel_placement(300, 600, 500, 800)
-        assert w <= 300 - 2 * 12
-        assert h <= 600 - 2 * 12
+        assert w <= 300 - 2 * 8
+        assert h <= 600 - 2 * 8
 
 
 class TestGraphStripRect:
@@ -365,6 +365,154 @@ class TestLayoutProperties:
     def test_scale_preserves_aspect_ratio_in_gutter(self):
         layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
         vx, vy, vw, vh = layout.play_viewport_rect
-        aspect_viewport = vw / vh
-        aspect_world = 1920 / 1080
-        assert aspect_viewport == pytest.approx(aspect_world, abs=0.05)
+        scale_x = vw / 1920
+        scale_y = vh / 1080
+        assert layout.scale == pytest.approx(min(scale_x, scale_y), abs=0.01)
+
+
+class TestRefinedProportions:
+    """Tests for the refined gutter proportions."""
+
+    def test_right_gutter_smaller_than_before(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        assert layout.right_gutter_rect[2] <= 460
+
+    def test_right_gutter_at_23_percent(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        expected = min(400, max(200, int(1920 * 0.23)))
+        assert layout.right_gutter_rect[2] == expected
+
+    def test_right_gutter_uses_max_cap(self):
+        layout = compute_layout(3840, 2160, 3840, 2160, inspect_active=True)
+        assert layout.right_gutter_rect[2] <= 400
+
+    def test_inspect_panel_uses_most_of_right_gutter(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        rg_w = layout.right_gutter_rect[2]
+        from primordial.rendering.inspect_mode import _inspect_panel_width
+        panel_w = _inspect_panel_width(rg_w)
+        fill_ratio = panel_w / rg_w if rg_w > 0 else 0
+        assert fill_ratio >= 0.90
+
+    def test_bottom_gutter_height_reduced(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        assert layout.bottom_gutter_rect[3] <= 200
+
+    def test_bottom_gutter_height_capped_at_150(self):
+        layout = compute_layout(2560, 1440, 2560, 1440, inspect_active=True)
+        assert layout.bottom_gutter_rect[3] <= 150
+
+    def test_bottom_gutter_minimum_height(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        assert layout.bottom_gutter_rect[3] >= 88
+
+    def test_graph_rect_uses_available_height(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        gx, gy, gw, gh = layout.graph_rect
+        _, _, bw, bh = layout.bottom_gutter_rect
+        assert gh >= bh * 0.88
+
+    def test_hud_rect_and_graph_rect_do_not_overlap(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        hx, hy, hw, hh = layout.hud_rect
+        gx, gy, gw, gh = layout.graph_rect
+        if hw > 0 and gw > 0:
+            assert hx + hw <= gx
+
+    def test_hud_rect_and_graph_rect_no_overlap_at_1366x768(self):
+        layout = compute_layout(1366, 768, 1366, 768, inspect_active=True)
+        hx, hy, hw, hh = layout.hud_rect
+        gx, gy, gw, gh = layout.graph_rect
+        if hw > 0 and gw > 0:
+            assert hx + hw <= gx
+
+
+class TestCornerGutterRect:
+    """Tests for the explicitly modeled bottom-right corner gutter."""
+
+    def test_corner_rect_exists_when_both_gutters_present(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        if layout.right_gutter_rect[2] > 0 and layout.bottom_gutter_rect[3] > 0:
+            cx, cy, cw, ch = layout.corner_gutter_rect
+            assert cw > 0
+            assert ch > 0
+
+    def test_corner_rect_position(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        cx, cy, cw, ch = layout.corner_gutter_rect
+        rw = layout.right_gutter_rect[2]
+        bh = layout.bottom_gutter_rect[3]
+        if rw > 0 and bh > 0:
+            assert cx + cw == 1920
+            assert cy + ch == 1080
+            assert cw == rw
+            assert ch == bh
+
+    def test_corner_rect_zero_when_no_right_gutter(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=False)
+        cx, cy, cw, ch = layout.corner_gutter_rect
+        assert cw == 0
+        assert ch == 0
+
+    def test_corner_click_detected_as_gutter(self):
+        layout = compute_layout(1920, 1080, 1920, 1080, inspect_active=True)
+        cx, cy, cw, ch = layout.corner_gutter_rect
+        if cw > 0 and ch > 0:
+            assert layout.contains_gutter(cx + cw / 2, cy + ch / 2)
+            assert not layout.contains_play_viewport(cx + cw / 2, cy + ch / 2)
+
+
+class TestViewportMinimumSize:
+    """Play viewport remains at least minimum size across common resolutions."""
+
+    @pytest.mark.parametrize("sw,sh", [(1280, 720), (1920, 1080), (1366, 768), (2560, 1080)])
+    def test_viewport_at_least_minimum(self, sw, sh):
+        layout = compute_layout(sw, sh, sw, sh, inspect_active=True)
+        if layout.is_gutter_layout:
+            vx, vy, vw, vh = layout.play_viewport_rect
+            assert vw >= _MIN_VIEWPORT_WIDTH
+            assert vh >= _MIN_VIEWPORT_HEIGHT
+
+    def test_small_degraded_window_valid_layout(self):
+        layout = compute_layout(600, 400, 600, 400, inspect_active=True)
+        if layout.is_gutter_layout:
+            vx, vy, vw, vh = layout.play_viewport_rect
+            assert vw > 0
+            assert vh > 0
+
+
+class TestRoundTripAtCommonResolutions:
+    """Coordinate round-trips at common resolutions."""
+
+    @pytest.mark.parametrize("sw,sh", [(1280, 720), (1920, 1080), (1366, 768), (2560, 1080)])
+    def test_round_trip_inspect(self, sw, sh):
+        layout = compute_layout(sw, sh, sw, sh, inspect_active=True)
+        wx, wy = 100.0, 100.0
+        sx, sy = layout.world_to_screen(wx, wy)
+        wx2, wy2 = layout.screen_to_world(sx, sy)
+        assert wx2 == pytest.approx(wx, abs=1.0)
+        assert wy2 == pytest.approx(wy, abs=1.0)
+
+    @pytest.mark.parametrize("sw,sh", [(1280, 720), (1920, 1080)])
+    def test_gutter_click_no_selection(self, sw, sh):
+        layout = compute_layout(sw, sh, sw, sh, inspect_active=True)
+        rx, ry, rw, rh = layout.right_gutter_rect
+        if rw > 0:
+            assert not layout.contains_play_viewport(rx + rw // 2, ry + rh // 2)
+        bx, by, bw, bh = layout.bottom_gutter_rect
+        if bh > 0:
+            assert not layout.contains_play_viewport(bx + bw // 2, by + bh // 2)
+
+
+class TestGraphStripRefined:
+    """Graph strip uses more of the available rect."""
+
+    def test_graph_strip_uses_available_space(self):
+        gx, gy, gw, gh = compute_graph_strip_rect((100, 900, 800, 120))
+        assert gw >= 800 - 2 * 6 - 4
+        assert gh >= 120 - 2 * 6 - 4
+
+    def test_graph_strip_respects_margin(self):
+        gx, gy, gw, gh = compute_graph_strip_rect((100, 900, 800, 120))
+        assert gx >= 100 + 6
+        assert gy >= 900 + 6

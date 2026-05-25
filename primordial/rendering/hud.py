@@ -63,6 +63,7 @@ class HUD:
         *,
         debug_lines: list[str] | None = None,
         refresh_token: object | None = None,
+        docked: bool = False,
     ) -> tuple[pygame.Surface, tuple[int, int]]:
         if not self.visible:
             empty = pygame.Surface((1, 1), pygame.SRCALPHA)
@@ -103,6 +104,7 @@ class HUD:
             lines=lines,
             show_food_bar=show_food_bar,
             debug_lines=debug_lines,
+            docked=docked,
         )
         self._panel_cache_key = (target_size, simulation.settings.sim_mode, simulation.paused, bool(debug_lines))
         self._panel_surface_cache = panel_surface
@@ -268,6 +270,7 @@ class HUD:
         lines: list[str],
         show_food_bar: bool,
         debug_lines: list[str] | None = None,
+        docked: bool = False,
     ) -> tuple[pygame.Surface, tuple[int, int]]:
         if simulation.paused:
             lines = ["[PAUSED]"] + lines
@@ -276,6 +279,10 @@ class HUD:
         lines.append(f"FPS: {fps_display}")
         if debug_lines:
             lines.extend(debug_lines)
+
+        if docked:
+            return self._build_docked_panel(target_size, lines, show_food_bar, simulation)
+
         max_panel_width = max(220, target_size[0] - 20)
         lines = self._fit_lines(lines, max_panel_width - self.padding * 2)
 
@@ -338,6 +345,63 @@ class HUD:
         screen_height = target_size[1]
         pos = (10, screen_height - panel_height - 10)
         return panel, pos
+
+    def _build_docked_panel(
+        self,
+        target_size: tuple[int, int],
+        lines: list[str],
+        show_food_bar: bool,
+        simulation: "Simulation",
+    ) -> tuple[pygame.Surface, tuple[int, int]]:
+        avail_w, avail_h = target_size
+        if avail_w < 40 or avail_h < 20:
+            empty = pygame.Surface((1, 1), pygame.SRCALPHA)
+            return empty, (0, 0)
+
+        col_width = max(80, (avail_w - self.padding * 2 - 8) // 2)
+        max_text_width = col_width - 8
+        fitted = self._fit_lines(lines, max_text_width)
+
+        col_lines: list[list[str]] = [[], []]
+        for i, line in enumerate(fitted):
+            col_lines[i % 2].append(line)
+
+        row_height = self.line_height
+        max_rows = max(len(col_lines[0]), len(col_lines[1]))
+        panel_height = max_rows * row_height + self.padding * 2
+        if show_food_bar:
+            panel_height += 12 + 6
+        panel_height = min(panel_height, avail_h)
+
+        panel = pygame.Surface((avail_w, panel_height), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 80))
+
+        y = self.padding
+        for col_idx, col in enumerate(col_lines):
+            x = self.padding + col_idx * (col_width + 8)
+            row_y = y
+            for line in col:
+                if row_y + row_height > panel_height - self.padding:
+                    break
+                text_surface = self.font.render(line, True, (255, 255, 255))
+                panel.blit(text_surface, (x, row_y))
+                row_y += row_height
+
+        if show_food_bar:
+            bar_y = panel_height - 18
+            phase = simulation.food_cycle_phase
+            bar_x = self.padding
+            bar_w = avail_w - self.padding * 2
+            pygame.draw.rect(panel, (60, 60, 80, 180),
+                             (bar_x, bar_y, bar_w, 12), border_radius=3)
+            fill_w = max(2, int(bar_w * phase))
+            fill_r = int(180 * (1 - phase) + 40 * phase)
+            fill_g = int(60 * (1 - phase) + 180 * phase)
+            fill_b = int(40 * (1 - phase) + 80 * phase)
+            pygame.draw.rect(panel, (fill_r, fill_g, fill_b, 220),
+                             (bar_x, bar_y, fill_w, 12), border_radius=3)
+
+        return panel, (0, 0)
 
     def _fit_lines(self, lines: list[str], max_text_width: int) -> list[str]:
         fitted: list[str] = []

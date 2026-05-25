@@ -1049,13 +1049,13 @@ class TestInspectPanelPresentation(unittest.TestCase):
 
     def test_panel_placement_anchors_top_right_with_margin(self):
         placement = compute_inspect_panel_placement(1280, 720, 320, 280)
-        self.assertEqual((placement.x, placement.y), (936, 24))
+        self.assertEqual((placement.x, placement.y), (952, 8))
         self.assertEqual(placement.height, 280)
 
     def test_panel_placement_clamps_height_on_small_screens(self):
         placement = compute_inspect_panel_placement(320, 140, 280, 220)
-        self.assertEqual((placement.x, placement.y), (16, 24))
-        self.assertEqual(placement.height, 92)
+        self.assertEqual((placement.x, placement.y), (32, 8))
+        self.assertEqual(placement.height, 124)
 
     def test_status_line_uses_readable_separators(self):
         mode = InspectMode(enabled=True, pause_mode="pause", detail_mode="compact")
@@ -1074,15 +1074,15 @@ class TestInspectPanelPresentation(unittest.TestCase):
         self.assertEqual(_format_age_value("8 / 100  (8%)"), "8% lifespan (8 / 100t)")
 
     def test_panel_width_stays_compact_on_large_windows(self):
-        self.assertEqual(_inspect_panel_width(1280), 400)
-        self.assertEqual(_inspect_panel_width(800), 320)
+        self.assertEqual(_inspect_panel_width(1280), 380)
+        self.assertEqual(_inspect_panel_width(800), 380)
 
     def test_panel_width_is_responsive_to_screen(self):
         width_small = _inspect_panel_width(400)
         self.assertGreaterEqual(width_small, 160)
-        self.assertLessEqual(width_small, 400)
+        self.assertLessEqual(width_small, 380)
         width_large = _inspect_panel_width(1920)
-        self.assertLessEqual(width_large, 400)
+        self.assertLessEqual(width_large, 380)
 
     def test_tag_wrapping_preserves_whole_terms_where_possible(self):
         font = pygame.font.Font(None, 20)
