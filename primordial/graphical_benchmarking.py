@@ -99,6 +99,10 @@ class RunSpec:
     action_bar_visible: bool = False
     warmup_ticks: int = 0
     inspect_visual_quality: str | None = None
+    inspect_select_creature: bool = False
+    inspect_disable_graph: bool = False
+    inspect_disable_attention_line: bool = False
+    inspect_freeze_panel_refresh: bool = False
 
     @property
     def run_id(self) -> str:
@@ -471,6 +475,84 @@ def _build_inspect_follow_run_specs(*, fullscreen: bool) -> list[RunSpec]:
             inspect_visual_quality="performance",
         ),
         RunSpec(
+            scenario="inspect_gutter_no_selection",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect enabled with no selected organism.",
+            show_hud=True,
+            inspect_scenario="pause",
+            inspect_select_creature=False,
+            action_bar_visible=False,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_selected_panel_paused",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect enabled with a selected organism, paused.",
+            show_hud=True,
+            inspect_scenario="pause",
+            inspect_select_creature=True,
+            action_bar_visible=False,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_selected_graph_disabled",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect selected organism with graph disabled for benchmark isolation.",
+            show_hud=True,
+            inspect_scenario="pause",
+            inspect_select_creature=True,
+            inspect_disable_graph=True,
+            action_bar_visible=False,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_selected_attention_disabled",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect selected organism with attention line disabled for benchmark isolation.",
+            show_hud=True,
+            inspect_scenario="pause",
+            inspect_select_creature=True,
+            inspect_disable_attention_line=True,
+            action_bar_visible=False,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
+            scenario="inspect_selected_panel_frozen",
+            mode="predator_prey",
+            seed=seed,
+            duration_seconds=duration,
+            fullscreen=fullscreen,
+            screenshot_times=screenshot_times,
+            notes="Inspect selected organism with panel refresh frozen for benchmark isolation.",
+            show_hud=True,
+            inspect_scenario="pause",
+            inspect_select_creature=True,
+            inspect_freeze_panel_refresh=True,
+            action_bar_visible=False,
+            warmup_ticks=warmup_ticks,
+            inspect_visual_quality="performance",
+        ),
+        RunSpec(
             scenario="inspect_follow_paused",
             mode="predator_prey",
             seed=seed,
@@ -480,6 +562,7 @@ def _build_inspect_follow_run_specs(*, fullscreen: bool) -> list[RunSpec]:
             notes="Inspect enabled with a selected organism, paused.",
             show_hud=True,
             inspect_scenario="pause",
+            inspect_select_creature=True,
             action_bar_visible=True,
             warmup_ticks=warmup_ticks,
             inspect_visual_quality="performance",
@@ -494,6 +577,7 @@ def _build_inspect_follow_run_specs(*, fullscreen: bool) -> list[RunSpec]:
             notes="Inspect enabled in slow follow mode.",
             show_hud=True,
             inspect_scenario="slow",
+            inspect_select_creature=True,
             action_bar_visible=True,
             warmup_ticks=warmup_ticks,
             inspect_visual_quality="performance",
@@ -508,6 +592,7 @@ def _build_inspect_follow_run_specs(*, fullscreen: bool) -> list[RunSpec]:
             notes="Inspect enabled in normal follow mode with the action bar visible.",
             show_hud=True,
             inspect_scenario="normal",
+            inspect_select_creature=True,
             action_bar_visible=True,
             warmup_ticks=warmup_ticks,
             inspect_visual_quality="performance",
@@ -522,6 +607,7 @@ def _build_inspect_follow_run_specs(*, fullscreen: bool) -> list[RunSpec]:
             notes="Inspect enabled in normal follow mode with the action bar faded out.",
             show_hud=True,
             inspect_scenario="normal",
+            inspect_select_creature=True,
             action_bar_visible=False,
             warmup_ticks=warmup_ticks,
             inspect_visual_quality="performance",
@@ -724,7 +810,12 @@ def _run_single_graphical_benchmark(
             elapsed_wall_seconds = frame_end - start_time
 
             for key, value in render_metrics.items():
-                if not key.endswith("_ms"):
+                if not (
+                    key.endswith("_ms")
+                    or key.endswith("_count")
+                    or key.endswith("_pixels")
+                    or key.endswith("_hit")
+                ):
                     continue
                 render_breakdown_sums[key] = render_breakdown_sums.get(key, 0.0) + float(value)
                 render_breakdown_counts[key] = render_breakdown_counts.get(key, 0) + 1
@@ -1854,19 +1945,26 @@ def _configure_benchmark_overlay_state(spec: RunSpec, simulation: Simulation, re
     inspect_mode = getattr(renderer, "inspect_mode", None)
     if inspect_mode is not None:
         inspect_mode.enabled = False
+        inspect_mode.benchmark_disable_graph = False
+        inspect_mode.benchmark_disable_attention_line = False
+        inspect_mode.benchmark_freeze_panel_refresh = False
         clear_selection = getattr(inspect_mode, "clear_selection", None)
         if callable(clear_selection):
             clear_selection()
     simulation.paused = False
-    if spec.inspect_scenario and inspect_mode is not None and simulation.creatures:
-        candidate = max(
-            simulation.creatures,
-            key=lambda creature: (float(creature.energy), -float(creature.age)),
-        )
+    if spec.inspect_scenario and inspect_mode is not None:
         inspect_mode.enabled = True
-        bind_selection = getattr(inspect_mode, "_bind_selection", None)
-        if callable(bind_selection):
-            bind_selection(candidate, simulation)
+        inspect_mode.benchmark_disable_graph = bool(spec.inspect_disable_graph)
+        inspect_mode.benchmark_disable_attention_line = bool(spec.inspect_disable_attention_line)
+        inspect_mode.benchmark_freeze_panel_refresh = bool(spec.inspect_freeze_panel_refresh)
+        if spec.inspect_select_creature and simulation.creatures:
+            candidate = max(
+                simulation.creatures,
+                key=lambda creature: (float(creature.energy), -float(creature.age)),
+            )
+            bind_selection = getattr(inspect_mode, "_bind_selection", None)
+            if callable(bind_selection):
+                bind_selection(candidate, simulation)
         inspect_mode.pause_mode = str(spec.inspect_scenario)
         inspect_mode._slow_accumulator = 0.0
         simulation.paused = inspect_mode.pause_mode == "pause"

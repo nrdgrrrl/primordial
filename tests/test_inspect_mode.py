@@ -14,6 +14,7 @@ from primordial.rendering.inspect_mode import (
     _build_graph_strip_surface,
     _build_inspect_panel_surface,
     _inspect_status_line,
+    build_inspect_overlay_surfaces,
     build_creature_card,
     build_creature_summary,
     build_inspect_panel_lines,
@@ -592,7 +593,7 @@ class TestInspectHistoryAndDeathHandling(unittest.TestCase):
         self.assertEqual(first_metrics["inspect_graph_cache_hit"], 0.0)
         self.assertEqual(second_metrics["inspect_graph_cache_hit"], 1.0)
 
-        sim._frame = 16
+        sim._frame = 24
         creature.energy = 0.7
         mode.observe_simulation(sim)
         third_surface, _third_rect, third_metrics = _build_graph_strip_surface(
@@ -1537,6 +1538,126 @@ class TestGraphSamplingIntervals(unittest.TestCase):
         from primordial.rendering.inspect_mode import inspect_attention_refresh_interval_ticks
         sim = SimpleNamespace(settings=SimpleNamespace(inspect_visual_quality="high"))
         self.assertEqual(inspect_attention_refresh_interval_ticks(sim), 2)
+
+
+class TestSelectedInspectCaching(unittest.TestCase):
+    def test_graph_cache_reused_when_energy_changes_without_new_sample(self):
+        selected = _make_creature(energy=0.8)
+        sim = _make_simulation([selected])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(selected.x, selected.y, sim)
+        sim._frame = 16
+        mode.observe_simulation(sim)
+
+        surface1, _rect1, timings1 = _build_graph_strip_surface(
+            target_width=300,
+            target_height=100,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+        self.assertIsNotNone(surface1)
+        self.assertEqual(timings1["inspect_graph_cache_hit"], 0.0)
+
+        mode.selected_last_known_energy = 0.1
+        surface2, _rect2, timings2 = _build_graph_strip_surface(
+            target_width=300,
+            target_height=100,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+
+        self.assertIs(surface1, surface2)
+        self.assertEqual(timings2["inspect_graph_cache_hit"], 1.0)
+
+    def test_panel_card_cache_reused_across_layouts_same_bucket(self):
+        selected = _make_creature()
+        sim = _make_simulation([selected])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(selected.x, selected.y, sim)
+        sim._frame = 20
+
+        with patch("primordial.rendering.inspect_mode.build_creature_card") as build_card:
+            build_card.return_value = {"species": "Prey", "lineage": "#1", "stage": "adult", "depth": "mid", "energy": "0.5", "vel": "0.1", "age": "10 / 20 (50%)", "behavior": "wandering", "tags": "calm", "body_plan": "generalist", "key_effect": "—", "epistasis_enabled": "no"}
+            _build_inspect_panel_surface(
+                target_width=300,
+                target_height=200,
+                inspect_mode=mode,
+                simulation=sim,
+                focus_creature=selected,
+            )
+            _build_inspect_panel_surface(
+                target_width=320,
+                target_height=200,
+                inspect_mode=mode,
+                simulation=sim,
+                focus_creature=selected,
+            )
+
+        self.assertEqual(build_card.call_count, 1)
+
+    def test_selection_change_invalidates_card_cache(self):
+        c1 = _make_creature(x=100.0, y=100.0)
+        c2 = _make_creature(x=150.0, y=100.0)
+        sim = _make_simulation([c1, c2])
+        mode = InspectMode(enabled=True)
+        sim._frame = 20
+
+        with patch("primordial.rendering.inspect_mode.build_creature_card") as build_card:
+            build_card.return_value = {"species": "Prey", "lineage": "#1", "stage": "adult", "depth": "mid", "energy": "0.5", "vel": "0.1", "age": "10 / 20 (50%)", "behavior": "wandering", "tags": "calm", "body_plan": "generalist", "key_effect": "—", "epistasis_enabled": "no"}
+            mode.select_at_world_pos(c1.x, c1.y, sim)
+            _build_inspect_panel_surface(
+                target_width=300,
+                target_height=200,
+                inspect_mode=mode,
+                simulation=sim,
+                focus_creature=c1,
+            )
+            mode.select_at_world_pos(c2.x, c2.y, sim)
+            _build_inspect_panel_surface(
+                target_width=300,
+                target_height=200,
+                inspect_mode=mode,
+                simulation=sim,
+                focus_creature=c2,
+            )
+
+        self.assertEqual(build_card.call_count, 2)
+
+    def test_overlay_content_keys_are_deterministic(self):
+        selected = _make_creature()
+        sim = _make_simulation([selected])
+        mode = InspectMode(enabled=True)
+        mode.select_at_world_pos(selected.x, selected.y, sim)
+        sim._frame = 20
+        overlay1 = build_inspect_overlay_surfaces(
+            target_width=300,
+            target_height=200,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+        overlay2 = build_inspect_overlay_surfaces(
+            target_width=300,
+            target_height=200,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+        self.assertEqual(overlay1["panel_content_key"], overlay2["panel_content_key"])
+        self.assertEqual(overlay1["graph_content_key"], overlay2["graph_content_key"])
+
+    def test_benchmark_disable_graph_returns_no_graph_surface(self):
+        selected = _make_creature()
+        sim = _make_simulation([selected])
+        mode = InspectMode(enabled=True)
+        mode.benchmark_disable_graph = True
+        mode.select_at_world_pos(selected.x, selected.y, sim)
+        surface, rect, _timings = _build_graph_strip_surface(
+            target_width=300,
+            target_height=100,
+            inspect_mode=mode,
+            simulation=sim,
+        )
+        self.assertIsNone(surface)
+        self.assertEqual(rect.size, (0, 0))
 
 
 class TestInspectStatusLine(unittest.TestCase):

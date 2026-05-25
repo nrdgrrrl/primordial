@@ -232,6 +232,7 @@ class Renderer:
         self._overlay_small_font = pygame.font.Font(None, 24)
         self._debug_timing: dict[str, float] = {}
         self._external_debug_metrics: dict[str, float] = {}
+        self._inspect_line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
         # Stub mode/theme detection — all four sim modes are now implemented
         _IMPLEMENTED_MODES = {"energy", "predator_prey", "boids", "drift"}
@@ -258,6 +259,7 @@ class Renderer:
         self._predator_highlight_surf = pygame.Surface(
             (self.width, self.height), pygame.SRCALPHA
         )
+        self._inspect_line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._trail_layer = TrailLayer(self.width, self.height)
 
         # Cached static composition layers.
@@ -348,6 +350,7 @@ class Renderer:
         self._predator_highlight_surf = pygame.Surface(
             (self.width, self.height), pygame.SRCALPHA
         )
+        self._inspect_line_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self._trail_layer = TrailLayer(self.width, self.height)
         self._shimmer_states.clear()
         self._invalidate_static_caches()
@@ -453,7 +456,12 @@ class Renderer:
             simulation: Simulation instance to render.
         """
         frame_t0 = time.perf_counter()
-        timings: dict[str, float] = {}
+        timings: dict[str, float] = {
+            "ui_upload_ms": 0.0,
+            "ui_upload_count": 0.0,
+            "ui_uploaded_pixels": 0.0,
+            "ui_overlay_count": 0.0,
+        }
         target, direct_to_screen = self._select_frame_target()
         timings["inspect_shortcuts_ms"] = 0.0
 
@@ -604,6 +612,14 @@ class Renderer:
             if hud_focus_creature is None:
                 self.hud_focus.clear_selection()
         timings["hud_focus_ms"] = (time.perf_counter() - hud_focus_t0) * 1000.0
+        timings["inspect_ring_build_ms"] = 0.0
+        timings["inspect_attention_infer_ms"] = 0.0
+        timings["inspect_highlight_draw_ms"] = 0.0
+        selected_attention = None
+        if selected_creature is not None:
+            attention_t0 = time.perf_counter()
+            selected_attention = self.inspect_mode.get_attention_target(simulation, selected_creature)
+            timings["inspect_attention_infer_ms"] = (time.perf_counter() - attention_t0) * 1000.0
         for creature in simulation.creatures:
             render_state = creature_render_states[id(creature)]
             if isinstance(self.theme, OceanTheme):
@@ -624,8 +640,19 @@ class Renderer:
                     scale=render_state.birth_scale,
                 )
             if selected_creature is not None and creature is selected_creature:
+                ring_t0 = time.perf_counter()
                 self._draw_selection_ring(sim_target, creature, anim_time)
-                self._draw_attention_line(sim_target, creature, simulation, anim_time)
+                timings["inspect_ring_build_ms"] += (time.perf_counter() - ring_t0) * 1000.0
+                line_t0 = time.perf_counter()
+                if not self.inspect_mode.benchmark_disable_attention_line:
+                    self._draw_attention_line(
+                        sim_target,
+                        creature,
+                        simulation,
+                        anim_time,
+                        attention=selected_attention,
+                    )
+                timings["inspect_highlight_draw_ms"] += (time.perf_counter() - line_t0) * 1000.0
             elif hud_focus_creature is not None and creature is hud_focus_creature:
                 self._draw_hud_focus_ring(sim_target, creature, anim_time)
                 self._draw_hud_focus_attention_line(sim_target, creature, simulation, anim_time)
@@ -701,6 +728,8 @@ class Renderer:
                     inspect_mode=self.inspect_mode,
                     simulation=simulation,
                     focus_creature=creature,
+                    include_panel=True,
+                    include_graph=False,
                 )
 
                 inspect_panel_t0 = time.perf_counter()
@@ -784,6 +813,8 @@ class Renderer:
                         inspect_mode=self.inspect_mode,
                         simulation=simulation,
                         focus_creature=creature,
+                        include_panel=False,
+                        include_graph=True,
                     )
                     graph_surface = graph_overlay.get("graph_surface")
                     if graph_surface is not None:
@@ -978,29 +1009,30 @@ class Renderer:
         pygame.draw.circle(target, (255, 255, 255), (cx, cy), ring_radius, 2)
 
     def _draw_attention_line(
-        self, target: pygame.Surface, creature: "Creature",
-        simulation: "Simulation", anim_time: float,
+        self,
+        target: pygame.Surface,
+        creature: "Creature",
+        simulation: "Simulation",
+        anim_time: float,
+        *,
+        attention=None,
     ) -> None:
         """Draw a pulsing line from the inspected creature to its attention target."""
-        from .creature_observation import infer_attention_target
-        try:
-            attention = infer_attention_target(creature, simulation)
-        except Exception:
-            attention = None
+        if attention is None:
+            attention = self.inspect_mode.get_attention_target(simulation, creature)
         if attention is None:
             return
-        t_pulse = int(100 + 80 * math.sin(anim_time * 3.0))
+        t_pulse = 0.4 + 0.4 * math.sin(anim_time * 3.0)
         kind_colors = {
             "prey": (255, 80, 80),
             "threat": (255, 200, 50),
             "food": (80, 255, 80),
         }
-        color = kind_colors.get(attention.kind, (200, 200, 200))
+        base = kind_colors.get(attention.kind, (200, 200, 200))
+        color = tuple(max(0, min(255, int(channel * (0.6 + t_pulse)))) for channel in base)
         cx, cy = int(creature.x), int(creature.y)
         tx, ty = int(attention.x), int(attention.y)
-        line_surf = pygame.Surface(target.get_size(), pygame.SRCALPHA)
-        pygame.draw.line(line_surf, (*color, t_pulse), (cx, cy), (tx, ty), 1)
-        target.blit(line_surf, (0, 0))
+        pygame.draw.line(target, color, (cx, cy), (tx, ty), 1)
 
     # ------------------------------------------------------------------
     # HUD focus rendering

@@ -1306,11 +1306,15 @@ class PredatorPreyGpuRenderer:
             "inspect_graph_ms": 0.0,
             "inspect_graph_static_ms": 0.0,
             "inspect_graph_dynamic_ms": 0.0,
+            "inspect_behavior_infer_ms": 0.0,
+            "inspect_shortcuts_ms": 0.0,
             "settings_ms": 0.0,
             "help_ms": 0.0,
             "tutorial_ms": 0.0,
             "action_bar_ms": 0.0,
             "ui_upload_ms": 0.0,
+            "ui_upload_count": 0.0,
+            "ui_uploaded_pixels": 0.0,
             "ui_overlay_count": 0.0,
         }
         action_bar_context = self.action_bar.build_context(
@@ -1386,7 +1390,25 @@ class PredatorPreyGpuRenderer:
 
         cx, cy, cw, ch = layout.corner_gutter_rect
         if cw > 0 and ch > 0:
-            self._draw_gutter_rect("gutter_corner", layout.corner_gutter_rect, (10, 18, 28, 240))
+            from .inspect_mode import build_inspect_shortcuts_surface
+
+            shortcuts_t0 = time.perf_counter()
+            shortcut_surf = build_inspect_shortcuts_surface(cw, ch, self.inspect_mode)
+            if shortcut_surf is not None:
+                self._record_overlay_upload(
+                    timings,
+                    "gutter_corner",
+                    shortcut_surf,
+                    content_key=(
+                        "gutter_corner",
+                        getattr(self.inspect_mode, "_shortcut_cell_cache_key", None),
+                        shortcut_surf.get_size(),
+                    ),
+                )
+                self._draw_overlay_texture("gutter_corner", pygame.Rect(cx, cy, cw, ch), viewport=overlay_viewport)
+            else:
+                self._draw_gutter_rect("gutter_corner", layout.corner_gutter_rect, (10, 18, 28, 240))
+            timings["inspect_shortcuts_ms"] = (time.perf_counter() - shortcuts_t0) * 1000.0
 
         current_tick = int(getattr(simulation, "_frame", 0))
         debug_lines = self._build_debug_lines(self._debug_timing) if self.debug_enabled else None
@@ -1405,16 +1427,18 @@ class PredatorPreyGpuRenderer:
             )
             timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
             if hud_surface.get_width() > 1 and hud_surface.get_height() > 1:
-                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                self._record_overlay_upload(
+                    timings,
                     "hud",
                     hud_surface,
-                    content_key=("hud", id(hud_surface), hud_surface.get_size()),
+                    content_key=("hud", getattr(self.hud, "_panel_cache_key", None), hud_surface.get_size()),
                 )
                 self._draw_overlay_texture("hud", pygame.Rect(hud_x, hud_y, hud_surface.get_width(), hud_surface.get_height()), viewport=overlay_viewport)
                 timings["ui_overlay_count"] += 1.0
 
         if self.inspect_mode.enabled:
             right_gx, right_gy, right_gw, right_gh = layout.right_gutter_rect
+            focus_creature = self.inspect_mode.get_focus_creature(simulation)
             if right_gw > 0 and right_gh > 0:
                 t0 = time.perf_counter()
                 inspect_overlay = build_inspect_overlay_surfaces(
@@ -1422,6 +1446,9 @@ class PredatorPreyGpuRenderer:
                     target_height=right_gh,
                     inspect_mode=self.inspect_mode,
                     simulation=simulation,
+                    focus_creature=focus_creature,
+                    include_panel=True,
+                    include_graph=False,
                 )
                 timings["inspect_ms"] = (time.perf_counter() - t0) * 1000.0
                 if inspect_overlay is not None:
@@ -1437,24 +1464,41 @@ class PredatorPreyGpuRenderer:
                             panel_rect.width,
                             panel_rect.height,
                         )
-                        timings["ui_upload_ms"] += self._upload_overlay_surface(
+                        self._record_overlay_upload(
+                            timings,
                             "inspect_panel",
                             panel_surface,
-                            content_key=("inspect_panel", id(panel_surface), panel_surface.get_size()),
+                            content_key=inspect_overlay.get("panel_content_key") or ("inspect_panel", panel_surface.get_size()),
                         )
                         self._draw_overlay_texture("inspect_panel", screen_panel_rect, viewport=overlay_viewport)
                         timings["ui_overlay_count"] += 1.0
-                    if graph_surface is not None:
-                        graph_x, graph_y, graph_w, graph_h = layout.graph_rect
-                        if graph_w > 0 and graph_h > 0:
+                    graph_x, graph_y, graph_w, graph_h = layout.graph_rect
+                    if graph_w > 0 and graph_h > 0:
+                        graph_overlay = build_inspect_overlay_surfaces(
+                            target_width=graph_w,
+                            target_height=graph_h,
+                            inspect_mode=self.inspect_mode,
+                            simulation=simulation,
+                            focus_creature=focus_creature,
+                            include_panel=False,
+                            include_graph=True,
+                        )
+                        timings["inspect_graph_ms"] += graph_overlay["timings"].get("inspect_graph_ms", 0.0)
+                        timings["inspect_graph_static_ms"] += graph_overlay["timings"].get("inspect_graph_static_ms", 0.0)
+                        timings["inspect_graph_dynamic_ms"] += graph_overlay["timings"].get("inspect_graph_dynamic_ms", 0.0)
+                        graph_surface = graph_overlay["graph_surface"]
+                        graph_rect = graph_overlay["graph_rect"]
+                        if graph_surface is not None:
                             screen_graph_rect = pygame.Rect(graph_x, graph_y, graph_rect.width, graph_rect.height)
-                            timings["ui_upload_ms"] += self._upload_overlay_surface(
+                            self._record_overlay_upload(
+                                timings,
                                 "inspect_graph",
                                 graph_surface,
-                                content_key=("inspect_graph", id(graph_surface), graph_surface.get_size()),
+                                content_key=graph_overlay.get("graph_content_key") or ("inspect_graph", graph_surface.get_size()),
                             )
                             self._draw_overlay_texture("inspect_graph", screen_graph_rect, viewport=overlay_viewport)
                             timings["ui_overlay_count"] += 1.0
+                    timings["inspect_ms"] = timings.get("inspect_panel_ms", 0.0) + timings.get("inspect_graph_ms", 0.0)
 
         t0 = time.perf_counter()
         layout_ot = self.layout
@@ -1466,10 +1510,11 @@ class PredatorPreyGpuRenderer:
         )
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
         if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
-            timings["ui_upload_ms"] += self._upload_overlay_surface(
+            self._record_overlay_upload(
+                timings,
                 "action_bar",
                 action_bar_surface,
-                content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
+                content_key=("action_bar", getattr(self.action_bar, "_panel_surface_cache_key", None), action_bar_surface.get_size()),
             )
             self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha, viewport=overlay_viewport)
             timings["ui_overlay_count"] += 1.0
@@ -1502,7 +1547,17 @@ class PredatorPreyGpuRenderer:
                 corner_panel.blit(shortcut_surf, (0, 0))
             else:
                 corner_panel.fill((10, 18, 28, 240))
-            self._upload_overlay_surface("gutter_corner", corner_panel, content_key=("gutter_corner", cw, ch, id(shortcut_surf)))
+            self._record_overlay_upload(
+                timings,
+                "gutter_corner",
+                corner_panel,
+                content_key=(
+                    "gutter_corner",
+                    getattr(self.inspect_mode, "_shortcut_cell_cache_key", None),
+                    cw,
+                    ch,
+                ),
+            )
             self._draw_overlay_texture("gutter_corner", pygame.Rect(cx, cy, cw, ch), viewport=(self.display_width, self.display_height))
             timings["inspect_shortcuts_ms"] = (time.perf_counter() - shortcuts_t0) * 1000.0
 
@@ -1546,10 +1601,11 @@ class PredatorPreyGpuRenderer:
         )
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
         if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
-            self._upload_overlay_surface(
+            self._record_overlay_upload(
+                timings,
                 "action_bar",
                 action_bar_surface,
-                content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
+                content_key=("action_bar", getattr(self.action_bar, "_panel_surface_cache_key", None), action_bar_surface.get_size()),
             )
             self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha, viewport=(self.display_width, self.display_height))
             timings["action_bar_count"] += 1.0
@@ -1569,10 +1625,11 @@ class PredatorPreyGpuRenderer:
         )
         timings["hud_ms"] = (time.perf_counter() - t0) * 1000.0
         if self.hud.visible and hud_surface.get_width() > 1 and hud_surface.get_height() > 1:
-            timings["ui_upload_ms"] += self._upload_overlay_surface(
+            self._record_overlay_upload(
+                timings,
                 "hud",
                 hud_surface,
-                content_key=("hud", id(hud_surface), hud_surface.get_size()),
+                content_key=("hud", getattr(self.hud, "_panel_cache_key", None), hud_surface.get_size()),
             )
             self._draw_overlay_texture(
                 "hud",
@@ -1581,10 +1638,23 @@ class PredatorPreyGpuRenderer:
             timings["ui_overlay_count"] += 1.0
             zone_label_surface = self._draw_zone_labels(simulation, target=None)
             if zone_label_surface is not None:
-                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                self._record_overlay_upload(
+                    timings,
                     "zone_labels",
                     zone_label_surface,
-                    content_key=("zone_labels", id(zone_label_surface), zone_label_surface.get_size()),
+                    content_key=(
+                        "zone_labels",
+                        zone_label_surface.get_size(),
+                        tuple(
+                            (
+                                zone.zone_type,
+                                int(zone.x),
+                                int(zone.y),
+                                int(zone.radius),
+                            )
+                            for zone in simulation.zone_manager.zones
+                        ),
+                    ),
                 )
                 self._draw_overlay_texture(
                     "zone_labels",
@@ -1606,18 +1676,20 @@ class PredatorPreyGpuRenderer:
             graph_surface = inspect_overlay["graph_surface"]
             graph_rect = inspect_overlay["graph_rect"]
             if panel_surface is not None:
-                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                self._record_overlay_upload(
+                    timings,
                     "inspect_panel",
                     panel_surface,
-                    content_key=("inspect_panel", id(panel_surface), panel_surface.get_size()),
+                    content_key=inspect_overlay.get("panel_content_key") or ("inspect_panel", panel_surface.get_size()),
                 )
                 self._draw_overlay_texture("inspect_panel", panel_rect)
                 timings["ui_overlay_count"] += 1.0
             if graph_surface is not None:
-                timings["ui_upload_ms"] += self._upload_overlay_surface(
+                self._record_overlay_upload(
+                    timings,
                     "inspect_graph",
                     graph_surface,
-                    content_key=("inspect_graph", id(graph_surface), graph_surface.get_size()),
+                    content_key=inspect_overlay.get("graph_content_key") or ("inspect_graph", graph_surface.get_size()),
                 )
                 self._draw_overlay_texture("inspect_graph", graph_rect)
                 timings["ui_overlay_count"] += 1.0
@@ -1631,10 +1703,11 @@ class PredatorPreyGpuRenderer:
         )
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
         if action_bar_surface is not None and action_bar_rect is not None and action_bar_alpha > 0.0:
-            timings["ui_upload_ms"] += self._upload_overlay_surface(
+            self._record_overlay_upload(
+                timings,
                 "action_bar",
                 action_bar_surface,
-                content_key=("action_bar", id(action_bar_surface), action_bar_surface.get_size()),
+                content_key=("action_bar", getattr(self.action_bar, "_panel_surface_cache_key", None), action_bar_surface.get_size()),
             )
             self._draw_overlay_texture("action_bar", action_bar_rect, alpha=action_bar_alpha)
             timings["ui_overlay_count"] += 1.0
@@ -2015,6 +2088,21 @@ class PredatorPreyGpuRenderer:
             )
         slot.content_key = content_key
         return (time.perf_counter() - t0) * 1000.0
+
+    def _record_overlay_upload(
+        self,
+        timings: dict[str, float],
+        name: str,
+        surface: pygame.Surface,
+        *,
+        content_key: tuple[object, ...],
+    ) -> float:
+        upload_ms = self._upload_overlay_surface(name, surface, content_key=content_key)
+        timings["ui_upload_ms"] += upload_ms
+        if upload_ms > 0.0:
+            timings["ui_upload_count"] += 1.0
+            timings["ui_uploaded_pixels"] += float(surface.get_width() * surface.get_height())
+        return upload_ms
 
     def _draw_overlay_texture(
         self,

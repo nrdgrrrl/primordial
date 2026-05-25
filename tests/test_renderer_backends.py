@@ -256,6 +256,100 @@ class RendererBackendTests(unittest.TestCase):
         self.assertEqual(uploads[0][1], uploads[1][1])
         self.assertEqual(draws, [("action_bar", 0.8), ("action_bar", 0.35)])
 
+    def test_inspect_overlay_uses_deterministic_content_keys(self) -> None:
+        renderer = PredatorPreyGpuRenderer.__new__(PredatorPreyGpuRenderer)
+        renderer.width = 320
+        renderer.height = 180
+        renderer.display_width = 320
+        renderer.display_height = 180
+        renderer.fps = 0.0
+        renderer.settings = SimpleNamespace(inspect_visual_quality="balanced")
+        renderer.debug_enabled = False
+        renderer._debug_timing = {}
+        renderer._overlay_textures_supported = True
+        renderer._overlay_textures = {
+            "hud": _OverlayTextureSlot(),
+            "zone_labels": _OverlayTextureSlot(),
+            "inspect_panel": _OverlayTextureSlot(),
+            "inspect_graph": _OverlayTextureSlot(),
+            "action_bar": _OverlayTextureSlot(),
+            "fallback_ui": _OverlayTextureSlot(),
+            "gutter_right": _OverlayTextureSlot(),
+            "gutter_bottom": _OverlayTextureSlot(),
+            "gutter_corner": _OverlayTextureSlot(),
+        }
+        renderer.hud = SimpleNamespace(
+            visible=False,
+            build_panel_surface=lambda *args, **kwargs: (
+                pygame.Surface((1, 1), pygame.SRCALPHA),
+                (0, 0),
+            ),
+            _panel_cache_key=None,
+        )
+        renderer.settings_overlay = SimpleNamespace(visible=False, fade=0.0)
+        renderer.help_overlay = SimpleNamespace(visible=False, fade=0.0)
+        renderer.tutorial_overlay = SimpleNamespace(visible=False, fade=0.0)
+        renderer.inspect_mode = SimpleNamespace(enabled=True, get_focus_creature=lambda simulation: None, _shortcut_cell_cache_key=None)
+        renderer._layout_cache_key = None
+        renderer._layout = SimpleNamespace(
+            is_gutter_layout=False,
+            play_viewport_rect=(0, 0, 320, 180),
+        )
+        renderer.action_bar = SimpleNamespace(
+            build_context=lambda *args, **kwargs: "ctx",
+            opacity=lambda context: 0.0,
+            overlay_state=lambda *args, **kwargs: (None, None, 0.0),
+            _panel_surface_cache_key=None,
+        )
+        renderer.hud_focus = SimpleNamespace(has_selection=False)
+        renderer._draw_overlay_texture = lambda *args, **kwargs: None
+        uploads: list[tuple[str, tuple[object, ...]]] = []
+        renderer._record_overlay_upload = (
+            lambda timings, name, surface, content_key: uploads.append((name, content_key)) or 0.0
+        )
+        renderer._draw_zone_labels = lambda simulation, target=None: None
+
+        panel = pygame.Surface((100, 80), pygame.SRCALPHA)
+        graph = pygame.Surface((120, 40), pygame.SRCALPHA)
+        overlay = {
+            "panel_surface": panel,
+            "panel_rect": pygame.Rect(10, 10, 100, 80),
+            "panel_content_key": ("inspect_panel", ("bucket", 1), (100, 80)),
+            "graph_surface": graph,
+            "graph_rect": pygame.Rect(10, 120, 120, 40),
+            "graph_content_key": ("inspect_graph", ("gen", 2), (120, 40)),
+            "timings": {},
+        }
+        simulation = SimpleNamespace(predator_prey_game_over_active=False)
+
+        with patch("primordial.rendering.gpu_renderer.build_inspect_overlay_surfaces", return_value=overlay):
+            timings = {
+                "hud_ms": 0.0,
+                "overlay_ms": 0.0,
+                "inspect_ms": 0.0,
+                "inspect_panel_ms": 0.0,
+                "inspect_panel_layout_ms": 0.0,
+                "inspect_graph_ms": 0.0,
+                "inspect_graph_static_ms": 0.0,
+                "inspect_graph_dynamic_ms": 0.0,
+                "inspect_behavior_infer_ms": 0.0,
+                "inspect_shortcuts_ms": 0.0,
+                "settings_ms": 0.0,
+                "help_ms": 0.0,
+                "tutorial_ms": 0.0,
+                "action_bar_ms": 0.0,
+                "ui_upload_ms": 0.0,
+                "ui_upload_count": 0.0,
+                "ui_uploaded_pixels": 0.0,
+                "ui_overlay_count": 0.0,
+            }
+            renderer._draw_ui_overlay_textures(simulation, timings, "ctx")
+            renderer._draw_ui_overlay_textures(simulation, timings, "ctx")
+
+        self.assertEqual([name for name, _ in uploads], ["inspect_panel", "inspect_graph", "inspect_panel", "inspect_graph"])
+        self.assertEqual(uploads[0][1], uploads[2][1])
+        self.assertEqual(uploads[1][1], uploads[3][1])
+
 
 if __name__ == "__main__":
     unittest.main()

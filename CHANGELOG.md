@@ -2,6 +2,55 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — perf: eliminate selected inspect overlay frame drop
+
+### Selected Inspect performance fixes
+- Fixed selected Inspect graph cache churn: graph surfaces no longer rebuild just because `selected_last_known_energy` changed between samples
+- Fixed selected Inspect GPU overlay upload churn: deterministic content keys now use cache keys and layout state instead of transient `id(surface)` values for inspect panel, inspect graph, HUD, action bar, and gutter shortcut overlays
+- Added overlay upload counters and uploaded-pixel tracking to GPU benchmark/render metrics: `ui_upload_count`, `ui_uploaded_pixels`
+- Fixed software gutter path double work: right gutter now builds panel only, bottom gutter now builds graph only, instead of building both surfaces twice per frame
+- Fixed selected attention line in software renderer to use cached Inspect attention targets instead of re-running direct attention inference every frame
+- Replaced full-screen temporary line-surface allocation in software Inspect attention drawing with direct line drawing
+
+### Selected panel/card throttling and cache reuse
+- Added cached selected-creature card/selection-display reuse per panel refresh bucket to avoid repeating expensive observability, phenotype, and behavior-card work across equivalent panel builds
+- Removed `follow_creature_id` from expensive selected panel/graph cache keys so lineage proxy changes no longer force full panel/graph rebuilds every frame
+- Added benchmark-only inspect flags for profiling isolation:
+  - `benchmark_disable_graph`
+  - `benchmark_disable_attention_line`
+  - `benchmark_freeze_panel_refresh`
+
+### Selected panel layout optimization
+- Reworked Inspect panel fitting to render line blocks once, fit by summed pre-rendered heights, and draw once
+- Removed repeated full-panel re-rendering during fit/measure loops, cutting selected panel rebuild cost from ~140ms spikes to ~14ms spikes on the current machine during normal follow
+
+### Benchmarking improvements
+- Extended the `inspect_follow` benchmark suite with selected-state isolation scenarios:
+  - no selection
+  - selected panel visible
+  - selected graph disabled
+  - selected attention line disabled
+  - selected panel refresh frozen
+  - selected normal follow
+  - selected paused
+- Benchmark aggregation now includes non-`*_ms` selected-overlay counters such as upload counts, upload pixels, and cache-hit metrics
+
+### Measured result on current machine
+- Before this pass, user-observed behavior was roughly:
+  - Inspect open, no selection: ~30 FPS
+  - Inspect open, selected organism: ~23 FPS
+- After this pass, live windowed benchmark on the same busy predator-prey scene shows:
+  - no selection: 28.97 FPS
+  - selected paused: 28.89 FPS
+  - selected normal follow: 28.84 FPS
+- Fullscreen spot-check shows selected mode remains close to unselected:
+  - no selection: 27.90 FPS
+  - selected paused: 27.48 FPS
+  - selected normal follow: 27.55 FPS
+
+### Remaining limitation
+- The selected normal-follow path still spends more time in panel refresh than paused Inspect, but the selected/unselected FPS gap is now small enough that the previous major regression is removed
+
 ## [2026-05-25] — refine: improve inspect shortcuts, playback defaults, and graph cadence
 
 ### Inspect mode defaults

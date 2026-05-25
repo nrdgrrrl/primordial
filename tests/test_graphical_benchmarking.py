@@ -107,6 +107,11 @@ class GraphicalBenchmarkingTests(unittest.TestCase):
             [
                 "inspect_follow_baseline_hud_off",
                 "inspect_follow_hud_only",
+                "inspect_gutter_no_selection",
+                "inspect_selected_panel_paused",
+                "inspect_selected_graph_disabled",
+                "inspect_selected_attention_disabled",
+                "inspect_selected_panel_frozen",
                 "inspect_follow_paused",
                 "inspect_follow_slow",
                 "inspect_follow_normal",
@@ -114,9 +119,14 @@ class GraphicalBenchmarkingTests(unittest.TestCase):
             ],
         )
         self.assertEqual(specs[0].show_hud, False)
-        self.assertEqual(specs[2].inspect_scenario, "pause")
-        self.assertEqual(specs[4].inspect_scenario, "normal")
-        self.assertTrue(specs[4].action_bar_visible)
+        self.assertFalse(specs[2].inspect_select_creature)
+        self.assertTrue(specs[3].inspect_select_creature)
+        self.assertTrue(specs[4].inspect_disable_graph)
+        self.assertTrue(specs[5].inspect_disable_attention_line)
+        self.assertTrue(specs[6].inspect_freeze_panel_refresh)
+        self.assertEqual(specs[7].inspect_scenario, "pause")
+        self.assertEqual(specs[9].inspect_scenario, "normal")
+        self.assertTrue(specs[9].action_bar_visible)
         self.assertFalse(specs[5].action_bar_visible)
 
 

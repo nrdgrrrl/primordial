@@ -134,6 +134,7 @@ class InspectMode:
     _graph_static_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
     _graph_dynamic_surface_cache: object | None = field(default=None, repr=False)
     _graph_dynamic_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
+    _graph_generation: int = field(default=0, repr=False)
     _creature_lookup_frame: int = field(default=-1, repr=False)
     _creature_lookup_size: int = field(default=-1, repr=False)
     _creature_lookup_by_id: dict[int, Creature] = field(default_factory=dict, repr=False)
@@ -146,6 +147,15 @@ class InspectMode:
     _attention_cache_target: object | None = field(default=None, repr=False)
     _latest_lineage_count: int = field(default=0, repr=False)
     _latest_lineage_trait_value: float | None = field(default=None, repr=False)
+    _card_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
+    _card_cache_value: Mapping[str, str] | None = field(default=None, repr=False)
+    _selection_display_cache_key: tuple[object, ...] | None = field(default=None, repr=False)
+    _selection_display_cache_value: object | None = field(default=None, repr=False)
+
+    # Benchmark-only flags used by the graphical profiling harness.
+    benchmark_disable_graph: bool = False
+    benchmark_disable_attention_line: bool = False
+    benchmark_freeze_panel_refresh: bool = False
 
     # Shortcut cell cache
     _shortcut_cell_cache: object | None = field(default=None, repr=False)
@@ -268,14 +278,22 @@ class InspectMode:
         self._graph_static_cache_key = None
         self._invalidate_graph_dynamic_cache()
 
+    def _invalidate_card_cache(self) -> None:
+        self._card_cache_key = None
+        self._card_cache_value = None
+        self._selection_display_cache_key = None
+        self._selection_display_cache_value = None
+
     def _reset_histories(self) -> None:
         self._last_history_sample_tick = None
         self._energy_history.clear()
         self._lineage_population_history.clear()
         self._lineage_trait_history.clear()
+        self._graph_generation += 1
         self._latest_lineage_count = 0
         self._latest_lineage_trait_value = None
         self._invalidate_attention_cache()
+        self._invalidate_card_cache()
         self._invalidate_panel_cache()
         self._invalidate_graph_cache()
 
@@ -327,6 +345,7 @@ class InspectMode:
         self._focus_cache_creature_id = id(creature)
         self._focus_cache_creature = creature
         self._invalidate_attention_cache()
+        self._invalidate_card_cache()
         self._store_live_snapshot(creature)
         self.selected_graph_trait_key = self._graph_trait_key_for_mode(simulation)
         self.selected_graph_trait_initial_value = float(
@@ -355,6 +374,7 @@ class InspectMode:
         self._focus_cache_frame = -1
         self._focus_cache_creature = None
         self._invalidate_attention_cache()
+        self._invalidate_card_cache()
         self._invalidate_panel_cache()
         self._invalidate_graph_dynamic_cache()
 
@@ -570,6 +590,7 @@ class InspectMode:
             self._lineage_population_history.append((current_tick, lineage_count))
             self._lineage_trait_history.append((current_tick, lineage_trait_value))
         sample_ms = (time.perf_counter() - sample_t0) * 1000.0
+        self._graph_generation += 1
         self._invalidate_graph_dynamic_cache()
         return {
             "inspect_observe_ms": (time.perf_counter() - observe_t0) * 1000.0,
@@ -1282,6 +1303,78 @@ def _build_selection_display(
     )
 
 
+def _build_cached_creature_card(
+    inspect_mode: InspectMode,
+    simulation: Simulation,
+    focus_creature: Creature | None,
+    attention_target,
+    refresh_bucket: int,
+    *,
+    timings: dict[str, float] | None = None,
+) -> Mapping[str, str] | None:
+    if focus_creature is None:
+        inspect_mode._invalidate_card_cache()
+        return None
+    card_key = (
+        id(focus_creature),
+        refresh_bucket,
+        inspect_mode.selected_dead,
+        inspect_mode.selected_death_cause,
+        inspect_mode.detail_mode,
+        inspect_mode.selected_lineage_id,
+        inspect_mode._latest_lineage_count,
+    )
+    if card_key == inspect_mode._card_cache_key and inspect_mode._card_cache_value is not None:
+        return inspect_mode._card_cache_value
+    behavior_t0 = time.perf_counter()
+    card = build_creature_card(
+        focus_creature,
+        simulation,
+        attention_target=attention_target,
+    )
+    if timings is not None:
+        timings["inspect_behavior_infer_ms"] = (time.perf_counter() - behavior_t0) * 1000.0
+    inspect_mode._card_cache_key = card_key
+    inspect_mode._card_cache_value = card
+    inspect_mode._selection_display_cache_key = None
+    inspect_mode._selection_display_cache_value = None
+    return card
+
+
+def _build_cached_selection_display(
+    inspect_mode: InspectMode,
+    simulation: Simulation,
+    *,
+    focus_creature: Creature | None,
+    card: Mapping[str, str] | None,
+    refresh_bucket: int,
+) -> InspectSelectionDisplay | None:
+    key = (
+        refresh_bucket,
+        inspect_mode.selected_creature_id,
+        inspect_mode.selected_lineage_id,
+        inspect_mode.selected_dead,
+        inspect_mode.selected_death_cause,
+        inspect_mode.selected_species,
+        inspect_mode._latest_lineage_count,
+        id(focus_creature) if focus_creature is not None else None,
+    )
+    if (
+        key == inspect_mode._selection_display_cache_key
+        and inspect_mode._selection_display_cache_value is not None
+    ):
+        return inspect_mode._selection_display_cache_value
+    value = _build_selection_display(
+        inspect_mode,
+        simulation,
+        focus_creature=focus_creature,
+        card=card,
+    )
+    inspect_mode._selection_display_cache_key = key
+    inspect_mode._selection_display_cache_value = value
+    return value
+
+
 def _compute_graph_strip_rect(surface_width: int, surface_height: int):
     import pygame
 
@@ -1413,6 +1506,13 @@ def _build_graph_strip_surface(
 ):
     import pygame
 
+    if inspect_mode.benchmark_disable_graph:
+        return None, pygame.Rect(0, 0, 0, 0), {
+            "inspect_graph_static_ms": 0.0,
+            "inspect_graph_dynamic_ms": 0.0,
+            "inspect_graph_cache_hit": 0.0,
+        }
+
     strip_rect = _compute_graph_strip_rect(target_width, target_height)
     title_font = pygame.font.Font(None, 22)
     body_font = pygame.font.Font(None, 20)
@@ -1427,14 +1527,10 @@ def _build_graph_strip_surface(
         static_key,
         inspect_mode.selected_creature_id,
         inspect_mode.selected_lineage_id,
-        inspect_mode.follow_creature_id,
         inspect_mode.selected_dead,
         inspect_mode.selected_death_cause,
         inspect_mode.selected_species,
-        inspect_mode.selected_last_known_energy,
-        tuple(inspect_mode._energy_history),
-        tuple(inspect_mode._lineage_population_history),
-        tuple(inspect_mode._lineage_trait_history),
+        inspect_mode._graph_generation,
         inspect_mode.selected_graph_trait_initial_value,
     )
     timings = {
@@ -1495,8 +1591,8 @@ def _build_graph_strip_surface(
             surface,
             graph_rects[0],
             current_text=(
-                f"{int(round((inspect_mode.selected_last_known_energy or 0.0) * 100.0))}%"
-                if not inspect_mode.selected_dead and inspect_mode.selected_last_known_energy is not None
+                f"{int(round((energy_series[-1][1] if energy_series else 0.0) * 100.0))}%"
+                if not inspect_mode.selected_dead and energy_series
                 else "Dead"
             ),
             range_text="0-100%",
@@ -1682,34 +1778,66 @@ def build_inspect_overlay_surfaces(
     inspect_mode: InspectMode,
     simulation: Simulation,
     focus_creature: Creature | None = None,
+    include_panel: bool = True,
+    include_graph: bool = True,
 ) -> dict[str, object]:
     import pygame
 
     creature = focus_creature if focus_creature is not None else inspect_mode.get_focus_creature(simulation)
-    panel_t0 = time.perf_counter()
-    panel_surface, panel_metrics = _build_inspect_panel_surface(
-        target_width=target_width,
-        target_height=target_height,
-        inspect_mode=inspect_mode,
-        simulation=simulation,
-        focus_creature=creature,
-    )
-    panel_ms = (time.perf_counter() - panel_t0) * 1000.0
-    placement = compute_inspect_panel_placement(
-        target_width,
-        target_height,
-        panel_surface.get_width(),
-        panel_surface.get_height(),
-    )
-    panel_rect = pygame.Rect(placement.x, placement.y, panel_surface.get_width(), panel_surface.get_height())
-    graph_t0 = time.perf_counter()
-    graph_surface, graph_rect, graph_metrics = _build_graph_strip_surface(
-        target_width=target_width,
-        target_height=target_height,
-        inspect_mode=inspect_mode,
-        simulation=simulation,
-    )
-    graph_ms = (time.perf_counter() - graph_t0) * 1000.0
+    panel_surface = None
+    panel_rect = pygame.Rect(0, 0, 0, 0)
+    panel_metrics = {
+        "inspect_panel_layout_ms": 0.0,
+        "inspect_behavior_infer_ms": 0.0,
+    }
+    panel_ms = 0.0
+    panel_content_key: tuple[object, ...] | None = None
+    if include_panel:
+        panel_t0 = time.perf_counter()
+        panel_surface, panel_metrics = _build_inspect_panel_surface(
+            target_width=target_width,
+            target_height=target_height,
+            inspect_mode=inspect_mode,
+            simulation=simulation,
+            focus_creature=creature,
+        )
+        panel_ms = (time.perf_counter() - panel_t0) * 1000.0
+        placement = compute_inspect_panel_placement(
+            target_width,
+            target_height,
+            panel_surface.get_width(),
+            panel_surface.get_height(),
+        )
+        panel_rect = pygame.Rect(placement.x, placement.y, panel_surface.get_width(), panel_surface.get_height())
+        panel_content_key = (
+            "inspect_panel",
+            inspect_mode._panel_cache_key,
+            panel_surface.get_size(),
+        )
+    graph_surface = None
+    graph_rect = pygame.Rect(0, 0, 0, 0)
+    graph_metrics = {
+        "inspect_graph_static_ms": 0.0,
+        "inspect_graph_dynamic_ms": 0.0,
+        "inspect_graph_cache_hit": 0.0,
+    }
+    graph_ms = 0.0
+    graph_content_key: tuple[object, ...] | None = None
+    if include_graph:
+        graph_t0 = time.perf_counter()
+        graph_surface, graph_rect, graph_metrics = _build_graph_strip_surface(
+            target_width=target_width,
+            target_height=target_height,
+            inspect_mode=inspect_mode,
+            simulation=simulation,
+        )
+        graph_ms = (time.perf_counter() - graph_t0) * 1000.0
+        if graph_surface is not None:
+            graph_content_key = (
+                "inspect_graph",
+                inspect_mode._graph_cache_key,
+                graph_surface.get_size(),
+            )
     timings = {
         "inspect_panel_ms": panel_ms,
         "inspect_graph_ms": graph_ms,
@@ -1717,14 +1845,17 @@ def build_inspect_overlay_surfaces(
         "inspect_graph_dynamic_ms": 0.0,
         "inspect_panel_layout_ms": 0.0,
         "inspect_graph_cache_hit": 0.0,
+        "inspect_behavior_infer_ms": 0.0,
     }
     timings.update(panel_metrics)
     timings.update(graph_metrics)
     return {
         "panel_surface": panel_surface,
         "panel_rect": panel_rect,
+        "panel_content_key": panel_content_key,
         "graph_surface": graph_surface,
         "graph_rect": graph_rect,
+        "graph_content_key": graph_content_key,
         "timings": timings,
     }
 
@@ -1949,37 +2080,46 @@ def _build_inspect_panel_surface(
     panel_width = _inspect_panel_width(target_width)
     max_height = max(1, target_height - (_INSPECT_MARGIN * 2))
     current_tick = int(getattr(simulation, "_frame", 0))
-    refresh_bucket = current_tick // inspect_panel_refresh_interval_ticks(simulation)
+    if inspect_mode.benchmark_freeze_panel_refresh and inspect_mode._panel_cache_key is not None:
+        refresh_bucket = -1
+    else:
+        refresh_bucket = current_tick // inspect_panel_refresh_interval_ticks(simulation)
     cache_key = (
         panel_width,
         max_height,
         inspect_mode.detail_mode,
         inspect_mode.selected_creature_id,
         inspect_mode.selected_lineage_id,
-        inspect_mode.follow_creature_id,
         inspect_mode.selected_dead,
         inspect_mode.selected_death_cause,
         refresh_bucket,
     )
     if cache_key == inspect_mode._panel_cache_key and inspect_mode._panel_surface_cache is not None:
-        return inspect_mode._panel_surface_cache, {"inspect_panel_layout_ms": 0.0}
+        return inspect_mode._panel_surface_cache, {
+            "inspect_panel_layout_ms": 0.0,
+            "inspect_behavior_infer_ms": 0.0,
+        }
 
     layout_t0 = time.perf_counter()
-    attention_target = inspect_mode.get_attention_target(simulation, focus_creature)
-    card = (
-        build_creature_card(
-            focus_creature,
-            simulation,
-            attention_target=attention_target,
-        )
-        if focus_creature is not None
-        else None
+    attention_target = inspect_mode.get_attention_target(
+        simulation,
+        focus_creature,
     )
-    selection_display = _build_selection_display(
+    panel_metrics = {"inspect_behavior_infer_ms": 0.0}
+    card = _build_cached_creature_card(
+        inspect_mode,
+        simulation,
+        focus_creature,
+        attention_target,
+        refresh_bucket,
+        timings=panel_metrics,
+    )
+    selection_display = _build_cached_selection_display(
         inspect_mode,
         simulation,
         focus_creature=focus_creature,
         card=card,
+        refresh_bucket=refresh_bucket,
     )
     line_candidates = [
         build_inspect_panel_lines(
@@ -2001,42 +2141,55 @@ def _build_inspect_panel_surface(
 
     last_surface = pygame.Surface((panel_width, min(max_height, 160)), pygame.SRCALPHA)
     for lines in line_candidates:
-        fitted_lines = _fit_inspect_panel_lines(lines, panel_width, max_height)
-        panel_surface = _render_inspect_panel_surface(panel_width, max_height, fitted_lines)
+        rendered_entries = _render_inspect_panel_entries(panel_width, lines)
+        fitted_entries = _fit_inspect_panel_entries(rendered_entries, max_height)
+        panel_surface = _render_inspect_panel_surface_from_blocks(panel_width, max_height, fitted_entries)
         last_surface = panel_surface
         if panel_surface.get_height() <= max_height:
             inspect_mode._panel_cache_key = cache_key
             inspect_mode._panel_surface_cache = panel_surface
             return panel_surface, {
                 "inspect_panel_layout_ms": (time.perf_counter() - layout_t0) * 1000.0,
+                **panel_metrics,
             }
     inspect_mode._panel_cache_key = cache_key
     inspect_mode._panel_surface_cache = last_surface
     return last_surface, {
         "inspect_panel_layout_ms": (time.perf_counter() - layout_t0) * 1000.0,
+        **panel_metrics,
     }
 
 
-def _fit_inspect_panel_lines(
-    lines: tuple[InspectPanelLine, ...],
+def _render_inspect_panel_entries(
     panel_width: int,
+    lines: tuple[InspectPanelLine, ...],
+) -> list[tuple[InspectPanelLine, dict[str, object]]]:
+    fonts = _inspect_fonts()
+    padding = 16
+    content_width = max(40, panel_width - (padding * 2))
+    return [(line, _render_line(line, fonts, content_width)) for line in lines]
+
+
+def _fit_inspect_panel_entries(
+    entries: list[tuple[InspectPanelLine, dict[str, object]]],
     max_height: int,
-) -> tuple[InspectPanelLine, ...]:
-    current_lines = tuple(lines)
-    while _measure_panel_height(panel_width, current_lines) > max_height:
-        removable = [line for line in current_lines if line.removable]
+) -> list[tuple[InspectPanelLine, dict[str, object]]]:
+    current_entries = list(entries)
+    while _measure_panel_height_from_entries(current_entries) > max_height:
+        removable = [line for line, _block in current_entries if line.removable]
         if not removable:
             break
+        current_lines = [line for line, _block in current_entries]
         line_to_remove = max(removable, key=lambda line: (line.priority, current_lines.index(line)))
         removed = False
-        next_lines: list[InspectPanelLine] = []
-        for line in current_lines:
+        next_entries: list[tuple[InspectPanelLine, dict[str, object]]] = []
+        for line, block in current_entries:
             if not removed and line is line_to_remove:
                 removed = True
                 continue
-            next_lines.append(line)
-        current_lines = _remove_empty_sections(tuple(next_lines))
-    return current_lines
+            next_entries.append((line, block))
+        current_entries = _remove_empty_sections_from_entries(next_entries)
+    return current_entries
 
 
 def _remove_empty_sections(lines: tuple[InspectPanelLine, ...]) -> tuple[InspectPanelLine, ...]:
@@ -2058,8 +2211,32 @@ def _remove_empty_sections(lines: tuple[InspectPanelLine, ...]) -> tuple[Inspect
     return tuple(cleaned)
 
 
-def _measure_panel_height(panel_width: int, lines: tuple[InspectPanelLine, ...]) -> int:
-    return _render_inspect_panel_surface(panel_width, 100000, lines).get_height()
+def _remove_empty_sections_from_entries(
+    entries: list[tuple[InspectPanelLine, dict[str, object]]],
+) -> list[tuple[InspectPanelLine, dict[str, object]]]:
+    cleaned: list[tuple[InspectPanelLine, dict[str, object]]] = []
+    total = len(entries)
+    for index, (line, block) in enumerate(entries):
+        if line.kind != "section":
+            cleaned.append((line, block))
+            continue
+        keep_section = False
+        for lookahead, _lookahead_block in entries[index + 1 : total]:
+            if lookahead.kind == "section":
+                break
+            if lookahead.kind in {"row", "row_pair"}:
+                keep_section = True
+                break
+        if keep_section:
+            cleaned.append((line, block))
+    return cleaned
+
+
+def _measure_panel_height_from_entries(
+    entries: list[tuple[InspectPanelLine, dict[str, object]]],
+) -> int:
+    padding = 16
+    return sum(int(block["height"]) for _line, block in entries) + (padding * 2)
 
 
 def _render_inspect_panel_surface(
@@ -2067,12 +2244,19 @@ def _render_inspect_panel_surface(
     max_height: int,
     lines: tuple[InspectPanelLine, ...],
 ):
+    rendered_entries = _render_inspect_panel_entries(panel_width, lines)
+    return _render_inspect_panel_surface_from_blocks(panel_width, max_height, rendered_entries)
+
+
+def _render_inspect_panel_surface_from_blocks(
+    panel_width: int,
+    max_height: int,
+    rendered_entries: list[tuple[InspectPanelLine, dict[str, object]]],
+):
     import pygame
 
-    fonts = _inspect_fonts()
     padding = 16
-    content_width = max(40, panel_width - (padding * 2))
-    rendered_lines = [_render_line(line, fonts, content_width) for line in lines]
+    rendered_lines = [block for _line, block in rendered_entries]
     content_height = sum(block["height"] for block in rendered_lines)
     panel_height = min(max_height, content_height + (padding * 2))
     surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
