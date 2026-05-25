@@ -680,7 +680,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-25] — perf: split gpu inspect overlays and add inspect quality budgets",
+            "## [2026-05-25] — feat: add HUD focus selection and attention line",
         )
         self.assertEqual(
             changelog.count("## [2026-05-25] — feat: add inspect follow modes and lineage graphs"),

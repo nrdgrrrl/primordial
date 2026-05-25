@@ -386,6 +386,9 @@ def main(
                             simulation,
                             renderer,
                         )
+                elif renderer.hud.visible and scr_args.mode == "normal":
+                    world_x, world_y = window_to_world(event.pos[0], event.pos[1], simulation)
+                    renderer.hud_focus.select_at_world_pos(world_x, world_y, simulation)
 
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_p:

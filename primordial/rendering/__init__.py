@@ -11,6 +11,7 @@ from .backend import (
 )
 from .themes import Theme, OceanTheme, StubTheme, get_theme
 from .hud import HUD
+from .hud_focus import HUDFocus
 from .help_overlay import HelpOverlay
 from .tutorial_overlay import TutorialOverlay
 from .glyphs import build_glyph_surface, get_glyph_surface
@@ -30,7 +31,7 @@ from .creature_observation import (
 
 __all__ = [
     "Renderer", "Theme", "OceanTheme", "StubTheme", "get_theme",
-    "HUD", "HelpOverlay", "TutorialOverlay", "build_glyph_surface", "get_glyph_surface", "AnimationManager",
+    "HUD", "HUDFocus", "HelpOverlay", "TutorialOverlay", "build_glyph_surface", "get_glyph_surface", "AnimationManager",
     "create_renderer", "display_flags_for_settings", "renderer_backend_name",
     "renderer_gpu_info", "save_renderer_screenshot", "wants_gpu_renderer",
     "InspectMode", "build_creature_card", "display_to_world",

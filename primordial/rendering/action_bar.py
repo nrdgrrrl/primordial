@@ -50,6 +50,8 @@ class ActionBarContext:
     help_visible: bool
     tutorial_visible: bool
     game_over_visible: bool
+    hud_visible: bool = False
+    hud_focus_active: bool = False
 
     @property
     def overlays_visible(self) -> bool:
@@ -74,6 +76,11 @@ _NORMAL_SHORTCUTS: tuple[ShortcutHint, ...] = (
     ShortcutHint("I", "Inspect"),
     ShortcutHint("+/-", "Food rate"),
     ShortcutHint("Esc/Q", "Quit"),
+)
+
+_NORMAL_SHORTCUTS_HUD_FOCUS: tuple[ShortcutHint, ...] = (
+    ShortcutHint("Click", "Focus organism"),
+    ShortcutHint("C", "Clear focus"),
 )
 
 _PREDATOR_PREY_EXTRA: tuple[ShortcutHint, ...] = (
@@ -139,6 +146,8 @@ class ActionBar:
         settings_visible: bool,
         help_visible: bool,
         tutorial_visible: bool,
+        hud_visible: bool = False,
+        hud_focus_active: bool = False,
     ) -> ActionBarContext:
         """Create a filter context from renderer/runtime state."""
         return ActionBarContext(
@@ -150,6 +159,8 @@ class ActionBar:
             help_visible=help_visible,
             tutorial_visible=tutorial_visible,
             game_over_visible=simulation.predator_prey_game_over_active,
+            hud_visible=hud_visible,
+            hud_focus_active=hud_focus_active,
         )
 
     def command_items(self, context: ActionBarContext) -> tuple[ShortcutHint, ...]:
@@ -161,6 +172,8 @@ class ActionBar:
         if context.inspect_enabled:
             return _INSPECT_SHORTCUTS
         items = list(_NORMAL_SHORTCUTS)
+        if context.hud_visible:
+            items = items[:3] + list(_NORMAL_SHORTCUTS_HUD_FOCUS) + items[3:]
         if context.sim_mode == "predator_prey":
             items.extend(_PREDATOR_PREY_EXTRA)
         return tuple(items)

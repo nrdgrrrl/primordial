@@ -17,7 +17,8 @@ Move the mouse during normal playback to reveal a temporary bottom action bar wi
 | `M` | In Inspect Mode, switch between pause and slow motion |
 | `N` | In Inspect Mode, switch to normal-speed follow |
 | `D` | In Inspect Mode, toggle compact/detailed card (detail shows effective phenotype modifiers) |
-| mouse click | In Inspect Mode, select a creature |
+| mouse click | In Inspect Mode, select a creature; with HUD visible, select an organism for HUD focus |
+| `C` | Clear HUD focus selection (when HUD is visible and Inspect is not active) |
 | hold `P` | Highlight predators |
 | `+` / `=` | Increase food spawn rate |
 | `-` / `_` | Decrease food spawn rate |

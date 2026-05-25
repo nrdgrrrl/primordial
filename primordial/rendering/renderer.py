@@ -14,6 +14,7 @@ from .action_bar import ActionBar
 from .animations import AnimationManager
 from .help_overlay import HelpOverlay
 from .hud import HUD
+from .hud_focus import HUDFocus
 from .inspect_mode import InspectMode
 from .predation_effects import PredationEffectManager
 from .settings_overlay import SettingsOverlay
@@ -269,6 +270,7 @@ class Renderer:
         self.show_predator_highlight = False
         self.show_cursor = False
         self.inspect_mode = InspectMode()
+        self.hud_focus = HUDFocus()
         self.action_bar = ActionBar()
 
         self.settings_overlay = SettingsOverlay(settings)
@@ -523,6 +525,18 @@ class Renderer:
                 selected_creature = get_focus_creature(simulation)
             else:
                 selected_creature = self.inspect_mode.get_selected_creature(simulation)
+        hud_focus_creature = None
+        hud_focus_t0 = time.perf_counter()
+        if (
+            not self.inspect_mode.enabled
+            and self.hud.visible
+            and self.hud_focus.has_selection
+        ):
+            self.hud_focus.observe_simulation(simulation)
+            hud_focus_creature = self.hud_focus.get_selected_creature(simulation)
+            if hud_focus_creature is None:
+                self.hud_focus.clear_selection()
+        timings["hud_focus_ms"] = (time.perf_counter() - hud_focus_t0) * 1000.0
         for creature in simulation.creatures:
             render_state = creature_render_states[id(creature)]
             if isinstance(self.theme, OceanTheme):
@@ -545,6 +559,9 @@ class Renderer:
             if selected_creature is not None and creature is selected_creature:
                 self._draw_selection_ring(target, creature, anim_time)
                 self._draw_attention_line(target, creature, simulation, anim_time)
+            elif hud_focus_creature is not None and creature is hud_focus_creature:
+                self._draw_hud_focus_ring(target, creature, anim_time)
+                self._draw_hud_focus_attention_line(target, creature, simulation, anim_time)
         timings["creatures_ms"] = (time.perf_counter() - t0) * 1000.0
 
         # --- Predator locator highlight (hold P) ---
@@ -636,6 +653,8 @@ class Renderer:
             settings_visible=self.settings_overlay.visible,
             help_visible=self.help_overlay.visible,
             tutorial_visible=self.tutorial_overlay.visible,
+            hud_visible=self.hud.visible,
+            hud_focus_active=self.hud_focus.has_selection,
         )
         self.action_bar.draw(target, action_bar_context)
         timings["action_bar_ms"] = (time.perf_counter() - t0) * 1000.0
@@ -659,6 +678,8 @@ class Renderer:
         """Toggle HUD visibility."""
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
+        if not self.hud.visible:
+            self.hud_focus.clear_selection()
         self.hud.invalidate_cache()
         self._zone_label_surf_cached = None
         self._static_background_surf_cached = None
@@ -732,6 +753,41 @@ class Renderer:
             "food": (80, 255, 80),
         }
         color = kind_colors.get(attention.kind, (200, 200, 200))
+        cx, cy = int(creature.x), int(creature.y)
+        tx, ty = int(attention.x), int(attention.y)
+        line_surf = pygame.Surface(target.get_size(), pygame.SRCALPHA)
+        pygame.draw.line(line_surf, (*color, t_pulse), (cx, cy), (tx, ty), 1)
+        target.blit(line_surf, (0, 0))
+
+    # ------------------------------------------------------------------
+    # HUD focus rendering
+    # ------------------------------------------------------------------
+
+    def _draw_hud_focus_ring(
+        self, target: pygame.Surface, creature: "Creature", anim_time: float,
+    ) -> None:
+        """Draw a subtle ring around the HUD-focused organism."""
+        cx, cy = int(creature.x), int(creature.y)
+        radius = int(creature.get_radius()) + 6
+        pulse = 1.0 + 0.08 * math.sin(anim_time * 3.0)
+        ring_radius = max(4, int(radius * pulse))
+        pygame.draw.circle(target, (180, 220, 255), (cx, cy), ring_radius, 1)
+
+    def _draw_hud_focus_attention_line(
+        self, target: pygame.Surface, creature: "Creature",
+        simulation: "Simulation", anim_time: float,
+    ) -> None:
+        """Draw the attention line for the HUD-focused organism."""
+        attention = self.hud_focus.get_attention_target(simulation, creature)
+        if attention is None:
+            return
+        t_pulse = int(70 + 50 * math.sin(anim_time * 2.5))
+        kind_colors = {
+            "prey": (200, 80, 80),
+            "threat": (200, 170, 50),
+            "food": (80, 200, 80),
+        }
+        color = kind_colors.get(attention.kind, (160, 160, 180))
         cx, cy = int(creature.x), int(creature.y)
         tx, ty = int(attention.x), int(attention.y)
         line_surf = pygame.Surface(target.get_size(), pygame.SRCALPHA)
@@ -1558,12 +1614,14 @@ class Renderer:
                 links=timings.get("links_ms", 0.0),
             ),
             "Dbg render: trails {trails:.2f}  creatures {creatures:.2f}  "
-            "attacks {attacks:.2f}  anim {anim:.2f}  hud {hud:.2f}".format(
+            "attacks {attacks:.2f}  anim {anim:.2f}  hud {hud:.2f}  "
+            "hud_focus {hud_focus:.2f}".format(
                 trails=timings.get("trails_ms", 0.0),
                 creatures=timings.get("creatures_ms", 0.0),
                 attacks=timings.get("attacks_ms", 0.0),
                 anim=timings.get("anim_ms", 0.0),
                 hud=timings.get("hud_ms", 0.0),
+                hud_focus=timings.get("hud_focus_ms", 0.0),
             ),
             "Dbg ui: inspect {inspect:.2f}  panel {panel:.2f}  graph {graph:.2f}  "
             "sample {sample:.2f}  bar {bar:.2f}".format(

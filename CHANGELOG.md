@@ -2,6 +2,15 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — feat: add HUD focus selection and attention line
+
+- Added lightweight organism focus selection for the basic HUD mode, separate from full Inspect Mode.
+- When the HUD is visible, clicking an organism selects it as the HUD focus and draws a subtle ring and attention line (food, prey, or threat target) without pausing or slowing the simulation.
+- Press `C` to clear the HUD focus selection. Inspect Mode (`I`) clears the HUD focus on entry and owns all selection while active.
+- The HUD focus is automatically cleared when the focused organism dies or when the HUD is hidden.
+- Action bar now shows "Click: Focus organism" and "C: Clear focus" shortcuts when the HUD is visible.
+- Help documentation and debug timing (`hud_focus_ms`) updated accordingly.
+
 ## [2026-05-25] — perf: split gpu inspect overlays and add inspect quality budgets
 
 - Extended the live graphical benchmark harness with an `inspect_follow` suite that runs real-display predator-prey scenarios for baseline, HUD-only, paused Inspect, slow follow, normal follow, and normal follow with the action bar faded out, including average FPS, 1% low FPS, and detailed render-breakdown metrics.
