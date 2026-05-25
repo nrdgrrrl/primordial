@@ -90,6 +90,7 @@ from .action_bar import ActionBar
 from .glyphs import build_glyph_surface
 from .help_overlay import HelpOverlay
 from .hud import HUD
+from .hud_focus import HUDFocus
 from .inspect_mode import (
     InspectMode,
     build_inspect_overlay_surfaces,
@@ -457,6 +458,7 @@ class PredatorPreyGpuRenderer:
         self.show_predator_highlight = False
         self.show_cursor = False
         self.inspect_mode = InspectMode()
+        self.hud_focus = HUDFocus()
         self.action_bar = ActionBar()
         self.hud = HUD(font_size=16)
         self.hud.visible = settings.show_hud
@@ -706,6 +708,7 @@ class PredatorPreyGpuRenderer:
         self._inspect_highlight_cache_lines = ()
         self.inspect_mode.invalidate_render_caches()
         self.hud.invalidate_cache()
+        self.hud_focus.clear_selection()
         self._reset_overlay_texture_state()
         self.predation_effect_manager = PredationEffectManager(
             enabled=bool(getattr(self.settings, "predation_kill_effects_enabled", True)),
@@ -716,6 +719,8 @@ class PredatorPreyGpuRenderer:
     def toggle_hud(self) -> None:
         self.hud.toggle()
         self.settings.show_hud = self.hud.visible
+        if not self.hud.visible:
+            self.hud_focus.clear_selection()
         self.hud.invalidate_cache()
         self._mark_overlay_dirty("hud")
         self._mark_overlay_dirty("zone_labels")
@@ -878,6 +883,18 @@ class PredatorPreyGpuRenderer:
             self._draw_lines(debug_click_lines, width=2.0)
         timings["inspect_highlight_draw_ms"] = (time.perf_counter() - draw_lines_t0) * 1000.0
         timings["inspect_highlight_ms"] = (time.perf_counter() - t0) * 1000.0
+
+        t0 = time.perf_counter()
+        hud_focus_creature = None
+        if not self.inspect_mode.enabled and self.hud.visible and self.hud_focus.has_selection:
+            self.hud_focus.observe_simulation(simulation)
+            hud_focus_creature = self.hud_focus.get_selected_creature(simulation)
+            if hud_focus_creature is None:
+                self.hud_focus.clear_selection()
+        hud_focus_lines = self._build_hud_focus_highlight(simulation, anim_time, hud_focus_creature)
+        if hud_focus_lines:
+            self._draw_lines(hud_focus_lines, width=1.0)
+        timings["hud_focus_ms"] = (time.perf_counter() - t0) * 1000.0
 
         t0 = time.perf_counter()
         timings.update(self._draw_ui(simulation))
@@ -1236,6 +1253,8 @@ class PredatorPreyGpuRenderer:
             settings_visible=self.settings_overlay.visible,
             help_visible=self.help_overlay.visible,
             tutorial_visible=self.tutorial_overlay.visible,
+            hud_visible=self.hud.visible,
+            hud_focus_active=self.hud_focus.has_selection,
         )
         should_draw = (
             self.hud.visible
@@ -1488,6 +1507,42 @@ class PredatorPreyGpuRenderer:
         self._inspect_highlight_cache_key = cache_key
         self._inspect_highlight_cache_lines = tuple(lines)
         return lines, timings
+
+    def _build_hud_focus_highlight(
+        self,
+        simulation,
+        anim_time: float,
+        hud_focus_creature,
+    ) -> list[LineSprite]:
+        """Build line sprites for the HUD focus ring and attention target."""
+        if hud_focus_creature is None:
+            return []
+        cx, cy = hud_focus_creature.x, hud_focus_creature.y
+        pulse = 0.5 + 0.5 * math.sin(anim_time * 3.0)
+        radius = hud_focus_creature.get_radius() + 6.0 + 2.5 * pulse
+        color = (0.7, 0.86, 1.0, 0.55 + 0.15 * pulse)
+        n = 24
+        points = []
+        for i in range(n):
+            angle = 2.0 * math.pi * i / n
+            px = cx + radius * math.cos(angle)
+            py = cy + radius * math.sin(angle)
+            points.append((px, py))
+        lines = []
+        for i in range(n):
+            j = (i + 1) % n
+            lines.append(LineSprite(points[i][0], points[i][1], points[j][0], points[j][1], color))
+        attention = self.hud_focus.get_attention_target(simulation, hud_focus_creature)
+        if attention is not None:
+            t_pulse = 0.27 + 0.2 * math.sin(anim_time * 2.5)
+            kind_colors = {
+                "prey": (0.78, 0.31, 0.31, t_pulse),
+                "threat": (0.78, 0.67, 0.20, t_pulse),
+                "food": (0.31, 0.78, 0.31, t_pulse),
+            }
+            att_color = kind_colors.get(attention.kind, (0.63, 0.63, 0.71, t_pulse))
+            lines.append(LineSprite(cx, cy, attention.x, attention.y, att_color))
+        return lines
 
     def _build_debug_inspect_click_marker(self, current_time: float) -> list[LineSprite]:
         """Build a short-lived debug marker at the inspect click's mapped world point."""

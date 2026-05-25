@@ -353,6 +353,7 @@ class Renderer:
         self._invalidate_static_caches()
         self.inspect_mode.invalidate_render_caches()
         self.hud.invalidate_cache()
+        self.hud_focus.clear_selection()
         if isinstance(self.theme, OceanTheme):
             self.theme.invalidate_runtime_caches()
             self.theme._trail_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)

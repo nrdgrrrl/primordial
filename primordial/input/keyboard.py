@@ -35,6 +35,20 @@ def handle_keydown(
         return False
     elif key == pygame.K_u:
         renderer.toggle_hud()
+        if renderer.hud.visible and not renderer.inspect_mode.enabled:
+            show_interactive_cursor()
+            renderer.show_cursor = True
+        elif not renderer.inspect_mode.enabled:
+            hide_cursor = (
+                settings.fullscreen
+                or bool(screen.get_flags() & pygame.FULLSCREEN)
+                or mode == "screensaver"
+            )
+            if hide_cursor:
+                hide_runtime_cursor()
+            else:
+                show_interactive_cursor()
+            renderer.show_cursor = False
     elif key == pygame.K_c:
         if renderer.hud.visible and not renderer.inspect_mode.enabled:
             renderer.hud_focus.clear_selection()
@@ -56,16 +70,20 @@ def handle_keydown(
                     simulation.paused = restore_paused
                 else:
                     simulation.paused = False
-                hide_cursor = (
-                    settings.fullscreen
-                    or bool(screen.get_flags() & pygame.FULLSCREEN)
-                    or mode == "screensaver"
-                )
-                if hide_cursor:
-                    hide_runtime_cursor()
-                else:
+                if renderer.hud.visible:
                     show_interactive_cursor()
-                renderer.show_cursor = False
+                    renderer.show_cursor = True
+                else:
+                    hide_cursor = (
+                        settings.fullscreen
+                        or bool(screen.get_flags() & pygame.FULLSCREEN)
+                        or mode == "screensaver"
+                    )
+                    if hide_cursor:
+                        hide_runtime_cursor()
+                    else:
+                        show_interactive_cursor()
+                    renderer.show_cursor = False
                 inspect_mode.clear_selection()
             runtime_loop.reset_timing_debt()
     elif key == pygame.K_m:

@@ -171,6 +171,7 @@ class RendererBackendTests(unittest.TestCase):
             opacity=lambda context: 0.0,
             draw=lambda surface, context: None,
         )
+        renderer.hud_focus = SimpleNamespace(has_selection=False)
         renderer.debug_enabled = False
         renderer._debug_timing = {}
         renderer._draw_game_over_overlay = lambda simulation: None
@@ -224,6 +225,7 @@ class RendererBackendTests(unittest.TestCase):
                 alpha_state["value"],
             ),
         )
+        renderer.hud_focus = SimpleNamespace(has_selection=False)
         uploads: list[tuple[str, tuple[object, ...]]] = []
         draws: list[tuple[str, float]] = []
         fallback_called = {"value": 0}
