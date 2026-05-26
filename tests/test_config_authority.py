@@ -91,7 +91,6 @@ mutation_rate = 0.1200
 target_fps = 30
 simulation_tick_hz = 30
 adaptive_tuning_enabled = true
-predator_post_move_contact_kill_enabled = true
 predator_energy_to_reproduce = 0.7100
 prey_flee_age_slowdown_enabled = false
 prey_flee_low_energy_slowdown_enabled = false
@@ -142,11 +141,6 @@ adaptive_near_extinction_prey_floor = 7
         self.assertEqual(settings.mode_params["predator_prey"]["food_spawn_rate"], 0.65)
         self.assertTrue(
             settings.mode_params["predator_prey"]["adaptive_tuning_enabled"]
-        )
-        self.assertTrue(
-            settings.mode_params["predator_prey"][
-                "predator_post_move_contact_kill_enabled"
-            ]
         )
         self.assertEqual(
             settings.mode_params["predator_prey"]["predator_energy_to_reproduce"],
@@ -253,14 +247,6 @@ adaptive_near_extinction_prey_floor = 7
         self.assertEqual(
             settings.mode_params["predator_prey"]["prey_energy_to_reproduce"],
             0.76,
-        )
-
-    def test_predator_post_move_contact_kill_default_is_false(self) -> None:
-        settings = Config()
-        self.assertFalse(
-            settings.mode_params["predator_prey"][
-                "predator_post_move_contact_kill_enabled"
-            ]
         )
 
     def test_legacy_predator_prey_mode_block_is_reset_to_canonical_defaults(self) -> None:

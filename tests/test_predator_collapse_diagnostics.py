@@ -342,7 +342,6 @@ def _make_run(
             "prey_depth_fatigue_decay_ticks": 180,
             "prey_depth_fatigue_max": 1.0,
             "predator_near_contact_diagnostic_scale": 1.25,
-            "predator_post_move_contact_kill_enabled": False,
             "predator_sustained_chase_min_frames": 20,
             "predator_committed_depth_tracking_enabled": True,
             "predator_committed_depth_tracking_min_chase_ticks": 90,
@@ -362,11 +361,6 @@ def _make_run(
             "predator_depth_fatigue_summary": {
                 "prey_depth_fatigue_events": sum(int(l.get("kills_after_depth_fatigue", 0)) for l in completed_lives + active_lives),
                 "depth_escape_fatigue_applied_frames": 0,
-                "post_move_contact_opportunities": 5,
-                "post_move_contact_same_depth_opportunities": 3,
-                "post_move_contact_cross_depth_opportunities": 2,
-                "post_move_contact_kills": 0,
-                "post_move_contact_misses_by_depth": 2,
                 "committed_depth_tracking_events": sum(int(l.get("committed_depth_tracking_events", 0)) for l in completed_lives + active_lives),
                 "committed_depth_tracking_kills": sum(int(l.get("committed_depth_tracking_kills", 0)) for l in completed_lives + active_lives),
                 "cross_depth_near_contact_before_tracking": sum(int(l.get("cross_depth_near_contact_before_tracking", 0)) for l in completed_lives + active_lives),
@@ -599,12 +593,6 @@ class TestReportSections(unittest.TestCase):
         self.assertEqual(result["committed_depth_tracking_events"], 2)
         self.assertEqual(result["committed_depth_tracking_kills"], 1)
         self.assertTrue(result["cross_depth_near_contact_decreased_after_tracking"])
-        self.assertEqual(result["post_move_contact_opportunities"], 5)
-        self.assertEqual(result["post_move_contact_same_depth_opportunities"], 3)
-        self.assertEqual(result["post_move_contact_cross_depth_opportunities"], 2)
-        self.assertEqual(result["post_move_contact_kills"], 0)
-        self.assertEqual(result["post_move_contact_misses_by_depth"], 2)
-        self.assertFalse(result["predator_post_move_contact_kill_enabled"])
         self.assertEqual(result["kills_after_depth_fatigue"], 1)
         self.assertEqual(result["kills_after_committed_depth_tracking"], 1)
         self.assertAlmostEqual(result["average_chase_pressure_at_kill"], 108.0)
@@ -844,19 +832,6 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertIn('"Pred Count" is the final predator count.', md)
 
-    def test_markdown_includes_post_move_contact_metrics(self):
-        run = _make_run(completed_lives=[_make_life(near_contact_frames=2)])
-        report = build_report([run])
-        md = render_markdown(report)
-        self.assertIn("Post-move kills enabled:", md)
-        self.assertIn("Post-move contact opportunities:", md)
-        self.assertIn("Post-move same-depth opportunities:", md)
-        self.assertIn("Post-move cross-depth opportunities:", md)
-        self.assertIn("Post-move contact kills:", md)
-        self.assertIn("Post-move contact misses by depth:", md)
-        self.assertIn("post-move same-depth contact kills are disabled", md)
-        self.assertIn("Post-move contact conversion:", md)
-
     def test_changelog_begins_with_header_and_single_quarry_memory_entry(self):
         changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         lines = changelog.splitlines()
@@ -867,7 +842,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
             "All notable changes to Primordial are documented in this file.",
         )
         self.assertEqual(
-            lines[23],
+            lines[4],
             "## [2026-05-25] — feat: add predator chase depth fatigue",
         )
         self.assertEqual(

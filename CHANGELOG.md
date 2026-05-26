@@ -2,17 +2,6 @@
 
 All notable changes to Primordial are documented in this file.
 
-## [2026-05-26] — diagnostics: salvage predator contact observability without changing defaults
-
-### Predator-prey diagnostics
-- Added conservative post-move predator contact opportunity diagnostics that reuse the existing pre-move contact radius, split opportunities into same-depth and cross-depth, and leave default predator/prey behavior unchanged
-- Added optional `predator_post_move_contact_kill_enabled = false` predator_prey mode param so experimental same-depth post-move kills stay disabled by default while remaining testable
-- Fixed predator quarry-memory fallback targeting to recompute live prey distance before the contact-kill check, preventing stale `best_dist_sq` from affecting contact correctness
-- Extended `tools/predator_collapse_diagnostics.py` reporting with post-move opportunity metrics and explicit labeling that post-move kills are disabled unless the flag is enabled
-
-### Tests
-- Added focused tests for the default-off post-move kill flag, observability-only post-move contact tracking, optional same-depth post-move kill behavior, cross-depth no-kill enforcement, and memory-target distance recomputation
-
 ## [2026-05-26] — chore: add local default config reset tool
 
 ### Developer tooling
