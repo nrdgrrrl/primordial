@@ -234,6 +234,12 @@ class PredatorHuntResult:
     engaged: bool
     killed: bool
     hunt_modifiers: PredatorHuntModifiers = field(default_factory=PredatorHuntModifiers)
+    target_prey_id: int | None = None
+    contact_dist: float = 0.0
+    near_contact_dist: float = 0.0
+    used_memory_target: bool = False
+    near_contact_before_tracking: bool = False
+    near_contact_after_tracking: bool = False
 
 
 @dataclass
@@ -2026,9 +2032,11 @@ class Simulation:
     def _mark_cross_depth_tracking_context(
         self,
         predator: Creature,
+        *,
+        post_tracking: bool,
     ) -> None:
         life = self._ensure_predator_life(predator)
-        if life.get("_current_chase_had_committed_tracking"):
+        if post_tracking:
             life["cross_depth_near_contact_after_tracking"] += 1
             self._predator_depth_fatigue_summary[
                 "cross_depth_near_contact_after_tracking"
@@ -2288,6 +2296,12 @@ class Simulation:
             memory_target = self._get_predator_memory_target(predator, sense=sense)
             if memory_target is not None:
                 best_prey, best_sensed_prey = memory_target
+                best_dist_sq = self._distance_sq(
+                    predator.x,
+                    predator.y,
+                    best_prey.x,
+                    best_prey.y,
+                )
                 used_memory_target = True
             else:
                 self._clear_predator_chase_state(predator)
@@ -2333,18 +2347,7 @@ class Simulation:
         )
         committed_tracking_applied = False
         pre_tracking_same_depth = predator.depth_band == best_prey.depth_band
-        if is_near_contact:
-            self._record_predator_near_contact(
-                predator,
-                best_prey,
-                same_depth=pre_tracking_same_depth,
-                no_kill=not (
-                    best_dist_sq < (contact_dist * contact_dist)
-                    and pre_tracking_same_depth
-                ),
-            )
         if is_near_contact and best_prey.energy > 0.0 and predator.depth_band != best_prey.depth_band:
-            self._mark_cross_depth_tracking_context(predator)
             committed_tracking_applied = self._maybe_apply_committed_depth_tracking(
                 predator,
                 best_prey,
@@ -2353,8 +2356,20 @@ class Simulation:
                 hunt_modifiers=hunt_modifiers,
             )
         post_tracking_same_depth = predator.depth_band == best_prey.depth_band
-        if is_near_contact and (not pre_tracking_same_depth) and (not post_tracking_same_depth):
-            self._mark_cross_depth_tracking_context(predator)
+        if is_near_contact and (not pre_tracking_same_depth):
+            self._mark_cross_depth_tracking_context(predator, post_tracking=False)
+        if is_near_contact and (not post_tracking_same_depth):
+            self._mark_cross_depth_tracking_context(predator, post_tracking=True)
+        if is_near_contact:
+            self._record_predator_near_contact(
+                predator,
+                best_prey,
+                same_depth=post_tracking_same_depth,
+                no_kill=not (
+                    best_dist_sq < (contact_dist * contact_dist)
+                    and post_tracking_same_depth
+                ),
+            )
         if (
             best_dist_sq < (contact_dist * contact_dist)
             and best_prey.energy > 0.0
@@ -2366,6 +2381,12 @@ class Simulation:
                 engaged=True,
                 killed=True,
                 hunt_modifiers=hunt_modifiers,
+                target_prey_id=id(best_prey),
+                contact_dist=contact_dist,
+                near_contact_dist=near_contact_dist,
+                used_memory_target=used_memory_target,
+                near_contact_before_tracking=is_near_contact and (not pre_tracking_same_depth),
+                near_contact_after_tracking=is_near_contact and (not post_tracking_same_depth),
             )
         elif best_dist_sq < (contact_dist * contact_dist) and best_prey.energy > 0.0:
             self._recent_cross_band_miss_frames.append(self._frame)
@@ -2377,6 +2398,12 @@ class Simulation:
             engaged=True,
             killed=False,
             hunt_modifiers=hunt_modifiers,
+            target_prey_id=id(best_prey),
+            contact_dist=contact_dist,
+            near_contact_dist=near_contact_dist,
+            used_memory_target=used_memory_target,
+            near_contact_before_tracking=is_near_contact and (not pre_tracking_same_depth),
+            near_contact_after_tracking=is_near_contact and (not post_tracking_same_depth),
         )
 
     def _resolve_post_move_predator_contact(
@@ -2386,22 +2413,16 @@ class Simulation:
         hunt_result: PredatorHuntResult,
         repro_threshold: float,
     ) -> None:
-        life = self._ensure_predator_life(predator)
-        target_id = life.get("_last_target_id")
+        target_id = hunt_result.target_prey_id
         if target_id is None:
             return
         prey = next((c for c in self.creatures if id(c) == target_id), None)
         if prey is None or prey.species != "prey" or prey.energy <= 0.0:
             return
-        contact_scale = (
-            self._get_predator_contact_kill_distance_scale()
-            * hunt_result.hunt_modifiers.contact_mult
-        )
-        contact_dist = (
-            predator.get_radius() + prey.get_radius()
-        ) * contact_scale * self._get_creature_predation_contact_multiplier(predator)
+        if hunt_result.contact_dist <= 0.0:
+            return
         dist_sq = self._distance_sq(predator.x, predator.y, prey.x, prey.y)
-        if dist_sq <= contact_dist * contact_dist:
+        if dist_sq <= hunt_result.contact_dist * hunt_result.contact_dist:
             self._predator_depth_fatigue_summary["post_move_contact_opportunities"] += 1
             if predator.depth_band == prey.depth_band:
                 self._resolve_predator_contact_kill(

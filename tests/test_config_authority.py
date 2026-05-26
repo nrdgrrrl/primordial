@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from primordial.config import Config, get_canonical_defaults_path
+from primordial.simulation import Simulation
 
 
 class ConfigAuthorityTests(unittest.TestCase):
@@ -433,6 +434,25 @@ predation_kill_effect_max_active = -12
         self.assertFalse(saved["rendering"]["predation_kill_effects_enabled"])
         self.assertEqual(saved["rendering"]["predation_kill_effect_intensity"], 2.5)
         self.assertEqual(saved["rendering"]["predation_kill_effect_max_active"], 1)
+
+    def test_adaptive_tuning_disabled_preserves_mode_params_on_sim_init(self) -> None:
+        settings = Config()
+        settings.sim_mode = "predator_prey"
+        settings.mode_params["predator_prey"]["adaptive_tuning_enabled"] = False
+        settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = 0.62
+        settings.mode_params["predator_prey"]["predator_contact_kill_distance_scale"] = 1.18
+        Simulation(400, 300, settings)
+        pp = settings.mode_params["predator_prey"]
+        self.assertEqual(pp["predator_kill_energy_gain_cap"], 0.62)
+        self.assertEqual(pp["predator_contact_kill_distance_scale"], 1.18)
+
+    def test_generated_toml_includes_full_predator_prey_comment_block(self) -> None:
+        settings = Config()
+        serialized = settings.to_toml()
+        self.assertIn("# Enables predator quarry memory fallback targeting.", serialized)
+        self.assertIn("# Enables predator committed depth-band tracking near contact.", serialized)
+        self.assertIn("# Predator efficiency when eating food particles (higher = stronger omnivory fallback).", serialized)
+        self.assertIn("# Enables low-predator-count rarity bonuses.", serialized)
 
 
 if __name__ == "__main__":

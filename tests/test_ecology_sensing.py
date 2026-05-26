@@ -283,6 +283,57 @@ class EcologySensingTests(unittest.TestCase):
         )
         self.assertAlmostEqual(low_energy_speed, healthy_speed, places=6)
 
+    def test_post_move_same_depth_contact_kills(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=50.0, y=50.0, genome=Genome(speed=1.0, sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator", depth_band=1, energy=0.05)
+        prey = Creature(x=90.0, y=50.0, genome=Genome(speed=0.1, sense_radius=1.0, aggression=0.1), lineage_id=2, species="prey", depth_band=1, energy=0.4)
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch("random.random", return_value=0.99):
+            result = simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        self.assertFalse(result.killed)
+        predator.x = prey.x
+        predator.y = prey.y
+        simulation._resolve_post_move_predator_contact(predator, hunt_result=result, repro_threshold=0.7)
+        self.assertEqual(prey.energy, 0.0)
+
+    def test_post_move_cross_depth_contact_does_not_kill(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=50.0, y=50.0, genome=Genome(speed=1.0, sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator", depth_band=0)
+        prey = Creature(x=90.0, y=50.0, genome=Genome(speed=0.1, sense_radius=1.0, aggression=0.1), lineage_id=2, species="prey", depth_band=2, energy=0.4)
+        simulation.creatures = [predator, prey]
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch("random.random", return_value=0.99):
+            result = simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        predator.x = prey.x
+        predator.y = prey.y
+        simulation._resolve_post_move_predator_contact(predator, hunt_result=result, repro_threshold=0.7)
+        self.assertGreater(prey.energy, 0.0)
+
+    def test_memory_fallback_recomputes_distance_contact_correctly(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(speed=1.0, sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator", depth_band=0)
+        prey = Creature(x=101.0, y=100.0, genome=Genome(speed=0.2, sense_radius=1.0, aggression=0.1), lineage_id=2, species="prey", depth_band=0, energy=0.4)
+        simulation.creatures = [predator, prey]
+        life = simulation._ensure_predator_life(predator)
+        life["_memory_target_id"] = id(prey)
+        life["_memory_target_pos"] = (prey.x, prey.y)
+        life["_memory_last_seen_frame"] = simulation._frame
+        with patch.object(simulation, "_nearby_creatures", return_value=[]), patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)):
+            result = simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        self.assertTrue(result.killed)
+
+    def test_memory_fallback_out_of_contact_does_not_false_kill(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(x=100.0, y=100.0, genome=Genome(speed=1.0, sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator", depth_band=0)
+        prey = Creature(x=130.0, y=100.0, genome=Genome(speed=0.2, sense_radius=1.0, aggression=0.1), lineage_id=2, species="prey", depth_band=0, energy=0.4)
+        simulation.creatures = [predator, prey]
+        life = simulation._ensure_predator_life(predator)
+        life["_memory_target_id"] = id(prey)
+        life["_memory_target_pos"] = (prey.x, prey.y)
+        life["_memory_last_seen_frame"] = simulation._frame
+        with patch.object(simulation, "_nearby_creatures", return_value=[]), patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)):
+            result = simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+        self.assertFalse(result.killed)
+
     def test_chase_pressure_increases_when_predator_repeatedly_pursues_same_prey(self) -> None:
         simulation = self._build_simulation("predator_prey")
         predator = Creature(
