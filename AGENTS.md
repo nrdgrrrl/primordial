@@ -11,6 +11,35 @@ Standalone biology reference: `docs/organism_biology.md`
 Whenever you make code changes you MUST make a meaningful git commit
 Whenever you make code changes you MUST update CHANGELOG.md with an explanation of the change.
 
+## Config authority and user config discipline
+
+Canonical app defaults live in `primordial/config/defaults.toml`. Do not treat a developer's local `config.toml` as source of truth.
+
+Automated diagnostics, seeded scenario runs, and benchmarks must use committed scenario/default values and must not silently depend on the developer's user-profile `config.toml`. This keeps runs reproducible across machines.
+
+During development the local user config.toml can drift from the committed defaults, making manual interactive testing misleading.
+
+**To reset local config to canonical defaults for manual testing:**
+```bash
+.venv/bin/python tools/write_default_config.py --backup --force
+```
+
+This writes canonical defaults to the platform-appropriate user config path and
+timestamps a backup of the previous config. There is also `--dry-run` to preview
+and `--print-path` to see the target path.
+
+When changing a user-meaningful default or tuning value:
+1. Update `primordial/config/defaults.toml`.
+2. Update config parsing/serialization/comments if needed.
+3. Update scenario overrides if the seeded diagnostic/benchmark scenario should intentionally change.
+4. Update tests/docs/changelog.
+5. Do not modify the user's local `config.toml` unless the task explicitly asks for a local testing config.
+
+Agents must never overwrite, create, or modify the user's local `config.toml`
+unless the task explicitly asks for a local testing config. The
+`tools/write_default_config.py` script exists for explicit developer use and
+must not be run automatically by agent tasks or CI.
+
 ## Project Summary
 
 Primordial is a fullscreen Python screensaver featuring a cellular evolution simulation with bioluminescent visuals. Creatures with heritable genomes compete for food, reproduce with mutations, and evolve over time. The app is designed to run indefinitely on a monitor.

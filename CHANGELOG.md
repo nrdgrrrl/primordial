@@ -2,6 +2,21 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-26] — chore: add local default config reset tool
+
+### Developer tooling
+- Added `tools/write_default_config.py` to overwrite the local user `config.toml`
+  with current canonical defaults from `primordial/config/defaults.toml`
+- Supports `--dry-run`, `--print-path`, `--backup` (timestamped backup), and `--force`
+- Refuses to overwrite an existing `config.toml` unless `--force` is passed
+- Added `Config.canonical_toml()` classmethod for serializing pure canonical defaults
+  without user overrides
+- Added `PRIMORDIAL_CONFIG_DIR` env var to `get_config_path()` for test isolation
+- Added comprehensive tests in `test_config_authority.py` for both `canonical_toml()`
+  and the CLI script
+- Updated `AGENTS.md` with config authority discipline and reset instructions
+- Updated `README.md` with reset usage
+
 ## [2026-05-25] — feat: add predator chase depth fatigue
 
 ### Predator-prey chase depth fatigue

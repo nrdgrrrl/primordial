@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -8,6 +11,9 @@ from unittest.mock import patch
 
 from primordial.config import Config, get_canonical_defaults_path
 from primordial.simulation import Simulation
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_SCRIPT = _PROJECT_ROOT / "tools" / "write_default_config.py"
 
 
 class ConfigAuthorityTests(unittest.TestCase):
@@ -453,6 +459,101 @@ predation_kill_effect_max_active = -12
         self.assertIn("# Enables predator committed depth-band tracking near contact.", serialized)
         self.assertIn("# Predator efficiency when eating food particles (higher = stronger omnivory fallback).", serialized)
         self.assertIn("# Enables low-predator-count rarity bonuses.", serialized)
+
+    # ------------------------------------------------------------------ #
+    #  canonical_toml() – pure canonical defaults without user overrides
+    # ------------------------------------------------------------------ #
+
+    def test_canonical_toml_does_not_contain_user_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                "[simulation]\nfood_spawn_rate = 0.1234\n",
+                encoding="utf-8",
+            )
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                Config()
+            canonical = Config.canonical_toml()
+        data = tomllib.loads(canonical)
+        self.assertEqual(data["simulation"]["food_spawn_rate"], 0.8)
+
+    def test_canonical_toml_includes_known_defaults_and_comments(self) -> None:
+        canonical = Config.canonical_toml()
+        data = tomllib.loads(canonical)
+        self.assertEqual(data["simulation"]["mode"], "energy")
+        self.assertEqual(data["display"]["visual_theme"], "ocean")
+        self.assertEqual(data["simulation"]["initial_population"], 80)
+        self.assertIn("# Primordial user configuration", canonical)
+        self.assertIn("# Enables predator quarry memory fallback targeting.", canonical)
+
+    # ------------------------------------------------------------------ #
+    #  CLI script tests
+    # ------------------------------------------------------------------ #
+
+    def _run_script(self, *args: str, config_dir: str | Path) -> subprocess.CompletedProcess:
+        env = os.environ.copy()
+        env["PRIMORDIAL_CONFIG_DIR"] = str(config_dir)
+        return subprocess.run(
+            [sys.executable, str(_SCRIPT), *args],
+            capture_output=True,
+            text=True,
+            cwd=str(_PROJECT_ROOT),
+            env=env,
+        )
+
+    def test_print_path_resolves_to_config_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = self._run_script("--print-path", config_dir=temp_dir)
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertTrue(result.stdout.strip().endswith("config.toml"))
+
+    def test_dry_run_does_not_write_a_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = self._run_script("--dry-run", config_dir=temp_dir)
+            config_path = Path(temp_dir) / "config.toml"
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertFalse(config_path.exists())
+            self.assertIn("mode =", result.stdout)
+            self.assertIn("energy", result.stdout)
+
+    def test_overwrite_refused_when_config_exists_and_no_force(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text("existing = true\n", encoding="utf-8")
+            result = self._run_script(config_dir=temp_dir)
+            self.assertEqual(result.returncode, 1, msg=result.stdout)
+            self.assertIn("Refusing", result.stderr)
+            self.assertEqual(config_path.read_text(encoding="utf-8"), "existing = true\n")
+
+    def test_force_overwrites_existing_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text("existing = true\n", encoding="utf-8")
+            result = self._run_script("--force", config_dir=temp_dir)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["simulation"]["mode"], "energy")
+
+    def test_backup_force_creates_timestamped_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text("existing = true\n", encoding="utf-8")
+            result = self._run_script("--backup", "--force", config_dir=temp_dir)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            backups = sorted(Path(temp_dir).glob("config.toml.bak.*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(encoding="utf-8"), "existing = true\n")
+            data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["simulation"]["mode"], "energy")
+
+    def test_force_without_backup_does_not_leave_backup_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text("existing = true\n", encoding="utf-8")
+            result = self._run_script("--force", config_dir=temp_dir)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            backups = list(Path(temp_dir).glob("config.toml.bak*"))
+            self.assertEqual(len(backups), 0)
 
 
 if __name__ == "__main__":
