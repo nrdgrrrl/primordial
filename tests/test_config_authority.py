@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -7,6 +10,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from primordial.config import Config, get_canonical_defaults_path
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_WRITE_DEFAULT_CONFIG = _PROJECT_ROOT / "tools" / "write_default_config.py"
 
 
 class ConfigAuthorityTests(unittest.TestCase):
@@ -433,6 +439,138 @@ predation_kill_effect_max_active = -12
         self.assertFalse(saved["rendering"]["predation_kill_effects_enabled"])
         self.assertEqual(saved["rendering"]["predation_kill_effect_intensity"], 2.5)
         self.assertEqual(saved["rendering"]["predation_kill_effect_max_active"], 1)
+
+    def test_canonical_toml_ignores_existing_user_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                """
+[simulation]
+creature_speed_base = 1.6500
+
+[modes.predator_prey]
+predator_contact_kill_distance_scale = 1.0500
+prey_energy_to_reproduce = 0.8200
+predator_energy_to_reproduce = 0.6800
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("primordial.config.config.get_config_path", return_value=config_path):
+                Config()
+                canonical = Config.canonical_toml()
+
+        data = tomllib.loads(canonical)
+        predator_prey = data["modes"]["predator_prey"]
+        self.assertEqual(data["simulation"]["creature_speed_base"], 1.5)
+        self.assertEqual(predator_prey["predator_contact_kill_distance_scale"], 0.85)
+        self.assertEqual(predator_prey["prey_energy_to_reproduce"], 0.76)
+        self.assertEqual(predator_prey["predator_energy_to_reproduce"], 0.78)
+        self.assertIn("# Primordial user configuration", canonical)
+        self.assertIn("# Edit by hand or press S in-app to change settings.", canonical)
+
+    def _run_write_default_config(
+        self, *args: str, config_dir: str | Path
+    ) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env["PRIMORDIAL_CONFIG_DIR"] = str(config_dir)
+        return subprocess.run(
+            [sys.executable, str(_WRITE_DEFAULT_CONFIG), *args],
+            capture_output=True,
+            cwd=_PROJECT_ROOT,
+            env=env,
+            text=True,
+        )
+
+    def test_write_default_config_print_path_ends_with_config_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = self._run_write_default_config("--print-path", config_dir=temp_dir)
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertTrue(result.stdout.strip().endswith("config.toml"))
+
+    def test_write_default_config_dry_run_does_not_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = self._run_write_default_config("--dry-run", config_dir=temp_dir)
+            config_path = Path(temp_dir) / "config.toml"
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertFalse(config_path.exists())
+            self.assertIn("# Primordial user configuration", result.stdout)
+
+    def test_write_default_config_refuses_existing_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text("existing = true\n", encoding="utf-8")
+
+            result = self._run_write_default_config(config_dir=temp_dir)
+
+            self.assertEqual(result.returncode, 1, msg=result.stdout)
+            self.assertIn("Refusing to overwrite", result.stderr)
+            self.assertEqual(config_path.read_text(encoding="utf-8"), "existing = true\n")
+
+    def test_write_default_config_force_overwrites_existing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text("existing = true\n", encoding="utf-8")
+
+            result = self._run_write_default_config("--force", config_dir=temp_dir)
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["simulation"]["mode"], "energy")
+
+    def test_write_default_config_backup_force_creates_timestamped_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text("existing = true\n", encoding="utf-8")
+
+            result = self._run_write_default_config(
+                "--backup", "--force", config_dir=temp_dir
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            backups = list(Path(temp_dir).glob("config.toml.bak.*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(encoding="utf-8"), "existing = true\n")
+
+    def test_write_default_config_overwrites_predator_prey_user_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                """
+[modes.predator_prey]
+predator_contact_kill_distance_scale = 1.0500
+prey_energy_to_reproduce = 0.8200
+predator_energy_to_reproduce = 0.6800
+""".strip()
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = self._run_write_default_config("--force", config_dir=temp_dir)
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            predator_prey = data["modes"]["predator_prey"]
+            self.assertEqual(predator_prey["predator_contact_kill_distance_scale"], 0.85)
+            self.assertEqual(predator_prey["prey_energy_to_reproduce"], 0.76)
+            self.assertEqual(predator_prey["predator_energy_to_reproduce"], 0.78)
+
+    def test_write_default_config_overwrites_speed_user_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(
+                "[simulation]\ncreature_speed_base = 1.6500\n",
+                encoding="utf-8",
+            )
+
+            result = self._run_write_default_config("--force", config_dir=temp_dir)
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(data["simulation"]["creature_speed_base"], 1.5)
 
 
 if __name__ == "__main__":

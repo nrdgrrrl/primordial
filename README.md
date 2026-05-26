@@ -58,6 +58,16 @@ snapshot.
 
 The screensaver will launch in fullscreen mode by default.
 
+### Reset Local Config
+
+Developer config can drift from committed defaults during testing. Reset the local user `config.toml` to canonical defaults with a timestamped backup:
+
+```bash
+.venv/bin/python tools/write_default_config.py --backup --force
+```
+
+Use `--dry-run` to preview the file contents or `--print-path` to show the target `config.toml` path.
+
 ### Runtime CLI Flags
 
 | Flag | Effect |

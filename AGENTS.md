@@ -11,6 +11,20 @@ Standalone biology reference: `docs/organism_biology.md`
 Whenever you make code changes you MUST make a meaningful git commit
 Whenever you make code changes you MUST update CHANGELOG.md with an explanation of the change.
 
+## Config authority and user config discipline
+
+Canonical app defaults live in `primordial/config/defaults.toml`. Do not treat a developer's local `config.toml` as source of truth.
+
+Diagnostics, seeded scenario runs, and benchmarks must use committed defaults or explicit scenario parameters. They must not silently depend on the developer's user-profile `config.toml`, because that makes results non-reproducible across machines.
+
+Agents must never overwrite, create, or modify the user's local `config.toml` unless the task explicitly asks for local config changes. For a manual baseline reset, use:
+
+```bash
+.venv/bin/python tools/write_default_config.py --backup --force
+```
+
+The reset tool writes canonical defaults to the platform-appropriate user config path, timestamps a backup of the previous config, and also supports `--dry-run` and `--print-path`.
+
 ## Project Summary
 
 Primordial is a fullscreen Python screensaver featuring a cellular evolution simulation with bioluminescent visuals. Creatures with heritable genomes compete for food, reproduce with mutations, and evolve over time. The app is designed to run indefinitely on a monitor.

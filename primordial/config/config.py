@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import logging
+import os
 import platform
 import shutil
 from pathlib import Path
@@ -546,6 +547,15 @@ class Config:
         """Return the canonical default value for a rendering key, or _MISSING."""
         return self._canonical_render_defaults.get(key, _MISSING)
 
+    @classmethod
+    def canonical_toml(cls) -> str:
+        """Return TOML for committed defaults only, without user overrides."""
+        config = cls.__new__(cls)
+        config.config_path = None
+        config._initialize_state()
+        config._load_canonical_defaults()
+        return config.to_toml()
+
     def reset_to_defaults(self) -> None:
         self._load_canonical_defaults()
         self.save()
@@ -802,7 +812,10 @@ def get_canonical_defaults_path() -> Path:
 
 def get_config_path() -> Path:
     """Return platform-appropriate config file path."""
-    if platform.system() == "Windows":
+    override = os.environ.get("PRIMORDIAL_CONFIG_DIR")
+    if override:
+        base = Path(override)
+    elif platform.system() == "Windows":
         base = Path.home() / "AppData" / "Roaming" / "Primordial"
     elif platform.system() == "Darwin":
         base = Path.home() / "Library" / "Application Support" / "Primordial"

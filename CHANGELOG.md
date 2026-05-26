@@ -2,6 +2,14 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-26] — chore: add local default config reset tool
+
+### Developer tooling
+- Added `tools/write_default_config.py` for explicitly resetting the local user `config.toml` to canonical defaults with `--dry-run`, `--print-path`, `--force`, and timestamped `--backup` support
+- Added `Config.canonical_toml()` so reset tooling serializes committed defaults without preserving user overrides
+- Added `PRIMORDIAL_CONFIG_DIR` test/dev override for isolated config-path tests
+- Documented config authority discipline and the manual reset command
+
 ## [2026-05-25] — feat: add predator chase depth fatigue
 
 ### Predator-prey chase depth fatigue
