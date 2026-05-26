@@ -73,6 +73,7 @@ predator_kill_biomass_bonus = 0.0500
 predator_hunt_sense_multiplier = 1.4000
 predator_hunt_speed_multiplier = 1.1500
 predator_contact_kill_distance_scale = 0.8500
+predator_post_move_contact_kill_enabled = false
 predator_refuge_enabled = true
 predator_refuge_hunt_sense_bonus = 0.0800
 predator_refuge_contact_bonus = 0.0800

@@ -866,8 +866,14 @@ def _section_g_near_contact_dance(
         "predator_committed_depth_tracking_min_chase_ticks": runs[0]["diagnostics"].get("predator_committed_depth_tracking_min_chase_ticks") if runs else None,
         "predator_committed_depth_tracking_near_contact_scale": runs[0]["diagnostics"].get("predator_committed_depth_tracking_near_contact_scale") if runs else None,
         "predator_committed_depth_tracking_cooldown_ticks": runs[0]["diagnostics"].get("predator_committed_depth_tracking_cooldown_ticks") if runs else None,
+        "predator_post_move_contact_kill_enabled": runs[0]["diagnostics"].get("predator_post_move_contact_kill_enabled") if runs else None,
         "prey_depth_fatigue_events": int(fatigue_summary.get("prey_depth_fatigue_events", 0)),
         "depth_escape_fatigue_applied_frames": int(fatigue_summary.get("depth_escape_fatigue_applied_frames", 0)),
+        "post_move_contact_opportunities": int(fatigue_summary.get("post_move_contact_opportunities", 0)),
+        "post_move_contact_same_depth_opportunities": int(fatigue_summary.get("post_move_contact_same_depth_opportunities", 0)),
+        "post_move_contact_cross_depth_opportunities": int(fatigue_summary.get("post_move_contact_cross_depth_opportunities", 0)),
+        "post_move_contact_kills": int(fatigue_summary.get("post_move_contact_kills", 0)),
+        "post_move_contact_misses_by_depth": int(fatigue_summary.get("post_move_contact_misses_by_depth", 0)),
         "committed_depth_tracking_events": committed_depth_tracking_events,
         "committed_depth_tracking_kills": committed_depth_tracking_kills,
         "cross_depth_near_contact_before_tracking": cross_depth_before_tracking,
@@ -1609,6 +1615,18 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Committed tracking defaults:** min_chase={_fmt(g.get('predator_committed_depth_tracking_min_chase_ticks'))}, near_scale={_fmt(g.get('predator_committed_depth_tracking_near_contact_scale'))}, cooldown={_fmt(g.get('predator_committed_depth_tracking_cooldown_ticks'))}")
         lines.append(f"- **Prey depth fatigue events:** {g.get('prey_depth_fatigue_events', 0)}")
         lines.append(f"- **Depth fatigue applied frames:** {g.get('depth_escape_fatigue_applied_frames', 0)}")
+        lines.append(f"- **Post-move kills enabled:** {g.get('predator_post_move_contact_kill_enabled')}")
+        lines.append(f"- **Post-move contact opportunities:** {g.get('post_move_contact_opportunities', 0)}")
+        lines.append(f"- **Post-move same-depth opportunities:** {g.get('post_move_contact_same_depth_opportunities', 0)}")
+        lines.append(f"- **Post-move cross-depth opportunities:** {g.get('post_move_contact_cross_depth_opportunities', 0)}")
+        lines.append(f"- **Post-move contact kills:** {g.get('post_move_contact_kills', 0)}")
+        lines.append(f"- **Post-move contact misses by depth:** {g.get('post_move_contact_misses_by_depth', 0)}")
+        if not g.get("predator_post_move_contact_kill_enabled"):
+            lines.append("- **Interpretation:** post-move same-depth contact kills are disabled; these metrics are observability only by default.")
+        if int(g.get("post_move_contact_opportunities", 0)) > 0:
+            lines.append(
+                f"- **Post-move contact conversion:** {g.get('post_move_contact_kills', 0)} / {g.get('post_move_contact_opportunities', 0)}"
+            )
         lines.append(f"- **Committed depth tracking events:** {g.get('committed_depth_tracking_events', 0)}")
         lines.append(f"- **Committed depth tracking kills:** {g.get('committed_depth_tracking_kills', 0)}")
         lines.append(f"- **Cross-depth near-contact before tracking:** {g.get('cross_depth_near_contact_before_tracking', 0)}")
