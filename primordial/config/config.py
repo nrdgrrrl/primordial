@@ -550,10 +550,20 @@ class Config:
     @classmethod
     def canonical_toml(cls) -> str:
         """Return TOML representing canonical defaults only, without user overrides."""
+        defaults_path = get_canonical_defaults_path()
+        with defaults_path.open("rb") as f:
+            data = tomllib.load(f)
         config = cls.__new__(cls)
-        config.config_path = None
         config._initialize_state()
-        config._load_canonical_defaults()
+        config._merge_from_dict(data)
+        config._explicit_rendering_keys.clear()
+        config._canonical_render_defaults = {
+            key: getattr(config, attr_name)
+            for key, (attr_name, _kind) in _SECTION_FIELDS["rendering"].items()
+            if getattr(config, attr_name) is not _MISSING
+        }
+        config.default_mode_params = deepcopy(config.mode_params)
+        config._validate()
         return config.to_toml()
 
     def reset_to_defaults(self) -> None:

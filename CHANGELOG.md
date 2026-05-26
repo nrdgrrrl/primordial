@@ -2,7 +2,7 @@
 
 All notable changes to Primordial are documented in this file.
 
-## [2026-05-26] — chore: add local default config reset tool
+## [2026-05-26] — fix: write canonical defaults in config reset tool
 
 ### Developer tooling
 - Added `tools/write_default_config.py` to overwrite the local user `config.toml`
@@ -10,7 +10,8 @@ All notable changes to Primordial are documented in this file.
 - Supports `--dry-run`, `--print-path`, `--backup` (timestamped backup), and `--force`
 - Refuses to overwrite an existing `config.toml` unless `--force` is passed
 - Added `Config.canonical_toml()` classmethod for serializing pure canonical defaults
-  without user overrides
+  without user overrides; rewritten to read the canonical file directly and skip
+  any path that could load user config
 - Added `PRIMORDIAL_CONFIG_DIR` env var to `get_config_path()` for test isolation
 - Added comprehensive tests in `test_config_authority.py` for both `canonical_toml()`
   and the CLI script

@@ -555,6 +555,70 @@ predation_kill_effect_max_active = -12
             backups = list(Path(temp_dir).glob("config.toml.bak*"))
             self.assertEqual(len(backups), 0)
 
+    # ------------------------------------------------------------------ #
+    #  Regression: user overrides must not leak into written output
+    # ------------------------------------------------------------------ #
+
+    def test_script_does_not_leak_user_mode_overrides(self) -> None:
+        user_config = """\
+[modes.predator_prey]
+predator_contact_kill_distance_scale = 1.05
+prey_energy_to_reproduce = 0.82
+predator_energy_to_reproduce = 0.68
+"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(user_config, encoding="utf-8")
+            result = self._run_script("--force", config_dir=temp_dir)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            pp = data.get("modes", {}).get("predator_prey", {})
+            self.assertEqual(
+                pp["predator_contact_kill_distance_scale"], 0.85,
+                msg="canonical default must be restored, not user override 1.05",
+            )
+            self.assertEqual(
+                pp["prey_energy_to_reproduce"], 0.76,
+                msg="canonical default must be restored, not user override 0.82",
+            )
+            self.assertEqual(
+                pp["predator_energy_to_reproduce"], 0.78,
+                msg="canonical default must be restored, not user override 0.68",
+            )
+
+    def test_script_does_not_leak_user_base_overrides(self) -> None:
+        user_config = """\
+[simulation]
+creature_speed_base = 1.65
+"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.toml"
+            config_path.write_text(user_config, encoding="utf-8")
+            result = self._run_script("--force", config_dir=temp_dir)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                data["simulation"]["creature_speed_base"], 1.5,
+                msg="canonical default must be restored, not user override 1.65",
+            )
+
+    def test_script_output_includes_known_comments(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = self._run_script("--dry-run", config_dir=temp_dir)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn(
+                "# Primordial user configuration",
+                result.stdout,
+            )
+            self.assertIn(
+                "# Enables predator quarry memory fallback targeting.",
+                result.stdout,
+            )
+            self.assertIn(
+                "# Predator reproduction threshold (higher = weaker predators).",
+                result.stdout,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
