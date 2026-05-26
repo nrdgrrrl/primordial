@@ -197,6 +197,15 @@ def _make_life(
             "share_of_kills_predator_full_limited": 0.0,
             "share_of_kills_crossed_reproduction_threshold": 0.0,
             "share_of_kills_already_reproduction_ready": 0.0,
+            "predator_kill_biomass_bonus": 0.0,
+            "old_formula_nominal_total": 0.0,
+            "biomass_added_nominal_total": 0.0,
+            "average_biomass_added_gain_per_kill": None,
+            "share_of_kills_helped_by_biomass_bonus": 0.0,
+            "actual_conversion_from_prey_and_biomass_raw_energy": 0.0,
+            "cap_limited_share_after_biomass": 0.0,
+            "predator_full_limited_share_after_biomass": 0.0,
+            "reproduction_threshold_crossing_share_after_biomass": 0.0,
         },
         "killed_prey_age_fractions": killed_prey_age_fractions or [],
         "killed_prey_energies": killed_prey_energies or [],
@@ -319,6 +328,9 @@ def _make_run(
                 "kill_energy_actual_total": sum(float(l.get("kill_energy_summary", {}).get("kill_energy_actual_total", 0.0)) for l in completed_lives + active_lives),
                 "kill_energy_wasted_to_full_cap_total": sum(float(l.get("kill_energy_summary", {}).get("kill_energy_wasted_to_full_cap_total", 0.0)) for l in completed_lives + active_lives),
                 "kill_energy_unconverted_due_to_kill_cap_total": sum(float(l.get("kill_energy_summary", {}).get("kill_energy_unconverted_due_to_kill_cap_total", 0.0)) for l in completed_lives + active_lives),
+                "predator_kill_biomass_bonus": 0.05,
+                "old_formula_nominal_total": sum(float(l.get("kill_energy_summary", {}).get("old_formula_nominal_total", 0.0)) for l in completed_lives + active_lives),
+                "biomass_added_nominal_total": sum(float(l.get("kill_energy_summary", {}).get("biomass_added_nominal_total", 0.0)) for l in completed_lives + active_lives),
             },
             "completed_lives": completed_lives,
             "active_lives": active_lives,
@@ -550,23 +562,29 @@ class TestReportSections(unittest.TestCase):
             "kill_gain_was_predator_full_limited": False,
             "predator_crossed_reproduction_threshold_on_kill": True,
             "predator_was_already_reproduction_ready_before_kill": False,
+            "biomass_bonus": 0.05,
+            "biomass_added_nominal_gain": 0.0,
+            "old_formula_nominal_gain": 0.3,
         }
         event_two = {
             "prey_energy_at_kill": 0.12,
-            "nominal_kill_energy_gain": 0.12,
+            "nominal_kill_energy_gain": 0.17,
             "actual_kill_energy_gain": 0.1,
             "kill_gain_was_cap_limited": False,
             "kill_gain_was_predator_full_limited": True,
             "predator_crossed_reproduction_threshold_on_kill": False,
             "predator_was_already_reproduction_ready_before_kill": True,
+            "biomass_bonus": 0.05,
+            "biomass_added_nominal_gain": 0.05,
+            "old_formula_nominal_gain": 0.12,
         }
         kill_energy_summary = {
             "kill_count": 2,
             "total_prey_energy_at_kill": 1.02,
-            "kill_energy_nominal_total": 0.42,
+            "kill_energy_nominal_total": 0.47,
             "kill_energy_actual_total": 0.4,
-            "kill_energy_wasted_to_full_cap_total": 0.02,
-            "kill_energy_unconverted_due_to_kill_cap_total": 0.6,
+            "kill_energy_wasted_to_full_cap_total": 0.07,
+            "kill_energy_unconverted_due_to_kill_cap_total": 0.55,
         }
         run = _make_run(
             completed_lives=[
@@ -584,6 +602,10 @@ class TestReportSections(unittest.TestCase):
         self.assertAlmostEqual(result["share_of_kills_predator_full_limited"], 0.5)
         self.assertAlmostEqual(result["share_of_kills_crossed_reproduction_threshold"], 0.5)
         self.assertAlmostEqual(result["share_of_kills_already_reproduction_ready"], 0.5)
+        self.assertIn("predator_kill_biomass_bonus", result)
+        self.assertIn("old_formula_nominal_total", result)
+        self.assertIn("biomass_added_nominal_total", result)
+        self.assertIn("share_of_kills_helped_by_biomass_bonus", result)
 
     def test_section_k_recommendations_long_scarcity(self):
         # More than 40% long_scarcity should trigger a recommendation

@@ -955,6 +955,10 @@ def _section_k_predator_kill_energy_transfer(
     predator_full_limited_count = 0
     crossed_threshold_count = 0
     already_ready_count = 0
+    old_formula_nominal_total = 0.0
+    biomass_added_nominal_total = 0.0
+    biomass_bonus_helped_kill_count = 0
+    predator_kill_biomass_bonus = 0.0
 
     for run in runs:
         summary = run.get("diagnostics", {}).get("predator_kill_energy_transfer", {})
@@ -964,6 +968,10 @@ def _section_k_predator_kill_energy_transfer(
         actual_total += float(summary.get("kill_energy_actual_total", 0.0))
         wasted_total += float(summary.get("kill_energy_wasted_to_full_cap_total", 0.0))
         unconverted_total += float(summary.get("kill_energy_unconverted_due_to_kill_cap_total", 0.0))
+        old_formula_nominal_total += float(summary.get("old_formula_nominal_total", 0.0))
+        biomass_added_nominal_total += float(summary.get("biomass_added_nominal_total", 0.0))
+        biomass_bonus_helped_kill_count += int(summary.get("share_of_kills_helped_by_biomass_bonus", 0.0) * int(summary.get("kill_count", 0)))
+        predator_kill_biomass_bonus = float(summary.get("predator_kill_biomass_bonus", 0.0))
 
         for life in run.get("diagnostics", {}).get("completed_lives", []):
             for event in life.get("kill_energy_events", []):
@@ -981,6 +989,8 @@ def _section_k_predator_kill_energy_transfer(
                     crossed_threshold_count += 1
                 if event.get("predator_was_already_reproduction_ready_before_kill"):
                     already_ready_count += 1
+                if event.get("biomass_added_nominal_gain", 0.0) > 0.0:
+                    biomass_bonus_helped_kill_count += 1
             life_summary = life.get("kill_energy_summary", {})
             if not life.get("kill_energy_events"):
                 cap_limited_count += int(life_summary.get("share_of_kills_cap_limited", 0.0) * int(life_summary.get("kill_count", 0)))
@@ -1003,6 +1013,8 @@ def _section_k_predator_kill_energy_transfer(
                     crossed_threshold_count += 1
                 if event.get("predator_was_already_reproduction_ready_before_kill"):
                     already_ready_count += 1
+                if event.get("biomass_added_nominal_gain", 0.0) > 0.0:
+                    biomass_bonus_helped_kill_count += 1
 
     if kill_count <= 0:
         return {"kill_count": 0, "interpretation": ["No predator kills were recorded."]}
@@ -1062,6 +1074,18 @@ def _section_k_predator_kill_energy_transfer(
         "share_of_kills_predator_full_limited": share_predator_full_limited,
         "share_of_kills_crossed_reproduction_threshold": share_crossed_threshold,
         "share_of_kills_already_reproduction_ready": share_already_ready,
+        "predator_kill_biomass_bonus": predator_kill_biomass_bonus,
+        "old_formula_nominal_total": old_formula_nominal_total,
+        "biomass_added_nominal_total": biomass_added_nominal_total,
+        "average_biomass_added_gain_per_kill": _safe_ratio(biomass_added_nominal_total, kill_count),
+        "share_of_kills_helped_by_biomass_bonus": _safe_ratio(biomass_bonus_helped_kill_count, kill_count),
+        "actual_conversion_from_prey_and_biomass_raw_energy": _safe_ratio(
+            actual_total,
+            total_prey_energy_at_kill + biomass_added_nominal_total,
+        ),
+        "cap_limited_share_after_biomass": share_cap_limited,
+        "predator_full_limited_share_after_biomass": share_predator_full_limited,
+        "reproduction_threshold_crossing_share_after_biomass": share_crossed_threshold,
         "interpretation": interpretation,
     }
 

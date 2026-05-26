@@ -168,6 +168,17 @@ Predator/prey reproduction thresholds are mode-scoped config authority:
 `[modes.predator_prey].predator_energy_to_reproduce` override reproduction
 thresholds by species only in `predator_prey`; if absent, resolution falls back
 to the shared `energy_to_reproduce`.
+Predator kill energy transfer uses a biomass bonus formula:
+`raw_kill_energy = prey.energy + predator_kill_biomass_bonus` (default 0.05);
+`energy_gain = min(predator_kill_energy_gain_cap, raw_kill_energy)`.
+The effective default `predator_kill_energy_gain_cap` for predator_prey is 0.40.
+Per-kill diagnostics separate `prey_energy_component`, `biomass_bonus_component`,
+`raw_kill_energy_before_cap`, `nominal_kill_energy_gain`, `actual_kill_energy_gain`,
+`unconverted_due_to_kill_cap`, and `wasted_to_predator_full_cap`.
+Aggregate diagnostics track `old_formula_nominal_total`, `biomass_added_nominal_total`,
+`share_of_kills_helped_by_biomass_bonus`, and biomass-adjusted conversion shares.
+The biomass bonus does not change contact rules, depth rules, prey death behavior,
+or allow multiple predators to farm the same prey in a frame.
 When predators exceed 60% of the live population, predator reproduction becomes
 harder by increasing the resolved predator threshold by 20%.
 Predator/prey extinction uses a grace window: when a species hits zero,

@@ -249,7 +249,7 @@ _PREDATOR_PREY_ADAPTIVE_DIALS: tuple[AdaptiveDialSpec, ...] = (
         minimum=0.35,
         maximum=0.65,
         step=0.02,
-        default=0.50,
+        default=0.40,
     ),
     AdaptiveDialSpec(
         key="predator_hunt_sense_multiplier",
@@ -494,7 +494,11 @@ class Simulation:
 
     def _get_predator_kill_energy_gain_cap(self) -> float:
         """Resolve the per-kill predator energy gain cap."""
-        return float(self._get_mode_param("predator_kill_energy_gain_cap", 0.5))
+        return float(self._get_mode_param("predator_kill_energy_gain_cap", 0.40))
+
+    def _get_predator_kill_biomass_bonus(self) -> float:
+        """Resolve the per-kill biomass bonus added on top of prey energy."""
+        return float(self._get_mode_param("predator_kill_biomass_bonus", 0.0))
 
     def _get_predator_hunt_sense_multiplier(self) -> float:
         """Resolve predator hunt sensing range multiplier."""
@@ -2038,7 +2042,10 @@ class Simulation:
             # farming energy from an already-dead prey in the same frame.
             pre_kill_energy = predator.energy
             prey_energy_before_kill = best_prey.energy
-            energy_gain = min(self._get_predator_kill_energy_gain_cap(), best_prey.energy)
+            kill_cap = self._get_predator_kill_energy_gain_cap()
+            biomass_bonus = self._get_predator_kill_biomass_bonus()
+            raw_kill_energy = best_prey.energy + biomass_bonus
+            energy_gain = min(kill_cap, raw_kill_energy)
             predator.energy = min(1.0, predator.energy + energy_gain)
             predator.recent_animal_energy = min(
                 1.0,
@@ -2064,6 +2071,7 @@ class Simulation:
                 repro_threshold=repro_threshold,
                 prey=best_prey,
                 prey_energy_at_kill=prey_energy_before_kill,
+                biomass_bonus=biomass_bonus,
                 refuge_modifiers=hunt_modifiers.refuge,
                 rarity_modifiers=hunt_modifiers.rarity,
             )
@@ -5390,6 +5398,9 @@ class Simulation:
             "prey_energy_at_kill_values": [],
             "nominal_kill_energy_gain_values": [],
             "actual_kill_energy_gain_values": [],
+            "old_formula_nominal_total": 0.0,
+            "biomass_added_nominal_total": 0.0,
+            "biomass_bonus_helped_kill_count": 0,
         }
 
     def _build_predator_kill_energy_record(
@@ -5399,9 +5410,11 @@ class Simulation:
         predator_pre_kill_energy: float,
         predator_post_kill_energy: float,
         prey_energy_at_kill: float,
+        biomass_bonus: float,
         repro_threshold: float,
     ) -> dict[str, Any]:
-        nominal_kill_energy_gain = min(predator_kill_energy_cap, prey_energy_at_kill)
+        raw_kill_energy_before_cap = prey_energy_at_kill + biomass_bonus
+        nominal_kill_energy_gain = min(predator_kill_energy_cap, raw_kill_energy_before_cap)
         actual_kill_energy_gain = max(
             0.0,
             predator_post_kill_energy - predator_pre_kill_energy,
@@ -5412,13 +5425,20 @@ class Simulation:
         )
         prey_energy_unconverted_due_to_kill_cap = max(
             0.0,
-            prey_energy_at_kill - nominal_kill_energy_gain,
+            raw_kill_energy_before_cap - nominal_kill_energy_gain,
+        )
+        old_formula_nominal_gain = min(predator_kill_energy_cap, prey_energy_at_kill)
+        biomass_added_nominal_gain = max(
+            0.0,
+            nominal_kill_energy_gain - old_formula_nominal_gain,
         )
         return {
             "predator_kill_energy_cap": predator_kill_energy_cap,
             "predator_pre_kill_energy": predator_pre_kill_energy,
             "predator_post_kill_energy": predator_post_kill_energy,
             "prey_energy_at_kill": prey_energy_at_kill,
+            "biomass_bonus": biomass_bonus,
+            "raw_kill_energy_before_cap": raw_kill_energy_before_cap,
             "nominal_kill_energy_gain": nominal_kill_energy_gain,
             "actual_kill_energy_gain": actual_kill_energy_gain,
             "wasted_kill_energy_to_predator_full_cap": (
@@ -5427,7 +5447,9 @@ class Simulation:
             "prey_energy_unconverted_due_to_kill_cap": (
                 prey_energy_unconverted_due_to_kill_cap
             ),
-            "kill_gain_was_cap_limited": prey_energy_at_kill > predator_kill_energy_cap,
+            "old_formula_nominal_gain": old_formula_nominal_gain,
+            "biomass_added_nominal_gain": biomass_added_nominal_gain,
+            "kill_gain_was_cap_limited": raw_kill_energy_before_cap > predator_kill_energy_cap,
             "kill_gain_was_predator_full_limited": (
                 actual_kill_energy_gain < nominal_kill_energy_gain
             ),
@@ -5473,6 +5495,10 @@ class Simulation:
         summary["actual_kill_energy_gain_values"].append(
             record["actual_kill_energy_gain"]
         )
+        summary["old_formula_nominal_total"] += record.get("old_formula_nominal_gain", record["nominal_kill_energy_gain"])
+        summary["biomass_added_nominal_total"] += record.get("biomass_added_nominal_gain", 0.0)
+        if record.get("biomass_added_nominal_gain", 0.0) > 0.0:
+            summary["biomass_bonus_helped_kill_count"] += 1
 
     def _copy_predator_kill_energy_summary(self, summary: dict[str, Any]) -> dict[str, Any]:
         kill_count = int(summary["kill_count"])
@@ -5542,6 +5568,37 @@ class Simulation:
             ),
             "share_of_kills_already_reproduction_ready": _safe_ratio(
                 float(summary["already_reproduction_ready_kill_count"]),
+                float(kill_count),
+            ),
+            "predator_kill_biomass_bonus": float(
+                self._get_predator_kill_biomass_bonus()
+            ) if self.settings.sim_mode == "predator_prey" else 0.0,
+            "old_formula_nominal_total": float(summary["old_formula_nominal_total"]),
+            "biomass_added_nominal_total": float(summary["biomass_added_nominal_total"]),
+            "average_biomass_added_gain_per_kill": (
+                float(summary["biomass_added_nominal_total"]) / kill_count
+                if kill_count > 0
+                else None
+            ),
+            "share_of_kills_helped_by_biomass_bonus": _safe_ratio(
+                float(summary["biomass_bonus_helped_kill_count"]),
+                float(kill_count),
+            ),
+            "actual_conversion_from_prey_and_biomass_raw_energy": _safe_ratio(
+                actual_total,
+                total_prey_energy_at_kill
+                + float(summary["biomass_added_nominal_total"]),
+            ),
+            "cap_limited_share_after_biomass": _safe_ratio(
+                float(summary["cap_limited_kill_count"]),
+                float(kill_count),
+            ),
+            "predator_full_limited_share_after_biomass": _safe_ratio(
+                float(summary["predator_full_limited_kill_count"]),
+                float(kill_count),
+            ),
+            "reproduction_threshold_crossing_share_after_biomass": _safe_ratio(
+                float(summary["crossed_reproduction_threshold_kill_count"]),
                 float(kill_count),
             ),
         }
@@ -5841,6 +5898,7 @@ class Simulation:
         repro_threshold: float,
         prey: Creature,
         prey_energy_at_kill: float,
+        biomass_bonus: float = 0.0,
         refuge_modifiers: PredatorRefugeModifiers,
         rarity_modifiers: PredatorRarityModifiers,
     ) -> None:
@@ -5850,6 +5908,7 @@ class Simulation:
             predator_pre_kill_energy=pre_kill_energy,
             predator_post_kill_energy=post_kill_energy,
             prey_energy_at_kill=prey_energy_at_kill,
+            biomass_bonus=biomass_bonus,
             repro_threshold=repro_threshold,
         )
         life["kills"] += 1

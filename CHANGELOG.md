@@ -2,6 +2,23 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — feat: add predator kill biomass energy reward
+
+### Predator kill biomass bonus
+- Added `predator_kill_biomass_bonus` mode parameter (default 0.05) for predator_prey mode, representing conservative body/mass value on top of prey current energy
+- Changed kill energy formula from `min(cap, prey.energy)` to `min(cap, prey.energy + biomass_bonus)`
+- Increased effective `predator_kill_energy_gain_cap` default for predator_prey from 0.30 to 0.40
+- Updated adaptive dial spec default for `predator_kill_energy_gain_cap` from 0.50 to 0.40 to stay consistent with canonical defaults
+- Added per-kill diagnostic fields: `biomass_bonus`, `raw_kill_energy_before_cap`, `old_formula_nominal_gain`, `biomass_added_nominal_gain`
+- Added aggregate diagnostic fields: `predator_kill_biomass_bonus`, `old_formula_nominal_total`, `biomass_added_nominal_total`, `average_biomass_added_gain_per_kill`, `share_of_kills_helped_by_biomass_bonus`, `actual_conversion_from_prey_and_biomass_raw_energy`, `cap_limited_share_after_biomass`, `predator_full_limited_share_after_biomass`, `reproduction_threshold_crossing_share_after_biomass`
+- Added `predator_kill_biomass_bonus` and `predator_kill_energy_gain_cap` to settings overlay for predator_prey mode
+- No change to contact rules, depth rules, predator/prey speed, reproduction rules, sensing rules, quarry memory, rarity advantage, or adaptive tuning behavior
+
+### Tests
+- Added tests for biomass bonus with low-energy prey (nominal gain 0.15), high-energy prey capped at cap (0.40), predator-full waste with biomass (wasted_to_full recorded), no-resurrect/no-farming, recent_animal_energy tracking, diagnostics summary completeness, and effective default parameter values
+- Updated existing kill energy tests to explicitly set biomass_bonus=0.0 to preserve original test scope
+- Updated predator collapse diagnostics section K test for new biomass fields
+
 ## [2026-05-25] — chore: instrument predator kill energy transfer
 
 ### Predator kill energy diagnostics
