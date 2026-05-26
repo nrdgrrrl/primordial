@@ -734,6 +734,46 @@ def _section_g_near_contact_dance(
     kills_after_sustained_chase = sum(
         int(l.get("kills_after_sustained_chase", 0)) for l in all_completed
     )
+    committed_depth_tracking_events = sum(
+        int(l.get("committed_depth_tracking_events", 0)) for l in all_completed
+    )
+    committed_depth_tracking_kills = sum(
+        int(l.get("committed_depth_tracking_kills", 0)) for l in all_completed
+    )
+    cross_depth_before_tracking = sum(
+        int(l.get("cross_depth_near_contact_before_tracking", 0))
+        for l in all_completed
+    )
+    cross_depth_after_tracking = sum(
+        int(l.get("cross_depth_near_contact_after_tracking", 0))
+        for l in all_completed
+    )
+    kills_after_depth_fatigue = sum(
+        int(l.get("kills_after_depth_fatigue", 0)) for l in all_completed
+    )
+    kills_after_committed_depth_tracking = sum(
+        int(l.get("kills_after_committed_depth_tracking", 0))
+        for l in all_completed
+    )
+    chase_pressure_at_kill_values = [
+        float(value)
+        for life in all_completed
+        for value in life.get("chase_pressure_at_kill_values", [])
+    ]
+    depth_fatigue_at_kill_values = [
+        float(value)
+        for life in all_completed
+        for value in life.get("depth_fatigue_at_kill_values", [])
+    ]
+    fatigue_summary = runs[0]["diagnostics"].get("predator_depth_fatigue_summary", {}) if runs else {}
+    fatigue_enabled = bool(runs[0]["diagnostics"].get("prey_depth_fatigue_enabled", False)) if runs else False
+    committed_tracking_enabled = bool(
+        runs[0]["diagnostics"].get("predator_committed_depth_tracking_enabled", False)
+    ) if runs else False
+    active_hunting_deaths = sum(
+        1 for l in all_completed if l.get("death_context") == "active_hunting"
+    )
+    prey_collapse_detected = any(int(run.get("final_prey_count", 0)) <= 0 for run in runs)
 
     killed_prey_age_fractions: list[float] = []
     killed_prey_energies: list[float] = []
@@ -816,6 +856,29 @@ def _section_g_near_contact_dance(
             sum(int(l.get("kills_after_memory_chase", 0)) for l in all_completed),
             total_kill_samples,
         ),
+        "prey_depth_fatigue_enabled": fatigue_enabled,
+        "prey_depth_fatigue_min_chase_ticks": runs[0]["diagnostics"].get("prey_depth_fatigue_min_chase_ticks") if runs else None,
+        "prey_depth_fatigue_energy_threshold": runs[0]["diagnostics"].get("prey_depth_fatigue_energy_threshold") if runs else None,
+        "prey_depth_fatigue_escape_urgency_mult": runs[0]["diagnostics"].get("prey_depth_fatigue_escape_urgency_mult") if runs else None,
+        "prey_depth_fatigue_decay_ticks": runs[0]["diagnostics"].get("prey_depth_fatigue_decay_ticks") if runs else None,
+        "prey_depth_fatigue_max": runs[0]["diagnostics"].get("prey_depth_fatigue_max") if runs else None,
+        "predator_committed_depth_tracking_enabled": committed_tracking_enabled,
+        "predator_committed_depth_tracking_min_chase_ticks": runs[0]["diagnostics"].get("predator_committed_depth_tracking_min_chase_ticks") if runs else None,
+        "predator_committed_depth_tracking_near_contact_scale": runs[0]["diagnostics"].get("predator_committed_depth_tracking_near_contact_scale") if runs else None,
+        "predator_committed_depth_tracking_cooldown_ticks": runs[0]["diagnostics"].get("predator_committed_depth_tracking_cooldown_ticks") if runs else None,
+        "prey_depth_fatigue_events": int(fatigue_summary.get("prey_depth_fatigue_events", 0)),
+        "depth_escape_fatigue_applied_frames": int(fatigue_summary.get("depth_escape_fatigue_applied_frames", 0)),
+        "committed_depth_tracking_events": committed_depth_tracking_events,
+        "committed_depth_tracking_kills": committed_depth_tracking_kills,
+        "cross_depth_near_contact_before_tracking": cross_depth_before_tracking,
+        "cross_depth_near_contact_after_tracking": cross_depth_after_tracking,
+        "cross_depth_near_contact_decreased_after_tracking": cross_depth_after_tracking < cross_depth_before_tracking,
+        "kills_after_depth_fatigue": kills_after_depth_fatigue,
+        "kills_after_committed_depth_tracking": kills_after_committed_depth_tracking,
+        "average_chase_pressure_at_kill": _safe_mean(chase_pressure_at_kill_values),
+        "average_depth_fatigue_at_kill": _safe_mean(depth_fatigue_at_kill_values),
+        "active_hunting_deaths": active_hunting_deaths,
+        "prey_collapse_detected": prey_collapse_detected,
         "killed_prey_age_bucket_counts": age_bucket_counts,
         "killed_prey_energy_bucket_counts": energy_bucket_counts,
         "killed_prey_condition_bucket_counts": condition_counts,
@@ -970,7 +1033,6 @@ def _section_k_predator_kill_energy_transfer(
         unconverted_total += float(summary.get("kill_energy_unconverted_due_to_kill_cap_total", 0.0))
         old_formula_nominal_total += float(summary.get("old_formula_nominal_total", 0.0))
         biomass_added_nominal_total += float(summary.get("biomass_added_nominal_total", 0.0))
-        biomass_bonus_helped_kill_count += int(summary.get("share_of_kills_helped_by_biomass_bonus", 0.0) * int(summary.get("kill_count", 0)))
         predator_kill_biomass_bonus = float(summary.get("predator_kill_biomass_bonus", 0.0))
 
         for life in run.get("diagnostics", {}).get("completed_lives", []):
@@ -1017,7 +1079,11 @@ def _section_k_predator_kill_energy_transfer(
                     biomass_bonus_helped_kill_count += 1
 
     if kill_count <= 0:
-        return {"kill_count": 0, "interpretation": ["No predator kills were recorded."]}
+        return {
+            "kill_count": 0,
+            "predator_kill_biomass_bonus": predator_kill_biomass_bonus,
+            "interpretation": ["No predator kills were recorded."],
+        }
 
     share_cap_limited = _safe_ratio(cap_limited_count, kill_count)
     share_predator_full_limited = _safe_ratio(predator_full_limited_count, kill_count)
@@ -1537,6 +1603,23 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Median max sustained chase frames:** {_fmt(g.get('median_max_sustained_chase_frames'))}")
         lines.append(f"- **% lives with sustained chase:** {_pct_fmt(g.get('pct_lives_with_sustained_chase'))}")
         lines.append(f"- **Kills after sustained chase:** {g.get('kills_after_sustained_chase', 0)}")
+        lines.append(f"- **Prey depth fatigue enabled:** {g.get('prey_depth_fatigue_enabled')}")
+        lines.append(f"- **Depth fatigue defaults:** min_chase={_fmt(g.get('prey_depth_fatigue_min_chase_ticks'))}, energy_threshold={_fmt(g.get('prey_depth_fatigue_energy_threshold'))}, escape_mult={_fmt(g.get('prey_depth_fatigue_escape_urgency_mult'))}, decay_ticks={_fmt(g.get('prey_depth_fatigue_decay_ticks'))}, max={_fmt(g.get('prey_depth_fatigue_max'))}")
+        lines.append(f"- **Committed depth tracking enabled:** {g.get('predator_committed_depth_tracking_enabled')}")
+        lines.append(f"- **Committed tracking defaults:** min_chase={_fmt(g.get('predator_committed_depth_tracking_min_chase_ticks'))}, near_scale={_fmt(g.get('predator_committed_depth_tracking_near_contact_scale'))}, cooldown={_fmt(g.get('predator_committed_depth_tracking_cooldown_ticks'))}")
+        lines.append(f"- **Prey depth fatigue events:** {g.get('prey_depth_fatigue_events', 0)}")
+        lines.append(f"- **Depth fatigue applied frames:** {g.get('depth_escape_fatigue_applied_frames', 0)}")
+        lines.append(f"- **Committed depth tracking events:** {g.get('committed_depth_tracking_events', 0)}")
+        lines.append(f"- **Committed depth tracking kills:** {g.get('committed_depth_tracking_kills', 0)}")
+        lines.append(f"- **Cross-depth near-contact before tracking:** {g.get('cross_depth_near_contact_before_tracking', 0)}")
+        lines.append(f"- **Cross-depth near-contact after tracking:** {g.get('cross_depth_near_contact_after_tracking', 0)}")
+        lines.append(f"- **Cross-depth near-contact decreased after tracking:** {g.get('cross_depth_near_contact_decreased_after_tracking')}")
+        lines.append(f"- **Kills after depth fatigue:** {g.get('kills_after_depth_fatigue', 0)}")
+        lines.append(f"- **Kills after committed depth tracking:** {g.get('kills_after_committed_depth_tracking', 0)}")
+        lines.append(f"- **Average chase pressure at kill:** {_fmt(g.get('average_chase_pressure_at_kill'))}")
+        lines.append(f"- **Average depth fatigue at kill:** {_fmt(g.get('average_depth_fatigue_at_kill'))}")
+        lines.append(f"- **Active-hunting deaths in sample:** {g.get('active_hunting_deaths', 0)}")
+        lines.append(f"- **Prey collapse detected:** {g.get('prey_collapse_detected')}")
         lines.append(f"- **Memory chase frames:** {g.get('memory_chase_frames', 0)}")
         lines.append(f"- **Memory chase frames / completed life:** {_fmt(g.get('memory_chase_frames_per_completed_life'))}")
         lines.append(f"- **Memory target reacquisitions:** {g.get('memory_target_reacquisitions', 0)}")
@@ -1645,6 +1728,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.append("## Predator Kill Energy Transfer")
     lines.append("")
     ke = report["section_k_predator_kill_energy_transfer"]
+    lines.append(f"- **Configured biomass bonus:** {_fmt(ke.get('predator_kill_biomass_bonus'))}")
     if ke.get("kill_count", 0) == 0:
         lines.append("No predator kills were recorded.")
     else:
@@ -1663,6 +1747,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Share of kills predator-full-limited:** {_pct_fmt(100.0 * ke.get('share_of_kills_predator_full_limited', 0.0))}")
         lines.append(f"- **Share of kills crossing reproduction threshold:** {_pct_fmt(100.0 * ke.get('share_of_kills_crossed_reproduction_threshold', 0.0))}")
         lines.append(f"- **Share of kills already reproduction-ready:** {_pct_fmt(100.0 * ke.get('share_of_kills_already_reproduction_ready', 0.0))}")
+        lines.append(f"- **Old-formula nominal total:** {_fmt(ke.get('old_formula_nominal_total'))}")
+        lines.append(f"- **Biomass-added nominal total:** {_fmt(ke.get('biomass_added_nominal_total'))}")
+        lines.append(f"- **Average biomass-added gain / kill:** {_fmt(ke.get('average_biomass_added_gain_per_kill'))}")
+        lines.append(f"- **Share of kills helped by biomass bonus:** {_pct_fmt(100.0 * ke.get('share_of_kills_helped_by_biomass_bonus', 0.0))}")
+        lines.append(f"- **Actual conversion from prey+biomass raw energy:** {_share_fmt(ke.get('actual_conversion_from_prey_and_biomass_raw_energy'))}")
         for line in ke.get("interpretation", []):
             lines.append(f"- **Interpretation:** {line}")
     lines.append("")

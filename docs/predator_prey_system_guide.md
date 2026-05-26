@@ -108,6 +108,11 @@ trait preservation, or reproduction thresholds. Predators track prey by
 sensing, steering, and probabilistically shifting depth. Inside a hunting
 ground, predators can get a small density-damped boost to hunt sensing, contact
 range, and depth tracking, plus a slight reduction in hunting energy costs.
+Sustained pursuit now also adds a conservative depth-fatigue layer: prey that
+have been chased repeatedly, especially while low on energy, become less
+perfect at repeated depth escapes, and predators that stay committed to the
+same quarry long enough can make a bounded depth-follow step near contact. The
+final kill still requires normal contact and same depth.
 
 ## Depth Bands and Cross-Band Misses
 
@@ -278,12 +283,24 @@ Predator-prey exposes additional ecology-only tuning for this pass:
 - `prey_flee_low_energy_slowdown_enabled`
 - `prey_flee_low_energy_threshold`
 - `prey_flee_low_energy_min_mult`
+- `prey_depth_fatigue_enabled`
+- `prey_depth_fatigue_min_chase_ticks`
+- `prey_depth_fatigue_energy_threshold`
+- `prey_depth_fatigue_escape_urgency_mult`
+- `prey_depth_fatigue_decay_ticks`
+- `prey_depth_fatigue_max`
 - `predator_near_contact_diagnostic_scale`
 - `predator_sustained_chase_min_frames`
+- `predator_committed_depth_tracking_enabled`
+- `predator_committed_depth_tracking_min_chase_ticks`
+- `predator_committed_depth_tracking_near_contact_scale`
+- `predator_committed_depth_tracking_cooldown_ticks`
 
 The prey flee settings change only prey escape speed under age/energy frailty.
-The near-contact settings are diagnostics-only and do not change kill distance
-or add a lunge/strike mechanic.
+The depth-fatigue and committed-tracking settings are conservative depth-band
+behavior rules: they do not increase global kill distance and do not allow
+cross-depth kills. The near-contact settings remain diagnostics-only and do not
+add a lunge/strike mechanic.
 
 Actions in the footer and Actions category use the same behavior as their
 keyboard shortcuts. Destructive reset actions require confirmation.

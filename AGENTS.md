@@ -218,6 +218,18 @@ directly to flee max speed, and the optional low-energy taper uses
 `prey_flee_low_energy_threshold`, and `prey_flee_low_energy_min_mult`. This is
 not predator spawning, not predator rescue, not extinct-trait preservation,
 and not a direct reproduction-threshold change.
+Predator/prey chase-depth fatigue is conservative and pursuit-bound. Prey-side
+keys are `prey_depth_fatigue_enabled`,
+`prey_depth_fatigue_min_chase_ticks`,
+`prey_depth_fatigue_energy_threshold`,
+`prey_depth_fatigue_escape_urgency_mult`,
+`prey_depth_fatigue_decay_ticks`, and `prey_depth_fatigue_max`. Predator-side
+committed tracking keys are `predator_committed_depth_tracking_enabled`,
+`predator_committed_depth_tracking_min_chase_ticks`,
+`predator_committed_depth_tracking_near_contact_scale`, and
+`predator_committed_depth_tracking_cooldown_ticks`. These mechanics must remain
+state-based, conservative, and depth-only: no global contact buff, no direct
+cross-depth kill shortcut, and no large speed buff.
 Predator near-contact diagnostics are observational only. The current config
 keys are `predator_near_contact_diagnostic_scale` and
 `predator_sustained_chase_min_frames`. They exist to measure same-depth

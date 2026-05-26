@@ -283,6 +283,286 @@ class EcologySensingTests(unittest.TestCase):
         )
         self.assertAlmostEqual(low_energy_speed, healthy_speed, places=6)
 
+    def test_chase_pressure_increases_when_predator_repeatedly_pursues_same_prey(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=0.8, sense_radius=1.0, aggression=0.9),
+            lineage_id=1,
+            species="predator",
+            depth_band=0,
+        )
+        prey = Creature(
+            x=130.0,
+            y=100.0,
+            genome=Genome(speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.7,
+            lineage_id=2,
+            species="prey",
+            depth_band=0,
+        )
+        simulation.creatures = [predator, prey]
+        bucket = simulation._build_creature_bucket()
+
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch(
+            "random.random",
+            return_value=0.99,
+        ):
+            simulation._predator_hunt_prey(predator, bucket)
+            simulation._predator_hunt_prey(predator, bucket)
+            simulation._predator_hunt_prey(predator, bucket)
+
+        state = simulation._prey_chase_pressure[id(prey)]
+        self.assertEqual(state.current_chase_pressure_ticks, 3)
+        self.assertEqual(state.last_chased_by_predator_id, id(predator))
+
+    def test_chase_pressure_decays_when_pursuit_stops(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        prey = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.7,
+            lineage_id=1,
+            species="prey",
+        )
+        state = simulation._get_prey_chase_pressure_state(prey)
+        state.current_chase_pressure_ticks = 4
+        state.depth_escape_fatigue = 0.4
+        state.last_chase_pressure_frame = 0
+        simulation.creatures = [prey]
+        simulation._frame = 3
+
+        simulation._decay_prey_chase_pressure_states()
+
+        self.assertEqual(state.current_chase_pressure_ticks, 3)
+        self.assertLess(state.depth_escape_fatigue, 0.4)
+
+    def test_low_energy_chased_prey_receives_depth_fatigue(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        prey = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.10,
+            lineage_id=1,
+            species="prey",
+        )
+        state = simulation._get_prey_chase_pressure_state(prey)
+        state.current_chase_pressure_ticks = 90
+        state.last_chase_pressure_frame = 0
+        state.depth_escape_fatigue = simulation._calculate_prey_depth_fatigue(prey, state)
+
+        self.assertGreater(simulation._get_prey_depth_escape_fatigue(prey), 0.0)
+        self.assertLess(simulation._get_prey_depth_escape_urgency(prey), 0.30)
+
+    def test_high_energy_unchased_prey_is_not_meaningfully_affected(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        prey = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.85,
+            lineage_id=1,
+            species="prey",
+        )
+
+        self.assertEqual(simulation._get_prey_depth_escape_fatigue(prey), 0.0)
+        self.assertAlmostEqual(simulation._get_prey_depth_escape_urgency(prey), 0.30)
+
+    def test_committed_depth_tracking_only_triggers_after_sustained_same_target_chase(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.5,
+            lineage_id=1,
+            species="predator",
+            depth_band=0,
+        )
+        prey = Creature(
+            x=101.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.5,
+            lineage_id=2,
+            species="prey",
+            depth_band=2,
+        )
+        simulation.creatures = [predator, prey]
+        bucket = simulation._build_creature_bucket()
+        life = simulation._ensure_predator_life(predator)
+        min_chase = simulation._get_predator_committed_depth_tracking_min_chase_ticks()
+        life["_last_target_id"] = id(prey)
+        life["_current_chase_frames"] = min_chase - 2
+
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch(
+            "random.random",
+            return_value=0.99,
+        ):
+            simulation._predator_hunt_prey(predator, bucket)
+
+        self.assertEqual(predator.depth_band, 0)
+        self.assertEqual(life["committed_depth_tracking_events"], 0)
+
+        life["_current_chase_frames"] = min_chase - 1
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch(
+            "random.random",
+            return_value=0.99,
+        ):
+            simulation._predator_hunt_prey(predator, bucket)
+
+        self.assertEqual(predator.depth_band, 1)
+        self.assertEqual(life["committed_depth_tracking_events"], 1)
+
+    def test_committed_tracking_does_not_create_cross_depth_kills(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.5,
+            lineage_id=1,
+            species="predator",
+            depth_band=0,
+        )
+        prey = Creature(
+            x=101.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.5,
+            lineage_id=2,
+            species="prey",
+            depth_band=1,
+        )
+        simulation.creatures = [predator, prey]
+        life = simulation._ensure_predator_life(predator)
+        life["_last_target_id"] = id(prey)
+        life["_current_chase_frames"] = simulation._get_predator_committed_depth_tracking_min_chase_ticks() - 1
+
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch(
+            "random.random",
+            return_value=0.99,
+        ):
+            result = simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        self.assertTrue(result.engaged)
+        self.assertFalse(result.killed)
+        self.assertEqual(prey.energy, 0.5)
+        self.assertEqual(simulation.predation_kill_count, 0)
+        self.assertEqual(predator.depth_band, 1)
+
+    def test_normal_same_depth_contact_kill_behavior_still_works(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.10,
+            lineage_id=1,
+            species="predator",
+            depth_band=1,
+        )
+        prey = Creature(
+            x=101.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.10,
+            lineage_id=2,
+            species="prey",
+            depth_band=1,
+        )
+        simulation.creatures = [predator, prey]
+
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch(
+            "random.random",
+            return_value=0.99,
+        ):
+            result = simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        self.assertTrue(result.killed)
+        self.assertEqual(prey.energy, 0.0)
+        self.assertEqual(simulation.predation_kill_count, 1)
+
+    def test_biomass_kill_energy_behavior_remains_unchanged_with_new_chase_state(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        simulation.settings.mode_params["predator_prey"]["predator_kill_energy_gain_cap"] = 0.40
+        simulation.settings.mode_params["predator_prey"]["predator_kill_biomass_bonus"] = 0.05
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.10,
+            lineage_id=1,
+            species="predator",
+            depth_band=1,
+        )
+        prey = Creature(
+            x=101.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.10,
+            lineage_id=2,
+            species="prey",
+            depth_band=1,
+        )
+        state = simulation._get_prey_chase_pressure_state(prey)
+        state.current_chase_pressure_ticks = 120
+        state.depth_escape_fatigue = 0.4
+        simulation.creatures = [predator, prey]
+
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch(
+            "random.random",
+            return_value=0.99,
+        ):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        self.assertAlmostEqual(predator.energy, 0.25)
+        self.assertAlmostEqual(predator.recent_animal_energy, 0.15)
+
+    def test_diagnostics_export_includes_depth_fatigue_and_tracking_fields(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(size=0.6, speed=1.0, sense_radius=1.0, aggression=0.9),
+            energy=0.10,
+            lineage_id=1,
+            species="predator",
+            depth_band=1,
+        )
+        prey = Creature(
+            x=101.0,
+            y=100.0,
+            genome=Genome(size=0.2, speed=0.7, sense_radius=1.0, aggression=0.1),
+            energy=0.10,
+            lineage_id=2,
+            species="prey",
+            depth_band=1,
+        )
+        state = simulation._get_prey_chase_pressure_state(prey)
+        state.current_chase_pressure_ticks = 120
+        state.depth_escape_fatigue = 0.4
+        simulation.creatures = [predator, prey]
+
+        with patch.object(simulation, "_sense_target_position", return_value=(prey.x, prey.y)), patch(
+            "random.random",
+            return_value=0.99,
+        ):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        diagnostics = simulation.export_predator_diagnostics()
+        self.assertIn("prey_depth_fatigue_enabled", diagnostics)
+        self.assertIn("predator_committed_depth_tracking_enabled", diagnostics)
+        self.assertIn("predator_depth_fatigue_summary", diagnostics)
+        self.assertIn("average_chase_pressure_at_kill", diagnostics["predator_depth_fatigue_summary"])
+        life = diagnostics["active_lives"][0]
+        self.assertIn("kills_after_depth_fatigue", life)
+        self.assertIn("committed_depth_tracking_events", life)
+        self.assertIn("average_depth_fatigue_at_kill", life)
+
     def test_predation_events_report_kills_and_actual_speed_telemetry(self) -> None:
         simulation = self._build_simulation("predator_prey")
         simulation.settings.cosmic_ray_rate = 0.0

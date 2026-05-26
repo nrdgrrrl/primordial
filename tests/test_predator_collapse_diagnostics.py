@@ -70,6 +70,14 @@ def _make_life(
     sustained_chase_frames=0,
     max_sustained_chase_frames=0,
     kills_after_sustained_chase=0,
+    committed_depth_tracking_events=0,
+    committed_depth_tracking_kills=0,
+    cross_depth_near_contact_before_tracking=0,
+    cross_depth_near_contact_after_tracking=0,
+    kills_after_depth_fatigue=0,
+    kills_after_committed_depth_tracking=0,
+    chase_pressure_at_kill_values=None,
+    depth_fatigue_at_kill_values=None,
     memory_chase_frames=0,
     memory_target_reacquisitions=0,
     memory_target_dropped_frames=0,
@@ -168,6 +176,14 @@ def _make_life(
         "sustained_chase_frames": sustained_chase_frames,
         "max_sustained_chase_frames": max_sustained_chase_frames,
         "kills_after_sustained_chase": kills_after_sustained_chase,
+        "committed_depth_tracking_events": committed_depth_tracking_events,
+        "committed_depth_tracking_kills": committed_depth_tracking_kills,
+        "cross_depth_near_contact_before_tracking": cross_depth_near_contact_before_tracking,
+        "cross_depth_near_contact_after_tracking": cross_depth_near_contact_after_tracking,
+        "kills_after_depth_fatigue": kills_after_depth_fatigue,
+        "kills_after_committed_depth_tracking": kills_after_committed_depth_tracking,
+        "chase_pressure_at_kill_values": chase_pressure_at_kill_values or [],
+        "depth_fatigue_at_kill_values": depth_fatigue_at_kill_values or [],
         "memory_chase_frames": memory_chase_frames,
         "memory_target_reacquisitions": memory_target_reacquisitions,
         "memory_target_dropped_frames": memory_target_dropped_frames,
@@ -319,8 +335,18 @@ def _make_run(
             "prey_flee_low_energy_slowdown_enabled": True,
             "prey_flee_low_energy_threshold": 0.35,
             "prey_flee_low_energy_min_mult": 0.75,
+            "prey_depth_fatigue_enabled": True,
+            "prey_depth_fatigue_min_chase_ticks": 90,
+            "prey_depth_fatigue_energy_threshold": 0.35,
+            "prey_depth_fatigue_escape_urgency_mult": 0.75,
+            "prey_depth_fatigue_decay_ticks": 180,
+            "prey_depth_fatigue_max": 1.0,
             "predator_near_contact_diagnostic_scale": 1.25,
             "predator_sustained_chase_min_frames": 20,
+            "predator_committed_depth_tracking_enabled": True,
+            "predator_committed_depth_tracking_min_chase_ticks": 90,
+            "predator_committed_depth_tracking_near_contact_scale": 1.75,
+            "predator_committed_depth_tracking_cooldown_ticks": 45,
             "predator_kill_energy_transfer": {
                 "kill_count": sum(int(l.get("kill_energy_summary", {}).get("kill_count", 0)) for l in completed_lives + active_lives),
                 "total_prey_energy_at_kill": sum(float(l.get("kill_energy_summary", {}).get("total_prey_energy_at_kill", 0.0)) for l in completed_lives + active_lives),
@@ -331,6 +357,21 @@ def _make_run(
                 "predator_kill_biomass_bonus": 0.05,
                 "old_formula_nominal_total": sum(float(l.get("kill_energy_summary", {}).get("old_formula_nominal_total", 0.0)) for l in completed_lives + active_lives),
                 "biomass_added_nominal_total": sum(float(l.get("kill_energy_summary", {}).get("biomass_added_nominal_total", 0.0)) for l in completed_lives + active_lives),
+            },
+            "predator_depth_fatigue_summary": {
+                "prey_depth_fatigue_events": sum(int(l.get("kills_after_depth_fatigue", 0)) for l in completed_lives + active_lives),
+                "depth_escape_fatigue_applied_frames": 0,
+                "committed_depth_tracking_events": sum(int(l.get("committed_depth_tracking_events", 0)) for l in completed_lives + active_lives),
+                "committed_depth_tracking_kills": sum(int(l.get("committed_depth_tracking_kills", 0)) for l in completed_lives + active_lives),
+                "cross_depth_near_contact_before_tracking": sum(int(l.get("cross_depth_near_contact_before_tracking", 0)) for l in completed_lives + active_lives),
+                "cross_depth_near_contact_after_tracking": sum(int(l.get("cross_depth_near_contact_after_tracking", 0)) for l in completed_lives + active_lives),
+                "kills_after_depth_fatigue": sum(int(l.get("kills_after_depth_fatigue", 0)) for l in completed_lives + active_lives),
+                "kills_after_committed_depth_tracking": sum(int(l.get("kills_after_committed_depth_tracking", 0)) for l in completed_lives + active_lives),
+                "chase_pressure_at_kill_total": sum(sum(float(v) for v in l.get("chase_pressure_at_kill_values", [])) for l in completed_lives + active_lives),
+                "depth_fatigue_at_kill_total": sum(sum(float(v) for v in l.get("depth_fatigue_at_kill_values", [])) for l in completed_lives + active_lives),
+                "kill_samples_with_chase_pressure": sum(len(l.get("chase_pressure_at_kill_values", [])) for l in completed_lives + active_lives),
+                "average_chase_pressure_at_kill": None,
+                "average_depth_fatigue_at_kill": None,
             },
             "completed_lives": completed_lives,
             "active_lives": active_lives,
@@ -521,6 +562,14 @@ class TestReportSections(unittest.TestCase):
                 near_contact_no_kill_with_low_energy_prey_frames=5,
                 max_sustained_chase_frames=24,
                 kills_after_sustained_chase=1,
+                committed_depth_tracking_events=2,
+                committed_depth_tracking_kills=1,
+                cross_depth_near_contact_before_tracking=3,
+                cross_depth_near_contact_after_tracking=1,
+                kills_after_depth_fatigue=1,
+                kills_after_committed_depth_tracking=1,
+                chase_pressure_at_kill_values=[120, 96],
+                depth_fatigue_at_kill_values=[0.4, 0.2],
                 killed_prey_age_fractions=[0.2, 0.82],
                 killed_prey_energies=[0.6, 0.2],
                 killed_prey_condition_buckets=["young_healthy", "old_low_energy"],
@@ -541,6 +590,13 @@ class TestReportSections(unittest.TestCase):
         self.assertEqual(result["killed_prey_age_bucket_counts"]["old"], 1)
         self.assertEqual(result["killed_prey_energy_bucket_counts"]["low_energy"], 1)
         self.assertAlmostEqual(result["average_killed_prey_energy"], 0.4)
+        self.assertEqual(result["committed_depth_tracking_events"], 2)
+        self.assertEqual(result["committed_depth_tracking_kills"], 1)
+        self.assertTrue(result["cross_depth_near_contact_decreased_after_tracking"])
+        self.assertEqual(result["kills_after_depth_fatigue"], 1)
+        self.assertEqual(result["kills_after_committed_depth_tracking"], 1)
+        self.assertAlmostEqual(result["average_chase_pressure_at_kill"], 108.0)
+        self.assertAlmostEqual(result["average_depth_fatigue_at_kill"], 0.3)
         self.assertAlmostEqual(
             result["pct_near_contact_no_kill_frames_with_low_energy_prey"],
             55.55555555555556,
@@ -606,6 +662,7 @@ class TestReportSections(unittest.TestCase):
         self.assertIn("old_formula_nominal_total", result)
         self.assertIn("biomass_added_nominal_total", result)
         self.assertIn("share_of_kills_helped_by_biomass_bonus", result)
+        self.assertLessEqual(result["share_of_kills_helped_by_biomass_bonus"], 1.0)
 
     def test_section_k_recommendations_long_scarcity(self):
         # More than 40% long_scarcity should trigger a recommendation
@@ -686,6 +743,8 @@ class TestBuildAndRenderReport(unittest.TestCase):
         self.assertIn("## Predator Kill Energy Transfer", md)
         self.assertIn("## I. Rarity Advantage Analysis", md)
         self.assertIn("## K. Recommendations", md)
+        self.assertIn("Committed depth tracking enabled", md)
+        self.assertIn("Configured biomass bonus", md)
         self.assertLess(md.index("## G. Near-Contact / Dance Analysis"), md.index("## H. Scarcity Analysis"))
         self.assertLess(md.index("## I. Rarity Advantage Analysis"), md.index("## J. Epistasis / Body-Plan Analysis"))
         self.assertIn("Kills inside refuge", md)
@@ -784,7 +843,7 @@ class TestBuildAndRenderReport(unittest.TestCase):
         )
         self.assertEqual(
             lines[4],
-            "## [2026-05-25] — chore: instrument predator kill energy transfer",
+            "## [2026-05-25] — feat: add predator chase depth fatigue",
         )
         self.assertEqual(
             changelog.count("## [2026-05-25] — feat: add inspect follow modes and lineage graphs"),

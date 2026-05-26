@@ -2,6 +2,25 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-25] — feat: add predator chase depth fatigue
+
+### Predator-prey chase depth fatigue
+- Added conservative predator-prey chase-depth fatigue tuning: `prey_depth_fatigue_enabled`, `prey_depth_fatigue_min_chase_ticks`, `prey_depth_fatigue_energy_threshold`, `prey_depth_fatigue_escape_urgency_mult`, `prey_depth_fatigue_decay_ticks`, `prey_depth_fatigue_max`, `predator_committed_depth_tracking_enabled`, `predator_committed_depth_tracking_min_chase_ticks`, `predator_committed_depth_tracking_near_contact_scale`, and `predator_committed_depth_tracking_cooldown_ticks`
+- Added lightweight transient per-prey chase-pressure state so repeated pursuit can build and decay conservative depth-escape fatigue without persisting runtime state
+- Reduced repeated prey depth escapes under sustained chase pressure, with stronger effect on low-energy prey and automatic recovery after escape windows cool off
+- Added committed predator depth tracking for sustained same-target near-contact chase that follows prey depth without changing contact rules or allowing cross-depth kills
+- Preserved the existing same-depth contact kill requirement, predator/prey role rules, reproduction logic, biomass kill-energy formula, rarity advantage, adaptive tuning, and rendering behavior
+
+### Diagnostics and reporting
+- Added predator-prey diagnostics for depth fatigue and committed tracking, including chase pressure/fatigue at kill, cross-depth near-contact before/after tracking, and kills attributed to sustained chase conversion
+- Extended `tools/predator_collapse_diagnostics.py` JSON and Markdown output with conservative-depth-fatigue settings, new chase/depth metrics, and explicit prey-collapse/active-hunting context
+- Fixed biomass reporting aggregation so `share_of_kills_helped_by_biomass_bonus` no longer double-counts event and summary data and cannot exceed 100%
+- Added missing biomass bonus totals and conversion fields to the Markdown report output
+
+### Tests and docs
+- Added focused predator-prey tests for chase-pressure buildup/decay, prey depth fatigue, committed depth tracking, preserved same-depth kill behavior, unchanged biomass reward behavior, and diagnostics export coverage
+- Updated README, predator-prey guide, primordial guide, settings metadata, and AGENTS notes for the new predator-prey depth-fatigue and committed-tracking configuration
+
 ## [2026-05-25] — feat: add predator kill biomass energy reward
 
 ### Predator kill biomass bonus

@@ -346,7 +346,11 @@ frailty directly and can taper downward for low-energy prey when
 `prey_flee_low_energy_slowdown_enabled` is active. This is a prey-side
 ecological frailty rule, not predator spawning, trait preservation, or a direct
 reproduction change. Predators track prey by sensing, steering, and
-probabilistically shifting depth.
+probabilistically shifting depth. Sustained pursuit also adds conservative
+depth-fatigue behavior: repeatedly chased prey, especially tired prey, become
+less perfect at repeated depth escapes, while predators that stay committed to
+one quarry long enough can make a bounded extra depth-follow step near contact.
+Kills still require normal contact and same depth.
 
 ### How Predators Behave
 
@@ -839,14 +843,25 @@ Predator-prey exposes additional ecology-only tuning for this pass:
 - `prey_flee_low_energy_slowdown_enabled`
 - `prey_flee_low_energy_threshold`
 - `prey_flee_low_energy_min_mult`
+- `prey_depth_fatigue_enabled`
+- `prey_depth_fatigue_min_chase_ticks`
+- `prey_depth_fatigue_energy_threshold`
+- `prey_depth_fatigue_escape_urgency_mult`
+- `prey_depth_fatigue_decay_ticks`
+- `prey_depth_fatigue_max`
 - `predator_near_contact_diagnostic_scale`
 - `predator_sustained_chase_min_frames`
+- `predator_committed_depth_tracking_enabled`
+- `predator_committed_depth_tracking_min_chase_ticks`
+- `predator_committed_depth_tracking_near_contact_scale`
+- `predator_committed_depth_tracking_cooldown_ticks`
 
 The prey flee settings change only prey escape speed under age/energy frailty.
-The near-contact settings are diagnostics-only and do not change kill distance
-or add a lunge/strike mechanic. They exist to separate same-depth contact/flee
-oscillation, cross-depth misses, sustained chase without kill, and kills that
-skew toward old or low-energy prey.
+The depth-fatigue and committed-tracking settings are conservative depth-band
+behavior rules: they do not increase kill distance or bypass same-depth kill
+requirements. The near-contact settings remain diagnostics-only. Together they
+separate same-depth contact/flee oscillation, cross-depth misses, sustained
+chase without kill, and kills that skew toward old or low-energy prey.
 
 Actions in the footer and Actions category use the same behavior as their
 keyboard shortcuts. Destructive reset actions require confirmation.

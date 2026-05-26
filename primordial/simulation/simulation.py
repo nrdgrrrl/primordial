@@ -236,6 +236,14 @@ class PredatorHuntResult:
     hunt_modifiers: PredatorHuntModifiers = field(default_factory=PredatorHuntModifiers)
 
 
+@dataclass
+class PreyChasePressureState:
+    current_chase_pressure_ticks: int = 0
+    last_chased_by_predator_id: int | None = None
+    last_chase_pressure_frame: int = -1
+    depth_escape_fatigue: float = 0.0
+
+
 _PREDATOR_PREY_ADAPTIVE_DIALS: tuple[AdaptiveDialSpec, ...] = (
     AdaptiveDialSpec(
         key="predator_contact_kill_distance_scale",
@@ -352,6 +360,8 @@ class Simulation:
         self._recent_cross_band_miss_frames: deque[int] = deque()
         self._predation_victims_this_frame: set[int] = set()
         self._predation_render_context_by_victim: dict[int, PredationRenderContext] = {}
+        self._prey_chase_pressure: dict[int, PreyChasePressureState] = {}
+        self._predator_depth_fatigue_summary = self._new_predator_depth_fatigue_summary()
 
         # Rolling average lifespan for old-age deaths (last 20)
         self._old_age_lifespans: deque[float] = deque(maxlen=20)
@@ -847,6 +857,59 @@ class Simulation:
                     20,
                 )
             ),
+        )
+
+    def _prey_depth_fatigue_enabled(self) -> bool:
+        return bool(self._get_mode_param("prey_depth_fatigue_enabled", True))
+
+    def _get_prey_depth_fatigue_min_chase_ticks(self) -> int:
+        return max(1, int(self._get_mode_param("prey_depth_fatigue_min_chase_ticks", 90)))
+
+    def _get_prey_depth_fatigue_energy_threshold(self) -> float:
+        return max(
+            0.01,
+            min(1.0, float(self._get_mode_param("prey_depth_fatigue_energy_threshold", 0.35))),
+        )
+
+    def _get_prey_depth_fatigue_escape_urgency_mult(self) -> float:
+        return max(
+            0.1,
+            min(1.0, float(self._get_mode_param("prey_depth_fatigue_escape_urgency_mult", 0.75))),
+        )
+
+    def _get_prey_depth_fatigue_decay_ticks(self) -> int:
+        return max(1, int(self._get_mode_param("prey_depth_fatigue_decay_ticks", 180)))
+
+    def _get_prey_depth_fatigue_max(self) -> float:
+        return max(0.0, min(1.0, float(self._get_mode_param("prey_depth_fatigue_max", 1.0))))
+
+    def _predator_committed_depth_tracking_enabled(self) -> bool:
+        return bool(self._get_mode_param("predator_committed_depth_tracking_enabled", True))
+
+    def _get_predator_committed_depth_tracking_min_chase_ticks(self) -> int:
+        return max(
+            1,
+            int(self._get_mode_param("predator_committed_depth_tracking_min_chase_ticks", 90)),
+        )
+
+    def _get_predator_committed_depth_tracking_near_contact_scale(self) -> float:
+        return max(
+            1.0,
+            min(
+                4.0,
+                float(
+                    self._get_mode_param(
+                        "predator_committed_depth_tracking_near_contact_scale",
+                        1.75,
+                    )
+                ),
+            ),
+        )
+
+    def _get_predator_committed_depth_tracking_cooldown_ticks(self) -> int:
+        return max(
+            0,
+            int(self._get_mode_param("predator_committed_depth_tracking_cooldown_ticks", 45)),
         )
 
     def _get_predator_food_efficiency_multiplier(self) -> float:
@@ -1368,6 +1431,8 @@ class Simulation:
         self._recent_cross_band_miss_frames.clear()
         self._predation_victims_this_frame.clear()
         self._predation_render_context_by_victim.clear()
+        self._prey_chase_pressure.clear()
+        self._predator_depth_fatigue_summary = self._new_predator_depth_fatigue_summary()
         self._old_age_lifespans.clear()
         self._flock_sizes = {}
         self._flock_count = 0
@@ -1460,6 +1525,8 @@ class Simulation:
         self._recent_cross_band_miss_frames.clear()
         self._predation_victims_this_frame.clear()
         self._reset_predator_diagnostics()
+        self._prey_chase_pressure.clear()
+        self._predator_depth_fatigue_summary = self._new_predator_depth_fatigue_summary()
 
         self._rebuild_lineage_first_seen_ticks()
 
@@ -1803,6 +1870,7 @@ class Simulation:
             self.creatures.append(creature)
             self.birth_events.append(creature)
 
+        self._decay_prey_chase_pressure_states()
         self._sweep_frame_deaths(dead_creatures, dead_causes)
         self._process_deaths(dead_creatures, dead_causes)
         self._check_predator_prey_collapse()
@@ -1818,6 +1886,183 @@ class Simulation:
             - self._get_predator_recent_animal_energy_decay_per_tick(),
         )
         predator.satiety_ticks_remaining = max(0, predator.satiety_ticks_remaining - 1)
+
+    def _new_predator_depth_fatigue_summary(self) -> dict[str, float | int]:
+        return {
+            "prey_depth_fatigue_events": 0,
+            "depth_escape_fatigue_applied_frames": 0,
+            "committed_depth_tracking_events": 0,
+            "committed_depth_tracking_kills": 0,
+            "cross_depth_near_contact_before_tracking": 0,
+            "cross_depth_near_contact_after_tracking": 0,
+            "kills_after_depth_fatigue": 0,
+            "kills_after_committed_depth_tracking": 0,
+            "chase_pressure_at_kill_total": 0.0,
+            "depth_fatigue_at_kill_total": 0.0,
+            "kill_samples_with_chase_pressure": 0,
+        }
+
+    def _get_prey_chase_pressure_state(self, prey: Creature) -> PreyChasePressureState:
+        return self._prey_chase_pressure.setdefault(id(prey), PreyChasePressureState())
+
+    def _record_prey_chase_pressure(
+        self,
+        prey: Creature,
+        *,
+        predator: Creature,
+    ) -> None:
+        if self.settings.sim_mode != "predator_prey" or prey.species != "prey":
+            return
+        state = self._get_prey_chase_pressure_state(prey)
+        state.current_chase_pressure_ticks = min(
+            state.current_chase_pressure_ticks + 1,
+            self._get_prey_depth_fatigue_min_chase_ticks()
+            + self._get_prey_depth_fatigue_decay_ticks(),
+        )
+        state.last_chased_by_predator_id = id(predator)
+        state.last_chase_pressure_frame = self._frame
+        if self._prey_depth_fatigue_enabled():
+            target = self._calculate_prey_depth_fatigue(prey, state)
+            if target > state.depth_escape_fatigue:
+                state.depth_escape_fatigue = min(
+                    self._get_prey_depth_fatigue_max(),
+                    target,
+                )
+
+    def _decay_prey_chase_pressure_states(self) -> None:
+        if self.settings.sim_mode != "predator_prey":
+            return
+        live_prey_ids = {id(creature) for creature in self.creatures if creature.species == "prey"}
+        for prey_id in list(self._prey_chase_pressure):
+            if prey_id not in live_prey_ids:
+                self._prey_chase_pressure.pop(prey_id, None)
+                continue
+            state = self._prey_chase_pressure[prey_id]
+            if state.last_chase_pressure_frame == self._frame:
+                continue
+            state.current_chase_pressure_ticks = max(
+                0,
+                state.current_chase_pressure_ticks - 1,
+            )
+            decay_step = self._get_prey_depth_fatigue_max() / max(
+                1,
+                self._get_prey_depth_fatigue_decay_ticks(),
+            )
+            state.depth_escape_fatigue = max(0.0, state.depth_escape_fatigue - decay_step)
+            if state.current_chase_pressure_ticks <= 0 and state.depth_escape_fatigue <= 0.0:
+                self._prey_chase_pressure.pop(prey_id, None)
+
+    def _calculate_prey_depth_fatigue(
+        self,
+        prey: Creature,
+        state: PreyChasePressureState,
+    ) -> float:
+        if not self._prey_depth_fatigue_enabled():
+            return 0.0
+        max_fatigue = self._get_prey_depth_fatigue_max()
+        if max_fatigue <= 0.0:
+            return 0.0
+        min_ticks = self._get_prey_depth_fatigue_min_chase_ticks()
+        decay_ticks = self._get_prey_depth_fatigue_decay_ticks()
+        threshold = self._get_prey_depth_fatigue_energy_threshold()
+        pressure_progress = max(
+            0.0,
+            min(
+                1.0,
+                (state.current_chase_pressure_ticks - min_ticks) / max(1, decay_ticks),
+            ),
+        )
+        pressure_presence = max(
+            0.0,
+            min(1.0, state.current_chase_pressure_ticks / max(1, min_ticks)),
+        )
+        energy_pressure = 0.0
+        if prey.energy < threshold:
+            energy_pressure = max(0.0, min(1.0, (threshold - prey.energy) / threshold))
+        fatigue = max(
+            pressure_progress,
+            pressure_presence * energy_pressure * 0.6,
+        )
+        return max(0.0, min(max_fatigue, fatigue * max_fatigue))
+
+    def _get_prey_depth_escape_fatigue(self, prey: Creature) -> float:
+        state = self._prey_chase_pressure.get(id(prey))
+        if state is None:
+            return 0.0
+        return max(0.0, min(self._get_prey_depth_fatigue_max(), state.depth_escape_fatigue))
+
+    def _get_prey_depth_escape_urgency(self, prey: Creature) -> float:
+        fatigue = self._get_prey_depth_escape_fatigue(prey)
+        if fatigue <= 0.0:
+            return _PREY_DEPTH_ESCAPE_URGENCY
+        urgency = _PREY_DEPTH_ESCAPE_URGENCY * (
+            1.0 - (fatigue * self._get_prey_depth_fatigue_escape_urgency_mult())
+        )
+        return max(_PREY_DEPTH_ESCAPE_URGENCY * 0.35, urgency)
+
+    def _prey_has_meaningful_depth_fatigue(self, prey: Creature) -> bool:
+        return self._get_prey_depth_escape_fatigue(prey) >= 0.05
+
+    def _mark_cross_depth_tracking_context(
+        self,
+        predator: Creature,
+    ) -> None:
+        life = self._ensure_predator_life(predator)
+        if life.get("_current_chase_had_committed_tracking"):
+            life["cross_depth_near_contact_after_tracking"] += 1
+            self._predator_depth_fatigue_summary[
+                "cross_depth_near_contact_after_tracking"
+            ] += 1
+        else:
+            life["cross_depth_near_contact_before_tracking"] += 1
+            self._predator_depth_fatigue_summary[
+                "cross_depth_near_contact_before_tracking"
+            ] += 1
+
+    def _maybe_apply_committed_depth_tracking(
+        self,
+        predator: Creature,
+        prey: Creature,
+        *,
+        near_contact_dist: float,
+        best_dist_sq: float,
+        hunt_modifiers: PredatorHuntModifiers,
+    ) -> bool:
+        if not self._predator_committed_depth_tracking_enabled():
+            return False
+        if predator.depth_band == prey.depth_band or prey.energy <= 0.0:
+            return False
+        life = self._ensure_predator_life(predator)
+        if int(life.get("_current_chase_frames", 0)) < self._get_predator_committed_depth_tracking_min_chase_ticks():
+            return False
+        if life.get("_last_target_id") != id(prey):
+            return False
+        scaled_near_contact = (
+            near_contact_dist * self._get_predator_committed_depth_tracking_near_contact_scale()
+        )
+        if best_dist_sq > (scaled_near_contact * scaled_near_contact):
+            return False
+        cooldown_until = int(life.get("_committed_depth_tracking_cooldown_until", -1))
+        if self._frame < cooldown_until:
+            return False
+        previous_depth_band = predator.depth_band
+        self._update_predator_prey_depth_band(
+            predator,
+            prey.depth_band,
+            urgency=1.0,
+            extra_transition_mult=hunt_modifiers.depth_transition_mult,
+        )
+        if predator.depth_band == previous_depth_band:
+            return False
+        life["committed_depth_tracking_events"] += 1
+        life["_current_chase_had_committed_tracking"] = True
+        life["_current_chase_committed_tracking_target_id"] = id(prey)
+        life["_last_committed_depth_tracking_frame"] = self._frame
+        life["_committed_depth_tracking_cooldown_until"] = (
+            self._frame + self._get_predator_committed_depth_tracking_cooldown_ticks()
+        )
+        self._predator_depth_fatigue_summary["committed_depth_tracking_events"] += 1
+        return True
 
     def _predator_interference_factor(
         self,
@@ -1996,6 +2241,7 @@ class Simulation:
             urgency=_PREDATOR_DEPTH_TRACK_URGENCY,
             extra_transition_mult=hunt_modifiers.depth_transition_mult,
         )
+        self._record_prey_chase_pressure(best_prey, predator=predator)
 
         if not used_memory_target:
             self._record_predator_prey_sighting(predator)
@@ -2023,6 +2269,7 @@ class Simulation:
             best_prey.energy > 0.0
             and best_dist_sq <= (near_contact_dist * near_contact_dist)
         )
+        committed_tracking_applied = False
         if is_near_contact:
             self._record_predator_near_contact(
                 predator,
@@ -2033,10 +2280,20 @@ class Simulation:
                     and predator.depth_band == best_prey.depth_band
                 ),
             )
+        if is_near_contact and best_prey.energy > 0.0 and predator.depth_band != best_prey.depth_band:
+            self._mark_cross_depth_tracking_context(predator)
+            committed_tracking_applied = self._maybe_apply_committed_depth_tracking(
+                predator,
+                best_prey,
+                near_contact_dist=near_contact_dist,
+                best_dist_sq=best_dist_sq,
+                hunt_modifiers=hunt_modifiers,
+            )
         if (
             best_dist_sq < (contact_dist * contact_dist)
             and best_prey.energy > 0.0
             and predator.depth_band == best_prey.depth_band
+            and not committed_tracking_applied
         ):
             # Transfer from prey to predator; prevents multiple predators
             # farming energy from an already-dead prey in the same frame.
@@ -2121,10 +2378,12 @@ class Simulation:
             return False
 
         if prey.depth_band == nearest_pred.depth_band:
+            if self._prey_has_meaningful_depth_fatigue(prey):
+                self._predator_depth_fatigue_summary["prey_depth_fatigue_events"] += 1
             self._update_predator_prey_depth_band(
                 prey,
                 self._pick_depth_escape_band(prey, nearest_pred.depth_band),
-                urgency=_PREY_DEPTH_ESCAPE_URGENCY,
+                urgency=self._get_prey_depth_escape_urgency(prey),
             )
 
         sensed_predator = self._sense_target_position(
@@ -2146,6 +2405,10 @@ class Simulation:
 
         flee_speed_scale = self._get_creature_flee_speed_scale(prey)
         flee_condition_mult = self._get_prey_flee_condition_multiplier(prey)
+        if self._prey_has_meaningful_depth_fatigue(prey):
+            self._predator_depth_fatigue_summary[
+                "depth_escape_fatigue_applied_frames"
+            ] += 1
         max_speed = (
             prey.genome.speed
             * self.settings.creature_speed_base
@@ -2200,6 +2463,8 @@ class Simulation:
                         self, creature, previous_species, next_species,
                     )
                 creature.species = next_species
+                if previous_species == "prey":
+                    self._prey_chase_pressure.pop(id(creature), None)
                 creature.lineage_id = self._alloc_lineage_id()
                 creature.recent_animal_energy = 0.0
                 creature.satiety_ticks_remaining = 0
@@ -4151,6 +4416,8 @@ class Simulation:
                     end_reason="death",
                     death_cause=death_cause,
                 )
+            elif creature.species == "prey":
+                self._prey_chase_pressure.pop(id(creature), None)
             self.death_events.append({
                 "x": creature.x,
                 "y": creature.y,
@@ -4906,11 +5173,35 @@ class Simulation:
             "prey_flee_low_energy_min_mult": (
                 self._get_prey_flee_low_energy_min_mult()
             ),
+            "prey_depth_fatigue_enabled": self._prey_depth_fatigue_enabled(),
+            "prey_depth_fatigue_min_chase_ticks": (
+                self._get_prey_depth_fatigue_min_chase_ticks()
+            ),
+            "prey_depth_fatigue_energy_threshold": (
+                self._get_prey_depth_fatigue_energy_threshold()
+            ),
+            "prey_depth_fatigue_escape_urgency_mult": (
+                self._get_prey_depth_fatigue_escape_urgency_mult()
+            ),
+            "prey_depth_fatigue_decay_ticks": self._get_prey_depth_fatigue_decay_ticks(),
+            "prey_depth_fatigue_max": self._get_prey_depth_fatigue_max(),
             "predator_near_contact_diagnostic_scale": (
                 self._get_predator_near_contact_diagnostic_scale()
             ),
             "predator_sustained_chase_min_frames": (
                 self._get_predator_sustained_chase_min_frames()
+            ),
+            "predator_committed_depth_tracking_enabled": (
+                self._predator_committed_depth_tracking_enabled()
+            ),
+            "predator_committed_depth_tracking_min_chase_ticks": (
+                self._get_predator_committed_depth_tracking_min_chase_ticks()
+            ),
+            "predator_committed_depth_tracking_near_contact_scale": (
+                self._get_predator_committed_depth_tracking_near_contact_scale()
+            ),
+            "predator_committed_depth_tracking_cooldown_ticks": (
+                self._get_predator_committed_depth_tracking_cooldown_ticks()
             ),
             "predator_refuge_enabled": self._predator_refuge_enabled(),
             "predator_refuge_zone_type": "hunting_ground",
@@ -4938,6 +5229,7 @@ class Simulation:
             "predator_kill_energy_transfer": self._copy_predator_kill_energy_summary(
                 self._predator_diag_kill_energy_summary
             ),
+            "predator_depth_fatigue_summary": self._copy_predator_depth_fatigue_summary(),
             "completed_lives": [self._copy_predator_life(life) for life in self._predator_diag_completed],
             "active_lives": [
                 self._copy_predator_life(life)
@@ -5380,8 +5672,24 @@ class Simulation:
         self._predator_diag_active.clear()
         self._predator_diag_completed.clear()
         self._predator_diag_kill_energy_summary = self._new_predator_kill_energy_summary()
+        self._predator_depth_fatigue_summary = self._new_predator_depth_fatigue_summary()
         for events in self._predator_diag_events.values():
             events.clear()
+
+    def _copy_predator_depth_fatigue_summary(self) -> dict[str, Any]:
+        summary = dict(self._predator_depth_fatigue_summary)
+        kill_samples = max(0, int(summary.get("kill_samples_with_chase_pressure", 0)))
+        summary["average_chase_pressure_at_kill"] = (
+            float(summary.get("chase_pressure_at_kill_total", 0.0)) / kill_samples
+            if kill_samples > 0
+            else None
+        )
+        summary["average_depth_fatigue_at_kill"] = (
+            float(summary.get("depth_fatigue_at_kill_total", 0.0)) / kill_samples
+            if kill_samples > 0
+            else None
+        )
+        return summary
 
     def _new_predator_kill_energy_summary(self) -> dict[str, Any]:
         return {
@@ -5635,6 +5943,14 @@ class Simulation:
             "sustained_chase_frames": 0,
             "max_sustained_chase_frames": 0,
             "kills_after_sustained_chase": 0,
+            "committed_depth_tracking_events": 0,
+            "committed_depth_tracking_kills": 0,
+            "cross_depth_near_contact_before_tracking": 0,
+            "cross_depth_near_contact_after_tracking": 0,
+            "kills_after_depth_fatigue": 0,
+            "kills_after_committed_depth_tracking": 0,
+            "chase_pressure_at_kill_values": [],
+            "depth_fatigue_at_kill_values": [],
             "memory_chase_frames": 0,
             "memory_target_reacquisitions": 0,
             "memory_target_dropped_frames": 0,
@@ -5709,6 +6025,10 @@ class Simulation:
             "_current_chase_used_memory": False,
             "_current_chase_memory_target_id": None,
             "_last_memory_chase_frame": None,
+            "_current_chase_had_committed_tracking": False,
+            "_current_chase_committed_tracking_target_id": None,
+            "_last_committed_depth_tracking_frame": None,
+            "_committed_depth_tracking_cooldown_until": -1,
         }
         self._predator_diag_next_life_id += 1
         self._predator_diag_active[id(creature)] = life
@@ -5731,6 +6051,8 @@ class Simulation:
             return
         life["_last_target_id"] = None
         life["_current_chase_frames"] = 0
+        life["_current_chase_had_committed_tracking"] = False
+        life["_current_chase_committed_tracking_target_id"] = None
         self._clear_predator_memory_target(predator)
 
     def _record_predator_chase_target(
@@ -5921,6 +6243,26 @@ class Simulation:
         life["kill_pre_energies"].append(pre_kill_energy)
         life["kill_post_energies"].append(post_kill_energy)
         life["kill_energy_events"].append(kill_energy_record)
+        chase_pressure_state = self._prey_chase_pressure.get(id(prey))
+        chase_pressure_at_kill = (
+            chase_pressure_state.current_chase_pressure_ticks
+            if chase_pressure_state is not None
+            else 0
+        )
+        depth_fatigue_at_kill = (
+            chase_pressure_state.depth_escape_fatigue
+            if chase_pressure_state is not None
+            else 0.0
+        )
+        life["chase_pressure_at_kill_values"].append(chase_pressure_at_kill)
+        life["depth_fatigue_at_kill_values"].append(depth_fatigue_at_kill)
+        self._predator_depth_fatigue_summary["chase_pressure_at_kill_total"] += float(
+            chase_pressure_at_kill
+        )
+        self._predator_depth_fatigue_summary["depth_fatigue_at_kill_total"] += float(
+            depth_fatigue_at_kill
+        )
+        self._predator_depth_fatigue_summary["kill_samples_with_chase_pressure"] += 1
         self._record_predator_kill_energy_summary(
             life["kill_energy_summary"],
             kill_energy_record,
@@ -5939,6 +6281,21 @@ class Simulation:
         )
         if life["_current_chase_frames"] >= self._get_predator_sustained_chase_min_frames():
             life["kills_after_sustained_chase"] += 1
+        if depth_fatigue_at_kill >= 0.05:
+            life["kills_after_depth_fatigue"] += 1
+            self._predator_depth_fatigue_summary["kills_after_depth_fatigue"] += 1
+        if (
+            life.get("_current_chase_had_committed_tracking")
+            and life.get("_current_chase_committed_tracking_target_id") == id(prey)
+        ):
+            life["committed_depth_tracking_kills"] += 1
+            life["kills_after_committed_depth_tracking"] += 1
+            self._predator_depth_fatigue_summary[
+                "committed_depth_tracking_kills"
+            ] += 1
+            self._predator_depth_fatigue_summary[
+                "kills_after_committed_depth_tracking"
+            ] += 1
         if (
             life.get("_current_chase_used_memory")
             and life.get("_current_chase_memory_target_id") == id(prey)
@@ -5946,6 +6303,8 @@ class Simulation:
             life["kills_after_memory_chase"] += 1
         life["_current_chase_used_memory"] = False
         life["_current_chase_memory_target_id"] = None
+        life["_current_chase_had_committed_tracking"] = False
+        life["_current_chase_committed_tracking_target_id"] = None
         self._record_predator_gap(
             life,
             key="closest_peak_gap",
@@ -6102,10 +6461,32 @@ class Simulation:
         clone["killed_prey_condition_buckets"] = list(
             life["killed_prey_condition_buckets"]
         )
+        clone["chase_pressure_at_kill_values"] = list(
+            life.get("chase_pressure_at_kill_values", [])
+        )
+        clone["depth_fatigue_at_kill_values"] = list(
+            life.get("depth_fatigue_at_kill_values", [])
+        )
+        clone["average_chase_pressure_at_kill"] = (
+            sum(clone["chase_pressure_at_kill_values"])
+            / len(clone["chase_pressure_at_kill_values"])
+            if clone["chase_pressure_at_kill_values"]
+            else None
+        )
+        clone["average_depth_fatigue_at_kill"] = (
+            sum(clone["depth_fatigue_at_kill_values"])
+            / len(clone["depth_fatigue_at_kill_values"])
+            if clone["depth_fatigue_at_kill_values"]
+            else None
+        )
         if life.get("phenotype_modifiers_at_start") is not None:
             clone["phenotype_modifiers_at_start"] = dict(life["phenotype_modifiers_at_start"])
         if life.get("phenotype_modifiers_at_end") is not None:
             clone["phenotype_modifiers_at_end"] = dict(life["phenotype_modifiers_at_end"])
         clone.pop("_last_target_id", None)
         clone.pop("_current_chase_frames", None)
+        clone.pop("_current_chase_had_committed_tracking", None)
+        clone.pop("_current_chase_committed_tracking_target_id", None)
+        clone.pop("_last_committed_depth_tracking_frame", None)
+        clone.pop("_committed_depth_tracking_cooldown_until", None)
         return clone

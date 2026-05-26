@@ -491,10 +491,20 @@ Mode-specific tuning keys:
 | modes.predator_prey | prey_flee_low_energy_slowdown_enabled | bool | Allow low-energy prey to lose flee speed below the configured threshold |
 | modes.predator_prey | prey_flee_low_energy_threshold | float 0.01..1 | Energy threshold where low-energy prey flee slowdown begins |
 | modes.predator_prey | prey_flee_low_energy_min_mult | float 0.4..1 | Minimum flee-speed multiplier for the most energy-depleted prey |
+| modes.predator_prey | prey_depth_fatigue_enabled | bool | Allow sustained chase pressure to reduce repeated prey depth-escape reliability |
+| modes.predator_prey | prey_depth_fatigue_min_chase_ticks | int >= 1 | Chase length before prey depth fatigue starts building strongly |
+| modes.predator_prey | prey_depth_fatigue_energy_threshold | float 0.01..1 | Low-energy threshold where chase pressure degrades prey depth escapes faster |
+| modes.predator_prey | prey_depth_fatigue_escape_urgency_mult | float 0.1..1 | Strength of the urgency reduction applied to prey depth escapes under fatigue |
+| modes.predator_prey | prey_depth_fatigue_decay_ticks | int >= 1 | How long prey depth fatigue takes to decay after pressure eases |
+| modes.predator_prey | prey_depth_fatigue_max | float 0..1 | Upper cap on prey depth-fatigue strength |
 | modes.predator_prey | predator_prey_scarcity_penalty_multiplier | float 0.1..5 | Extra predator energy-cost multiplier when prey fall below 15% of population |
 | modes.predator_prey | food_cycle_amplitude | float 0..1 | Blend between constant food rate (`0`) and the full feast/famine swing (`1`) |
 | modes.predator_prey | predator_near_contact_diagnostic_scale | float 1..5 | Diagnostic-only multiple of contact distance used to count predator near-contact frames |
 | modes.predator_prey | predator_sustained_chase_min_frames | int >= 1 | Diagnostic-only same-target chase length required before a chase counts as sustained |
+| modes.predator_prey | predator_committed_depth_tracking_enabled | bool | Allow sustained same-target predators to commit to prey depth near contact without bypassing same-depth kill rules |
+| modes.predator_prey | predator_committed_depth_tracking_min_chase_ticks | int >= 1 | Same-target chase length required before committed depth tracking can trigger |
+| modes.predator_prey | predator_committed_depth_tracking_near_contact_scale | float 1..5 | Trigger-only radius multiple used for committed depth tracking near contact |
+| modes.predator_prey | predator_committed_depth_tracking_cooldown_ticks | int >= 0 | Cooldown between committed predator depth-follow steps |
 | modes.predator_prey | stability_history_size | int >= 1 | Rolling run-history window used for `MedN` / `BestN` survival stats and below-median comparisons |
 | modes.predator_prey | adaptive_step_escalation_runs | int >= 1 | Number of consecutive completed runs that fail to beat the rolling median before dial step sizes scale up |
 | modes.predator_prey | adaptive_step_escalation_percent | float >= 0 | Additional dial-step percentage applied for each full escalation streak block |
