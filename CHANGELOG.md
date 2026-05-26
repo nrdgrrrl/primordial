@@ -2132,3 +2132,5 @@ Guardrails preserved in this pass:
 - Cleanup: clarified quarry-memory diagnostics semantics so `kills_after_memory_chase` counts memory-assisted chase episodes that end in killing the same target, and tightened target-switch counting to exclude first-acquire/same-target reacquisition noise.
 
 - Added HUD/Inspect observability summaries for population age, lineage age, and run-baseline trait-drift direction/distance, including snapshot-compatible lineage first-seen metadata rebuild fallback for older saves.
+
+- Fixed predator-prey contact sequencing and diagnostics: added post-move contact kill resolution, corrected chase-pressure per-frame ticking semantics, and prevented adaptive dial initialization from mutating mode params when adaptive tuning is disabled.

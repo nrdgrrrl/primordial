@@ -314,7 +314,8 @@ class EcologySensingTests(unittest.TestCase):
             simulation._predator_hunt_prey(predator, bucket)
 
         state = simulation._prey_chase_pressure[id(prey)]
-        self.assertEqual(state.current_chase_pressure_ticks, 3)
+        self.assertEqual(state.current_chase_pressure_ticks, 1)
+        self.assertEqual(state.current_frame_chase_events, 3)
         self.assertEqual(state.last_chased_by_predator_id, id(predator))
 
     def test_chase_pressure_decays_when_pursuit_stops(self) -> None:

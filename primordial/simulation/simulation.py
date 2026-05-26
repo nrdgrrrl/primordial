@@ -239,6 +239,7 @@ class PredatorHuntResult:
 @dataclass
 class PreyChasePressureState:
     current_chase_pressure_ticks: int = 0
+    current_frame_chase_events: int = 0
     last_chased_by_predator_id: int | None = None
     last_chase_pressure_frame: int = -1
     depth_escape_fatigue: float = 0.0
@@ -1167,7 +1168,8 @@ class Simulation:
             )
             for spec in _PREDATOR_PREY_ADAPTIVE_DIALS
         }
-        self._apply_predator_prey_tuning_values(current_values)
+        if self._predator_prey_adaptive_tuning_enabled:
+            self._apply_predator_prey_tuning_values(current_values)
         return PredatorPreyStabilityState(
             current_seed=seed,
             run_history=self._build_predator_prey_run_history(),
@@ -1749,6 +1751,12 @@ class Simulation:
                         ),
                     )
                 creature.update_position(1.0, self.width, self.height)
+                if hunt_result.engaged and not hunt_result.killed:
+                    self._resolve_post_move_predator_contact(
+                        creature,
+                        hunt_result=hunt_result,
+                        repro_threshold=repro_threshold,
+                    )
 
                 # Broad omnivory softens the legacy predator metabolic premium.
                 predator_cost_multiplier = 1.0 + (
@@ -1891,12 +1899,19 @@ class Simulation:
         return {
             "prey_depth_fatigue_events": 0,
             "depth_escape_fatigue_applied_frames": 0,
+            "depth_escape_urgency_reduced_frames": 0,
+            "depth_fatigue_present_while_fleeing_frames": 0,
             "committed_depth_tracking_events": 0,
             "committed_depth_tracking_kills": 0,
             "cross_depth_near_contact_before_tracking": 0,
             "cross_depth_near_contact_after_tracking": 0,
             "kills_after_depth_fatigue": 0,
             "kills_after_committed_depth_tracking": 0,
+            "contact_kills_pre_move": 0,
+            "contact_kills_post_move": 0,
+            "post_move_contact_opportunities": 0,
+            "post_move_contact_kills": 0,
+            "post_move_contact_misses_by_depth": 0,
             "chase_pressure_at_kill_total": 0.0,
             "depth_fatigue_at_kill_total": 0.0,
             "kill_samples_with_chase_pressure": 0,
@@ -1914,11 +1929,16 @@ class Simulation:
         if self.settings.sim_mode != "predator_prey" or prey.species != "prey":
             return
         state = self._get_prey_chase_pressure_state(prey)
-        state.current_chase_pressure_ticks = min(
-            state.current_chase_pressure_ticks + 1,
-            self._get_prey_depth_fatigue_min_chase_ticks()
-            + self._get_prey_depth_fatigue_decay_ticks(),
-        )
+        if state.last_chase_pressure_frame != self._frame:
+            state.current_chase_pressure_ticks = min(
+                state.current_chase_pressure_ticks + 1,
+                self._get_prey_depth_fatigue_min_chase_ticks()
+                + self._get_prey_depth_fatigue_decay_ticks(),
+            )
+        life = self._ensure_predator_life(predator)
+        frame_targets = life.setdefault("_frame_chased_prey_ids", set())
+        frame_targets.add(id(prey))
+        state.current_frame_chase_events = int(state.current_frame_chase_events) + 1
         state.last_chased_by_predator_id = id(predator)
         state.last_chase_pressure_frame = self._frame
         if self._prey_depth_fatigue_enabled():
@@ -2105,6 +2125,48 @@ class Simulation:
             min(1.0, scarcity_scale),
         )
 
+    def _resolve_predator_contact_kill(
+        self,
+        *,
+        predator: Creature,
+        prey: Creature,
+        hunt_modifiers: PredatorHuntModifiers,
+        repro_threshold: float,
+        pre_move: bool,
+    ) -> bool:
+        if prey.energy <= 0.0 or id(prey) in self._predation_victims_this_frame:
+            return False
+        pre_kill_energy = predator.energy
+        prey_energy_before_kill = prey.energy
+        kill_cap = self._get_predator_kill_energy_gain_cap()
+        biomass_bonus = self._get_predator_kill_biomass_bonus()
+        raw_kill_energy = prey.energy + biomass_bonus
+        energy_gain = min(kill_cap, raw_kill_energy)
+        predator.energy = min(1.0, predator.energy + energy_gain)
+        predator.recent_animal_energy = min(1.0, predator.recent_animal_energy + energy_gain)
+        predator.satiety_ticks_remaining = self._get_predator_satiety_ticks()
+        prey.energy = 0.0
+        self.predation_kill_count += 1
+        self._predation_victims_this_frame.add(id(prey))
+        self._predation_render_context_by_victim[id(prey)] = {
+            "predator_x": predator.x, "predator_y": predator.y, "predator_species": predator.species,
+            "predator_hue": predator.genome.hue, "predator_saturation": predator.genome.saturation,
+            "predator_depth_band": predator.depth_band,
+        }
+        self._recent_kill_frames.append(self._frame)
+        if pre_move:
+            self._predator_depth_fatigue_summary["contact_kills_pre_move"] += 1
+        else:
+            self._predator_depth_fatigue_summary["contact_kills_post_move"] += 1
+            self._predator_depth_fatigue_summary["post_move_contact_kills"] += 1
+        self._record_predator_kill(
+            predator, pre_kill_energy=pre_kill_energy, post_kill_energy=predator.energy,
+            repro_threshold=repro_threshold, prey=prey, prey_energy_at_kill=prey_energy_before_kill,
+            biomass_bonus=biomass_bonus, refuge_modifiers=hunt_modifiers.refuge, rarity_modifiers=hunt_modifiers.rarity,
+        )
+        self.active_attacks.append((predator.x, predator.y, prey.x, prey.y, predator.species, predator.genome.hue, predator.genome.saturation))
+        return True
+
     def _predator_hunt_prey(
         self,
         predator: Creature,
@@ -2270,14 +2332,15 @@ class Simulation:
             and best_dist_sq <= (near_contact_dist * near_contact_dist)
         )
         committed_tracking_applied = False
+        pre_tracking_same_depth = predator.depth_band == best_prey.depth_band
         if is_near_contact:
             self._record_predator_near_contact(
                 predator,
                 best_prey,
-                same_depth=predator.depth_band == best_prey.depth_band,
+                same_depth=pre_tracking_same_depth,
                 no_kill=not (
                     best_dist_sq < (contact_dist * contact_dist)
-                    and predator.depth_band == best_prey.depth_band
+                    and pre_tracking_same_depth
                 ),
             )
         if is_near_contact and best_prey.energy > 0.0 and predator.depth_band != best_prey.depth_band:
@@ -2289,56 +2352,16 @@ class Simulation:
                 best_dist_sq=best_dist_sq,
                 hunt_modifiers=hunt_modifiers,
             )
+        post_tracking_same_depth = predator.depth_band == best_prey.depth_band
+        if is_near_contact and (not pre_tracking_same_depth) and (not post_tracking_same_depth):
+            self._mark_cross_depth_tracking_context(predator)
         if (
             best_dist_sq < (contact_dist * contact_dist)
             and best_prey.energy > 0.0
-            and predator.depth_band == best_prey.depth_band
+            and post_tracking_same_depth
             and not committed_tracking_applied
         ):
-            # Transfer from prey to predator; prevents multiple predators
-            # farming energy from an already-dead prey in the same frame.
-            pre_kill_energy = predator.energy
-            prey_energy_before_kill = best_prey.energy
-            kill_cap = self._get_predator_kill_energy_gain_cap()
-            biomass_bonus = self._get_predator_kill_biomass_bonus()
-            raw_kill_energy = best_prey.energy + biomass_bonus
-            energy_gain = min(kill_cap, raw_kill_energy)
-            predator.energy = min(1.0, predator.energy + energy_gain)
-            predator.recent_animal_energy = min(
-                1.0,
-                predator.recent_animal_energy + energy_gain,
-            )
-            predator.satiety_ticks_remaining = self._get_predator_satiety_ticks()
-            best_prey.energy = 0.0
-            self.predation_kill_count += 1
-            self._predation_victims_this_frame.add(id(best_prey))
-            self._predation_render_context_by_victim[id(best_prey)] = {
-                "predator_x": predator.x,
-                "predator_y": predator.y,
-                "predator_species": predator.species,
-                "predator_hue": predator.genome.hue,
-                "predator_saturation": predator.genome.saturation,
-                "predator_depth_band": predator.depth_band,
-            }
-            self._recent_kill_frames.append(self._frame)
-            self._record_predator_kill(
-                predator,
-                pre_kill_energy=pre_kill_energy,
-                post_kill_energy=predator.energy,
-                repro_threshold=repro_threshold,
-                prey=best_prey,
-                prey_energy_at_kill=prey_energy_before_kill,
-                biomass_bonus=biomass_bonus,
-                refuge_modifiers=hunt_modifiers.refuge,
-                rarity_modifiers=hunt_modifiers.rarity,
-            )
-            self.active_attacks.append((
-                predator.x, predator.y,
-                best_prey.x, best_prey.y,
-                predator.species,
-                predator.genome.hue,
-                predator.genome.saturation,
-            ))
+            self._resolve_predator_contact_kill(predator=predator, prey=best_prey, hunt_modifiers=hunt_modifiers, repro_threshold=repro_threshold, pre_move=True)
             return PredatorHuntResult(
                 engaged=True,
                 killed=True,
@@ -2355,6 +2378,41 @@ class Simulation:
             killed=False,
             hunt_modifiers=hunt_modifiers,
         )
+
+    def _resolve_post_move_predator_contact(
+        self,
+        predator: Creature,
+        *,
+        hunt_result: PredatorHuntResult,
+        repro_threshold: float,
+    ) -> None:
+        life = self._ensure_predator_life(predator)
+        target_id = life.get("_last_target_id")
+        if target_id is None:
+            return
+        prey = next((c for c in self.creatures if id(c) == target_id), None)
+        if prey is None or prey.species != "prey" or prey.energy <= 0.0:
+            return
+        contact_scale = (
+            self._get_predator_contact_kill_distance_scale()
+            * hunt_result.hunt_modifiers.contact_mult
+        )
+        contact_dist = (
+            predator.get_radius() + prey.get_radius()
+        ) * contact_scale * self._get_creature_predation_contact_multiplier(predator)
+        dist_sq = self._distance_sq(predator.x, predator.y, prey.x, prey.y)
+        if dist_sq <= contact_dist * contact_dist:
+            self._predator_depth_fatigue_summary["post_move_contact_opportunities"] += 1
+            if predator.depth_band == prey.depth_band:
+                self._resolve_predator_contact_kill(
+                    predator=predator,
+                    prey=prey,
+                    hunt_modifiers=hunt_result.hunt_modifiers,
+                    repro_threshold=repro_threshold,
+                    pre_move=False,
+                )
+            else:
+                self._predator_depth_fatigue_summary["post_move_contact_misses_by_depth"] += 1
 
     def _prey_flee(self, prey: Creature, bucket: dict) -> bool:
         """Prey flees from nearest predator within a tuned sensing range.
@@ -2409,6 +2467,9 @@ class Simulation:
             self._predator_depth_fatigue_summary[
                 "depth_escape_fatigue_applied_frames"
             ] += 1
+            self._predator_depth_fatigue_summary["depth_fatigue_present_while_fleeing_frames"] += 1
+        if prey.depth_band == nearest_pred.depth_band and self._prey_has_meaningful_depth_fatigue(prey):
+            self._predator_depth_fatigue_summary["depth_escape_urgency_reduced_frames"] += 1
         max_speed = (
             prey.genome.speed
             * self.settings.creature_speed_base

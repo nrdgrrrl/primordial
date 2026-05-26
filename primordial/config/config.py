@@ -624,12 +624,27 @@ inspect_visual_quality = "{self.inspect_visual_quality}"
 """]
 
         mode_params = deepcopy(self.mode_params)
+        predator_prey_comments = {
+            "predator_energy_to_reproduce": "# Predator reproduction threshold (higher = weaker predators).",
+            "predator_kill_energy_gain_cap": "# Max energy gained per prey kill (higher = stronger predators).",
+            "predator_kill_biomass_bonus": "# Flat bonus added to prey energy on kill (higher = stronger predators).",
+            "predator_hunt_sense_multiplier": "# Predator prey-detection multiplier (higher = stronger predators).",
+            "predator_hunt_speed_multiplier": "# Predator chase speed multiplier (higher = stronger predators).",
+            "predator_contact_kill_distance_scale": "# Predator kill contact radius scale (higher = easier kills).",
+            "prey_flee_sense_multiplier": "# Prey predator-detection multiplier (higher = stronger prey).",
+            "prey_flee_speed_multiplier": "# Prey flee speed multiplier (higher = stronger prey).",
+            "predator_near_contact_diagnostic_scale": "# Diagnostic-only near-contact radius scale.",
+            "predator_sustained_chase_min_frames": "# Diagnostic-only minimum frames for sustained chase classification.",
+            "extinction_grace_ticks": "# Predator/prey zero-population grace window in ticks before GAME OVER.",
+        }
         for mode_name in ("predator_prey", "boids", "drift"):
             lines.append(f"[modes.{mode_name}]")
             mode_values = mode_params.get(mode_name, {})
             default_keys = tuple(self.default_mode_params.get(mode_name, {}))
             for key in default_keys:
                 if key in mode_values:
+                    if mode_name == "predator_prey" and key in predator_prey_comments:
+                        lines.append(predator_prey_comments[key])
                     lines.append(f"{key} = {_fmt(mode_values[key])}")
             for key, value in mode_values.items():
                 if key not in default_keys:
