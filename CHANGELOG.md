@@ -2,6 +2,15 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-26] — tools: add predator contact forensics report
+
+### Diagnostics tooling
+- Added `tools/predator_contact_forensics.py`, an outside-the-simulation-loop predator/prey proximity forensics runner that observes nearest-prey distance, same-depth versus cross-depth near-contact, estimated contact-radius opportunities, inferred target switching, moving-away escapes, and kill follow-up windows without modifying `Simulation`
+- Added machine-readable JSON and Markdown reporting for aggregate contact-conversion evidence and a single recommended next change based on the observed bottleneck
+
+### Tests
+- Added focused unit coverage for predator-contact forensics argument parsing, aggregate math, kill-follow window accounting, and Markdown report formatting without requiring simulation changes
+
 ## [2026-05-26] — fix: recompute predator memory target distance
 
 ### Predator-prey correctness
