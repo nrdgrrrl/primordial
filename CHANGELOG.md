@@ -2,6 +2,14 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-26] — fix: recompute predator memory target distance
+
+### Predator-prey correctness
+- Recomputed `best_dist_sq` from the predator's current live position to the selected prey's current live position when predator memory fallback supplies the hunt target, preventing stale distance values from affecting contact and near-contact checks
+
+### Tests
+- Added a focused predator memory fallback regression test that fails when contact resolution uses a stale distance instead of the remembered prey's live current position
+
 ## [2026-05-26] — chore: add local default config reset tool
 
 ### Developer tooling

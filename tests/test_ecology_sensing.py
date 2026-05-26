@@ -1374,6 +1374,37 @@ class EcologySensingTests(unittest.TestCase):
         self.assertEqual(life["memory_target_reacquisitions"], 1)
         self.assertEqual(life["target_switches"], 0)
 
+    def test_predator_memory_fallback_recomputes_live_target_distance(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator = Creature(
+            x=100.0,
+            y=100.0,
+            genome=Genome(sense_radius=1.0, aggression=0.9),
+            energy=0.2,
+            lineage_id=1,
+            species="predator",
+        )
+        prey = Creature(
+            x=140.0,
+            y=100.0,
+            genome=Genome(aggression=0.1),
+            energy=0.4,
+            lineage_id=2,
+            species="prey",
+        )
+        simulation.creatures = [predator, prey]
+
+        with patch.object(simulation, "_sense_target_position", return_value=(140.0, 100.0)):
+            simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        prey.x = predator.x
+        prey.y = predator.y
+        with patch.object(simulation, "_sense_target_position", return_value=None):
+            result = simulation._predator_hunt_prey(predator, simulation._build_creature_bucket())
+
+        self.assertTrue(result.killed)
+        self.assertEqual(prey.energy, 0.0)
+
     def test_first_target_acquisition_does_not_count_switch(self) -> None:
         simulation = self._build_simulation("predator_prey")
         predator = Creature(x=100.0, y=100.0, genome=Genome(sense_radius=1.0, aggression=0.9), lineage_id=1, species="predator")

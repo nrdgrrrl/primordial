@@ -2226,6 +2226,12 @@ class Simulation:
             memory_target = self._get_predator_memory_target(predator, sense=sense)
             if memory_target is not None:
                 best_prey, best_sensed_prey = memory_target
+                best_dist_sq = self._distance_sq(
+                    predator.x,
+                    predator.y,
+                    best_prey.x,
+                    best_prey.y,
+                )
                 used_memory_target = True
             else:
                 self._clear_predator_chase_state(predator)
