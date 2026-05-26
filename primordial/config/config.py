@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 import logging
 import platform
@@ -546,6 +547,25 @@ class Config:
         """Return the canonical default value for a rendering key, or _MISSING."""
         return self._canonical_render_defaults.get(key, _MISSING)
 
+    @classmethod
+    def canonical_toml(cls) -> str:
+        """Return TOML representing canonical defaults only, without user overrides."""
+        defaults_path = get_canonical_defaults_path()
+        with defaults_path.open("rb") as f:
+            data = tomllib.load(f)
+        config = cls.__new__(cls)
+        config._initialize_state()
+        config._merge_from_dict(data)
+        config._explicit_rendering_keys.clear()
+        config._canonical_render_defaults = {
+            key: getattr(config, attr_name)
+            for key, (attr_name, _kind) in _SECTION_FIELDS["rendering"].items()
+            if getattr(config, attr_name) is not _MISSING
+        }
+        config.default_mode_params = deepcopy(config.mode_params)
+        config._validate()
+        return config.to_toml()
+
     def reset_to_defaults(self) -> None:
         self._load_canonical_defaults()
         self.save()
@@ -624,12 +644,73 @@ inspect_visual_quality = "{self.inspect_visual_quality}"
 """]
 
         mode_params = deepcopy(self.mode_params)
+        predator_prey_comments = {
+            "predator_energy_to_reproduce": "# Predator reproduction threshold (higher = weaker predators).",
+            "predator_kill_energy_gain_cap": "# Max energy gained per prey kill (higher = stronger predators).",
+            "predator_kill_biomass_bonus": "# Flat bonus added to prey energy on kill (higher = stronger predators).",
+            "predator_recent_animal_energy_required": "# Animal-energy required for predator reproduction (higher = weaker predators).",
+            "predator_recent_animal_energy_decay_per_tick": "# How fast predator recent-animal energy decays (higher = weaker predators).",
+            "predator_satiety_ticks": "# Frames predators stay in close-range-only hunting after a kill (higher = less roaming).",
+            "predator_hunt_sense_multiplier": "# Predator prey-detection multiplier (higher = stronger predators).",
+            "predator_hunt_speed_multiplier": "# Predator chase speed multiplier (higher = stronger predators).",
+            "predator_contact_kill_distance_scale": "# Predator kill contact radius scale (higher = easier kills).",
+            "predator_interference_strength": "# Predator crowding penalty while hunting (higher = weaker predators in groups).",
+            "predator_target_prey_per_predator": "# Target prey-per-predator balance point (higher = stricter scarcity scaling).",
+            "predator_low_prey_hunt_floor": "# Minimum hunt scaling under scarcity (higher = stronger predators in scarcity).",
+            "prey_flee_sense_multiplier": "# Prey predator-detection multiplier (higher = stronger prey).",
+            "prey_flee_speed_multiplier": "# Prey flee speed multiplier (higher = stronger prey).",
+            "prey_flee_age_slowdown_enabled": "# If true, older prey flee slower.",
+            "prey_flee_low_energy_slowdown_enabled": "# If true, low-energy prey flee slower.",
+            "prey_flee_low_energy_threshold": "# Energy threshold for low-energy flee slowdown (higher = more prey slowed).",
+            "prey_flee_low_energy_min_mult": "# Minimum low-energy flee speed multiplier (lower = weaker low-energy prey).",
+            "prey_depth_fatigue_enabled": "# Enables prey depth-escape fatigue behavior.",
+            "prey_depth_fatigue_min_chase_ticks": "# Chase frames before fatigue ramps up (higher = weaker fatigue effect).",
+            "prey_depth_fatigue_energy_threshold": "# Energy threshold that increases fatigue pressure (higher = more fatigue).",
+            "prey_depth_fatigue_escape_urgency_mult": "# Fatigue reduction applied to depth-escape urgency (higher = weaker prey escapes).",
+            "prey_depth_fatigue_decay_ticks": "# Frames for fatigue to decay when pressure stops (higher = longer fatigue persistence).",
+            "prey_depth_fatigue_max": "# Maximum depth fatigue intensity (higher = stronger fatigue effect).",
+            "predator_committed_depth_tracking_enabled": "# Enables predator committed depth-band tracking near contact.",
+            "predator_committed_depth_tracking_min_chase_ticks": "# Chase frames required before committed depth tracking can trigger.",
+            "predator_committed_depth_tracking_near_contact_scale": "# Near-contact scale gate for committed tracking (higher = easier tracking trigger).",
+            "predator_committed_depth_tracking_cooldown_ticks": "# Cooldown frames between committed tracking events.",
+            "predator_target_memory_enabled": "# Enables predator quarry memory fallback targeting.",
+            "predator_target_memory_ticks": "# How long predator memory targets remain valid.",
+            "predator_target_memory_radius_mult": "# Max distance from remembered position for memory chase (higher = stronger memory reach).",
+            "predator_target_switch_score_ratio": "# Target switch strictness from memory target to sensed target (lower = easier switching).",
+            "predator_memory_steering_mult": "# Steering speed multiplier while chasing remembered targets.",
+            "predator_food_efficiency_multiplier": "# Predator efficiency when eating food particles (higher = stronger omnivory fallback).",
+            "predator_forage_cost_multiplier": "# Extra movement cost when predators forage instead of hunt (higher = weaker predators).",
+            "predator_prey_scarcity_penalty_multiplier": "# Predator scarcity movement penalty when prey are rare (higher = weaker predators).",
+            "food_cycle_amplitude": "# Food-cycle strength in predator_prey mode (higher = larger food swings).",
+            "predator_refuge_enabled": "# Enables predator refuge bonuses in hunting_ground zones.",
+            "predator_refuge_hunt_sense_bonus": "# Refuge bonus to predator hunt sense (higher = stronger predators in refuge).",
+            "predator_refuge_contact_bonus": "# Refuge bonus to predator contact kill scale (higher = stronger predators in refuge).",
+            "predator_refuge_depth_transition_bonus": "# Refuge bonus to predator depth transitions (higher = stronger depth tracking in refuge).",
+            "predator_refuge_movement_cost_reduction": "# Refuge reduction to predator hunting cost (higher = stronger predators in refuge).",
+            "predator_refuge_density_radius": "# Radius used for refuge predator density checks.",
+            "predator_refuge_density_soft_cap": "# Refuge predator count where bonuses begin tapering.",
+            "predator_refuge_density_hard_cap": "# Refuge predator count where bonuses fully clamp.",
+            "predator_rarity_advantage_enabled": "# Enables low-predator-count rarity bonuses.",
+            "predator_rarity_floor": "# Predator fraction threshold where rarity bonus starts.",
+            "predator_rarity_full_bonus_at": "# Predator fraction where rarity bonus is maximal.",
+            "predator_rarity_min_prey": "# Minimum prey count required for rarity bonus.",
+            "predator_rarity_target_prey_per_predator": "# Target prey-per-predator gate for rarity bonus.",
+            "predator_rarity_hunt_sense_bonus": "# Rarity bonus to predator hunt sense.",
+            "predator_rarity_contact_bonus": "# Rarity bonus to predator contact distance.",
+            "predator_rarity_depth_transition_bonus": "# Rarity bonus to predator depth transitions.",
+            "predator_rarity_movement_cost_reduction": "# Rarity reduction to predator hunting cost.",
+            "predator_near_contact_diagnostic_scale": "# Diagnostic-only near-contact radius scale.",
+            "predator_sustained_chase_min_frames": "# Diagnostic-only minimum frames for sustained chase classification.",
+            "extinction_grace_ticks": "# Predator/prey zero-population grace window in ticks before GAME OVER.",
+        }
         for mode_name in ("predator_prey", "boids", "drift"):
             lines.append(f"[modes.{mode_name}]")
             mode_values = mode_params.get(mode_name, {})
             default_keys = tuple(self.default_mode_params.get(mode_name, {}))
             for key in default_keys:
                 if key in mode_values:
+                    if mode_name == "predator_prey" and key in predator_prey_comments:
+                        lines.append(predator_prey_comments[key])
                     lines.append(f"{key} = {_fmt(mode_values[key])}")
             for key, value in mode_values.items():
                 if key not in default_keys:
@@ -801,8 +882,14 @@ def get_canonical_defaults_path() -> Path:
 
 
 def get_config_path() -> Path:
-    """Return platform-appropriate config file path."""
-    if platform.system() == "Windows":
+    """Return platform-appropriate config file path.
+
+    Override with the PRIMORDIAL_CONFIG_DIR environment variable (tests/dev only).
+    """
+    override = os.environ.get("PRIMORDIAL_CONFIG_DIR")
+    if override:
+        base = Path(override)
+    elif platform.system() == "Windows":
         base = Path.home() / "AppData" / "Roaming" / "Primordial"
     elif platform.system() == "Darwin":
         base = Path.home() / "Library" / "Application Support" / "Primordial"

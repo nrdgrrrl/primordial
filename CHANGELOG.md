@@ -2,6 +2,22 @@
 
 All notable changes to Primordial are documented in this file.
 
+## [2026-05-26] — fix: write canonical defaults in config reset tool
+
+### Developer tooling
+- Added `tools/write_default_config.py` to overwrite the local user `config.toml`
+  with current canonical defaults from `primordial/config/defaults.toml`
+- Supports `--dry-run`, `--print-path`, `--backup` (timestamped backup), and `--force`
+- Refuses to overwrite an existing `config.toml` unless `--force` is passed
+- Added `Config.canonical_toml()` classmethod for serializing pure canonical defaults
+  without user overrides; rewritten to read the canonical file directly and skip
+  any path that could load user config
+- Added `PRIMORDIAL_CONFIG_DIR` env var to `get_config_path()` for test isolation
+- Added comprehensive tests in `test_config_authority.py` for both `canonical_toml()`
+  and the CLI script
+- Updated `AGENTS.md` with config authority discipline and reset instructions
+- Updated `README.md` with reset usage
+
 ## [2026-05-25] — feat: add predator chase depth fatigue
 
 ### Predator-prey chase depth fatigue
@@ -2132,3 +2148,7 @@ Guardrails preserved in this pass:
 - Cleanup: clarified quarry-memory diagnostics semantics so `kills_after_memory_chase` counts memory-assisted chase episodes that end in killing the same target, and tightened target-switch counting to exclude first-acquire/same-target reacquisition noise.
 
 - Added HUD/Inspect observability summaries for population age, lineage age, and run-baseline trait-drift direction/distance, including snapshot-compatible lineage first-seen metadata rebuild fallback for older saves.
+
+- Fixed predator-prey contact sequencing and diagnostics: added post-move contact kill resolution, corrected chase-pressure per-frame ticking semantics, and prevented adaptive dial initialization from mutating mode params when adaptive tuning is disabled.
+- Follow-up fixup: corrected memory-target distance recomputation, unified pre/post-move contact distance context, removed cross-depth near-contact double-counting, and expanded predator_prey config comments coverage.
+- Final fixup: chase-pressure frame event counters now reset per frame and predator-collapse near-contact reporting now includes post-move contact kill/opportunity metrics and interpretation.

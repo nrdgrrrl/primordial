@@ -361,6 +361,11 @@ def _make_run(
             "predator_depth_fatigue_summary": {
                 "prey_depth_fatigue_events": sum(int(l.get("kills_after_depth_fatigue", 0)) for l in completed_lives + active_lives),
                 "depth_escape_fatigue_applied_frames": 0,
+                "contact_kills_pre_move": 2,
+                "contact_kills_post_move": 3,
+                "post_move_contact_opportunities": 5,
+                "post_move_contact_kills": 3,
+                "post_move_contact_misses_by_depth": 2,
                 "committed_depth_tracking_events": sum(int(l.get("committed_depth_tracking_events", 0)) for l in completed_lives + active_lives),
                 "committed_depth_tracking_kills": sum(int(l.get("committed_depth_tracking_kills", 0)) for l in completed_lives + active_lives),
                 "cross_depth_near_contact_before_tracking": sum(int(l.get("cross_depth_near_contact_before_tracking", 0)) for l in completed_lives + active_lives),
@@ -593,6 +598,11 @@ class TestReportSections(unittest.TestCase):
         self.assertEqual(result["committed_depth_tracking_events"], 2)
         self.assertEqual(result["committed_depth_tracking_kills"], 1)
         self.assertTrue(result["cross_depth_near_contact_decreased_after_tracking"])
+        self.assertEqual(result["contact_kills_pre_move"], 2)
+        self.assertEqual(result["contact_kills_post_move"], 3)
+        self.assertEqual(result["post_move_contact_opportunities"], 5)
+        self.assertEqual(result["post_move_contact_kills"], 3)
+        self.assertEqual(result["post_move_contact_misses_by_depth"], 2)
         self.assertEqual(result["kills_after_depth_fatigue"], 1)
         self.assertEqual(result["kills_after_committed_depth_tracking"], 1)
         self.assertAlmostEqual(result["average_chase_pressure_at_kill"], 108.0)
@@ -608,6 +618,14 @@ class TestReportSections(unittest.TestCase):
         self.assertEqual(result["total_near_contact_frames"], 0)
         self.assertEqual(result["kills_after_sustained_chase"], 0)
         self.assertIsNone(result["average_killed_prey_age_fraction"])
+
+    def test_markdown_includes_post_move_contact_metrics(self):
+        run = _make_run(completed_lives=[_make_life(near_contact_frames=2)])
+        report = build_report([run])
+        md = render_markdown(report)
+        self.assertIn("Contact kills (post-move):", md)
+        self.assertIn("Post-move contact opportunities:", md)
+        self.assertIn("Post-move contact conversion:", md)
 
     def test_section_k_predator_kill_energy_transfer(self):
         event_one = {

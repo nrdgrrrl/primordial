@@ -868,6 +868,11 @@ def _section_g_near_contact_dance(
         "predator_committed_depth_tracking_cooldown_ticks": runs[0]["diagnostics"].get("predator_committed_depth_tracking_cooldown_ticks") if runs else None,
         "prey_depth_fatigue_events": int(fatigue_summary.get("prey_depth_fatigue_events", 0)),
         "depth_escape_fatigue_applied_frames": int(fatigue_summary.get("depth_escape_fatigue_applied_frames", 0)),
+        "contact_kills_pre_move": int(fatigue_summary.get("contact_kills_pre_move", 0)),
+        "contact_kills_post_move": int(fatigue_summary.get("contact_kills_post_move", 0)),
+        "post_move_contact_opportunities": int(fatigue_summary.get("post_move_contact_opportunities", 0)),
+        "post_move_contact_kills": int(fatigue_summary.get("post_move_contact_kills", 0)),
+        "post_move_contact_misses_by_depth": int(fatigue_summary.get("post_move_contact_misses_by_depth", 0)),
         "committed_depth_tracking_events": committed_depth_tracking_events,
         "committed_depth_tracking_kills": committed_depth_tracking_kills,
         "cross_depth_near_contact_before_tracking": cross_depth_before_tracking,
@@ -1609,6 +1614,17 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **Committed tracking defaults:** min_chase={_fmt(g.get('predator_committed_depth_tracking_min_chase_ticks'))}, near_scale={_fmt(g.get('predator_committed_depth_tracking_near_contact_scale'))}, cooldown={_fmt(g.get('predator_committed_depth_tracking_cooldown_ticks'))}")
         lines.append(f"- **Prey depth fatigue events:** {g.get('prey_depth_fatigue_events', 0)}")
         lines.append(f"- **Depth fatigue applied frames:** {g.get('depth_escape_fatigue_applied_frames', 0)}")
+        lines.append(f"- **Contact kills (pre-move):** {g.get('contact_kills_pre_move', 0)}")
+        lines.append(f"- **Contact kills (post-move):** {g.get('contact_kills_post_move', 0)}")
+        lines.append(f"- **Post-move contact opportunities:** {g.get('post_move_contact_opportunities', 0)}")
+        lines.append(f"- **Post-move contact kills:** {g.get('post_move_contact_kills', 0)}")
+        lines.append(f"- **Post-move contact misses by depth:** {g.get('post_move_contact_misses_by_depth', 0)}")
+        if int(g.get("contact_kills_post_move", 0)) > 0:
+            lines.append("- **Interpretation:** post-move contact resolution is catching valid kills that a pre-move-only sequence would miss.")
+        if int(g.get("post_move_contact_opportunities", 0)) > 0:
+            lines.append(
+                f"- **Post-move contact conversion:** {g.get('post_move_contact_kills', 0)} / {g.get('post_move_contact_opportunities', 0)}"
+            )
         lines.append(f"- **Committed depth tracking events:** {g.get('committed_depth_tracking_events', 0)}")
         lines.append(f"- **Committed depth tracking kills:** {g.get('committed_depth_tracking_kills', 0)}")
         lines.append(f"- **Cross-depth near-contact before tracking:** {g.get('cross_depth_near_contact_before_tracking', 0)}")
