@@ -2135,3 +2135,4 @@ Guardrails preserved in this pass:
 
 - Fixed predator-prey contact sequencing and diagnostics: added post-move contact kill resolution, corrected chase-pressure per-frame ticking semantics, and prevented adaptive dial initialization from mutating mode params when adaptive tuning is disabled.
 - Follow-up fixup: corrected memory-target distance recomputation, unified pre/post-move contact distance context, removed cross-depth near-contact double-counting, and expanded predator_prey config comments coverage.
+- Final fixup: chase-pressure frame event counters now reset per frame and predator-collapse near-contact reporting now includes post-move contact kill/opportunity metrics and interpretation.

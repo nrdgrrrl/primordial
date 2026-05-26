@@ -369,6 +369,22 @@ class EcologySensingTests(unittest.TestCase):
         self.assertEqual(state.current_frame_chase_events, 3)
         self.assertEqual(state.last_chased_by_predator_id, id(predator))
 
+    def test_current_frame_chase_events_resets_on_new_frame(self) -> None:
+        simulation = self._build_simulation("predator_prey")
+        predator_a = Creature(x=100.0, y=100.0, genome=Genome(aggression=0.9), lineage_id=1, species="predator")
+        predator_b = Creature(x=110.0, y=100.0, genome=Genome(aggression=0.9), lineage_id=2, species="predator")
+        prey = Creature(x=130.0, y=100.0, genome=Genome(aggression=0.1), energy=0.7, lineage_id=3, species="prey")
+        simulation.creatures = [predator_a, predator_b, prey]
+
+        simulation._record_prey_chase_pressure(prey, predator=predator_a)
+        simulation._record_prey_chase_pressure(prey, predator=predator_b)
+        state = simulation._prey_chase_pressure[id(prey)]
+        self.assertEqual(state.current_frame_chase_events, 2)
+
+        simulation._frame += 1
+        simulation._record_prey_chase_pressure(prey, predator=predator_a)
+        self.assertEqual(state.current_frame_chase_events, 1)
+
     def test_chase_pressure_decays_when_pursuit_stops(self) -> None:
         simulation = self._build_simulation("predator_prey")
         prey = Creature(

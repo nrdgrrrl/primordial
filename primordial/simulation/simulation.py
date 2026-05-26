@@ -1941,9 +1941,7 @@ class Simulation:
                 self._get_prey_depth_fatigue_min_chase_ticks()
                 + self._get_prey_depth_fatigue_decay_ticks(),
             )
-        life = self._ensure_predator_life(predator)
-        frame_targets = life.setdefault("_frame_chased_prey_ids", set())
-        frame_targets.add(id(prey))
+            state.current_frame_chase_events = 0
         state.current_frame_chase_events = int(state.current_frame_chase_events) + 1
         state.last_chased_by_predator_id = id(predator)
         state.last_chase_pressure_frame = self._frame
